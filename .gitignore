@@ -1,3 +1,7 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
 # Environment Variables (berisi kredensial sensitif seperti password DB & JWT Secret)
 .env
 .env.local

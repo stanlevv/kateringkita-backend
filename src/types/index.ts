@@ -27,3 +27,23 @@ export interface MerchantType {
 }
 
 export interface MerchantTypeRow extends MerchantType, RowDataPacket {}
+
+export interface MenuItem {
+  menu_id?: number;
+  id?: number;
+  user_id?: number;
+  name: string;
+  cat: string;
+  desc?: string;
+  img?: string;
+  hpp: number;
+  price: number;
+  stock: number;
+  est: string;
+  hold?: number;
+  sold?: number;
+  is_active?: boolean;
+}
+
+export interface MenuItemRow extends MenuItem, RowDataPacket {}
+
