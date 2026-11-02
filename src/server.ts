@@ -1,10 +1,11 @@
+import "dotenv/config";
 import app from "./app";
-import dotenv from "dotenv";
+import { env } from "./config/env";
+import { mulaiJobKadaluarsa } from "./pesanan/kadaluarsa";
 
-dotenv.config();
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server KateringKita running on port ${PORT}`);
+// Express 5 memanggil callback dengan galat bila port gagal dibuka; jangan jalankan job tanpa server
+app.listen(env.PORT, (err?: Error) => {
+  if (err) throw err;
+  console.log(`Server KateringKita running on port ${env.PORT}`);
+  mulaiJobKadaluarsa();
 });

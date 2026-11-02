@@ -41,9 +41,9 @@ HTTP Request
      ▼
 [  src/app.ts   ] ──► Express 5 Engine & CORS Middleware
      │
-     ├──► [ /api/auth ]  ──► authRoutes ──► authController ──► userModel & merchantModel
+     ├──► [ /api/v1 ]    ──► src/auth (routes ──► service)
      │                                                               │
-     └──► [ /api/menus ] ──► menuRoutes ──► menuController ──► menuModel
+     └──► [ /api/v1/merchant ] ──► src/merchant (routes ──► service)
                                                                      │
                                                                      ▼
                                                           [ src/config/db.ts ]
@@ -58,7 +58,7 @@ HTTP Request
 
 ## 🗄️ Skema Database & Relasi Tabel
 
-Skema database lengkap tersedia pada file [`src/config/schema.sql`](src/config/schema.sql).
+Skema database lengkap tersedia pada file [`docs/schema.sql`](../docs/schema.sql).
 
 ```text
 +----------------+          +----------------+
@@ -104,35 +104,21 @@ Skema database lengkap tersedia pada file [`src/config/schema.sql`](src/config/s
 
 ## 📡 Dokumentasi Endpoint REST API
 
-### 1. Autentikasi (`/api/auth`)
-| Method | Endpoint | Deskripsi | Auth Required |
-| :--- | :--- | :--- | :---: |
-| `POST` | `/api/auth/register` | Mendaftarkan akun merchant baru beserta detail usaha | ❌ |
-| `POST` | `/api/auth/login` | Login menggunakan email / no WhatsApp & password | ❌ |
-| `GET` | `/api/auth/profile` | Mengambil detail profil user yang sedang login | ✅ Bearer |
+### 1. Autentikasi & Sesi (`/api/v1`) — F01
+Kontrak lengkap ada di [`docs/API.md`](../docs/API.md) §3. Endpoint yang sudah tersedia:
 
-### 2. Manajemen Menu (`/api/menus`)
-| Method | Endpoint | Deskripsi | Status Code |
-| :--- | :--- | :--- | :---: |
-| `GET` | `/api/menus` | Mengambil seluruh daftar menu aktif | `200 OK` |
-| `GET` | `/api/menus/:id` | Mengambil detail menu berdasarkan ID | `200 OK` / `404 Not Found` |
-| `POST` | `/api/menus` | Menambahkan item menu baru | `201 Created` / `400 Bad Request` |
-| `PUT` | `/api/menus/:id` | Memperbarui seluruh data / stok menu | `200 OK` / `404 Not Found` |
-| `DELETE` | `/api/menus/:id` | Menghapus item menu dari database | `200 OK` / `404 Not Found` |
+| Method | Endpoint | Auth |
+| :--- | :--- | :---: |
+| `GET` | `/api/v1/meta/merchant-types` | ❌ |
+| `POST` | `/api/v1/auth/customer/register` | ❌ |
+| `POST` | `/api/v1/auth/merchant/register` | ❌ |
+| `POST` | `/api/v1/auth/login` | ❌ |
+| `POST` | `/api/v1/auth/logout` | ✅ Bearer |
+| `GET` | `/api/v1/me` | ✅ Bearer |
+| `GET` | `/api/v1/health` | ❌ |
 
-#### Contoh Payload `POST /api/menus`:
-```json
-{
-  "name": "Nasi Ayam Bakar Madu Komplit",
-  "cat": "Nasi Box",
-  "desc": "Nasi pulen, paha ayam bakar madu, sambal terasi & lalapan fresh",
-  "img": "/menu/1.png",
-  "hpp": 12000,
-  "price": 18000,
-  "stock": 25,
-  "est": "15 Mnt"
-}
-```
+### 2. Menu Penjual (`/api/v1/merchant/menus`) — F04
+Router lama `/api/menus` sudah dihapus. Kontrak menu, kuota, dan unggah foto ada di [`docs/API.md`](../docs/API.md) §7 "Menu".
 
 ---
 
@@ -159,9 +145,9 @@ cp .env.example .env
 Sesuaikan konfigurasi koneksi database Anda pada file `.env`.
 
 ### 4. Eksekusi Skema Database
-Import file `src/config/schema.sql` ke database MySQL Anda:
+Import file `docs/schema.sql` ke database MySQL Anda:
 ```bash
-mysql -u root -p kateringkita_db < src/config/schema.sql
+mysql -u root -p kateringkita_db < ../docs/schema.sql
 ```
 
 ### 5. Menjalankan Server

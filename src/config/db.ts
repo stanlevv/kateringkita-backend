@@ -1,31 +1,27 @@
 import mysql from "mysql2/promise";
-import dotenv from "dotenv";
+import { env } from "./env";
 
-dotenv.config();
+// TiDB Cloud mewajibkan TLS
+export const sslFor = (url: string) =>
+  url.includes("tidbcloud.com") ? { rejectUnauthorized: true, minVersion: "TLSv1.2" } : undefined;
 
-const isTiDB =
-  (process.env.DB_HOST || "").includes("tidbcloud.com") ||
-  (process.env.DATABASE_URL || "").includes("tidbcloud.com") ||
-  process.env.DB_SSL === "true";
+const pool = mysql.createPool({
+  uri: env.DATABASE_URL,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  timezone: "Z",
+  ssl: sslFor(env.DATABASE_URL),
+});
 
-const pool = process.env.DATABASE_URL
-  ? mysql.createPool({
-      uri: process.env.DATABASE_URL,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-      ssl: isTiDB ? { rejectUnauthorized: true, minVersion: "TLSv1.2" } : undefined,
-    })
-  : mysql.createPool({
-      host: process.env.DB_HOST || "localhost",
-      port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-      user: process.env.DB_USER || "root",
-      password: process.env.DB_PASS || "",
-      database: process.env.DB_NAME || "test",
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-      ssl: isTiDB ? { rejectUnauthorized: true, minVersion: "TLSv1.2" } : undefined,
-    });
+// CURRENT_TIMESTAMP mengikuti time_zone sesi; semua perbandingan kita mengasumsikan UTC.
+// Perintah ini diantrekan di koneksi baru sebelum query pertama pemakai.
+pool.pool.on("connection", (conn) => {
+  conn.query("SET time_zone = '+00:00'", (err) => {
+    if (!err) return;
+    console.error("Gagal mengatur zona waktu koneksi:", err.message);
+    conn.destroy(); // koneksi tanpa UTC tidak boleh dipakai ulang oleh pool
+  });
+});
 
 export default pool;
