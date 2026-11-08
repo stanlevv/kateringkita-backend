@@ -37,7 +37,7 @@ test("201: bentuk Order + payment tunai, kode KK-tanggal WIB, harga server, tanp
   expect(d.code).toMatch(new RegExp(`^KK-${hariIniWib().replaceAll("-", "")}-[0-9A-HJKMNP-TV-Z]{4}$`));
   expect(d).toMatchObject({
     status: "holding", payment_method: "cod", payment_status: "unpaid", payment: { method: "cod", status: "unpaid", amount: 36000 },
-    merchant: { id: s.idA, business_name: "Dapur Siti", wa_number: "081298765432" },
+    merchant: { id: s.idA, business_name: "Dapur Siti", wa_number: "081298765432", qris_image_url: null },
     pickup_point: { id: 1, name: "Gedung Vokasi UB (Lt. 2)" }, note: "Sambal dipisah", pickup_at: null,
     subtotal: 36000, discount: 0, service_fee: 0, total: 36000,
     can_cancel: true, can_complete: false, can_review: false,
@@ -120,10 +120,10 @@ test("OUT_OF_STOCK: 409 dengan sisa per baris, tidak ada pesanan, held_today tet
 });
 
 describe("validasi", () => {
-  test("payment_method selain cod / tidak ada → 400", async () => {
-    for (const pm of ["qris", "va", undefined]) {
+  test("payment_method selain cod/qris / tidak ada → 400", async () => {
+    for (const pm of ["va", "tunai", undefined]) {
       const r = await pesan(isi({ payment_method: pm })).expect(400);
-      expect(r.body.error.fields.payment_method).toEqual(["Saat ini pembayaran hanya bisa tunai."]);
+      expect(r.body.error.fields.payment_method).toEqual(["Pilih bayar tunai atau QRIS."]);
     }
   });
 

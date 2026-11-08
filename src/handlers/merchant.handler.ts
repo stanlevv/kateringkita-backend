@@ -74,7 +74,7 @@ export const waPesananTokoHandler: RequestHandler = async (req, res) => {
   res.json({ data: await waPesananToko(uid(req), String(req.params.code)) });
 };
 
-// aksi di luar 5 → lanjut ke notFoundHandler (404)
+// aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
 export const aksiPesananTokoHandler: RequestHandler = async (req, res, next) => {
   const aksi = String(req.params.aksi) as AksiToko;
   if (!AKSI_TOKO.includes(aksi)) return next();

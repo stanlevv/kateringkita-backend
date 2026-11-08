@@ -48,5 +48,5 @@ merchant.get("/reports/hourly", laporanPerJamHandler);
 
 merchant.get("/reports/transactions", laporanTransaksiHandler);
 
-// F07 (M-04, M-08): aksi di luar 5 → lanjut ke notFoundHandler (404)
+// F07 (M-04, M-08), F10 (pay): aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
 merchant.post("/orders/:code/:aksi", aksiPesananTokoHandler);

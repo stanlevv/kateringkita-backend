@@ -31,9 +31,10 @@ export const quoteSchema = z.object({
   pickup_at: z.iso.datetime({ offset: true, error: WAKTU }).nullish().transform((s) => s ?? null),
 }, { error: "Data pesanan tidak valid." });
 
-// D9: hanya tunai sampai F10; va_bank tidak dideklarasikan → dibuang
-const TUNAI = "Saat ini pembayaran hanya bisa tunai.";
-export const pesananSchema = quoteSchema.extend({ payment_method: z.literal("cod", { error: TUNAI }) });
+// F10: tunai atau QRIS toko yang diverifikasi manual penjual; va_bank tidak dideklarasikan → dibuang
+// shortcut: VA butuh gateway; upgrade saat Midtrans dipasang
+const BAYAR = "Pilih bayar tunai atau QRIS.";
+export const pesananSchema = quoteSchema.extend({ payment_method: z.enum(["cod", "qris"], { error: BAYAR }) });
 
 // D6: Idempotency-Key UUID, huruf kecil
 export const kunciSchema = z.uuid({ error: "Muat ulang aplikasi lalu coba lagi." }).transform((s) => s.toLowerCase());

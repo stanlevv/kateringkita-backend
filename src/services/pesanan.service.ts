@@ -75,6 +75,9 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
         Object.fromEntries(kurang.map((k) => [`items.${k.index}.qty`, [`Sisa ${Math.max(k.available, 0)} ${k.unit_label}.`]])));
       if (h.kurang.length) throw habis(h.kurang);
       cekPromo(data);
+      if (data.payment_method === "qris" && !h.merchant.qris_image_url) {
+        throw new AppError(409, "CONFLICT", "Toko belum memasang QRIS. Pilih bayar tunai.");
+      }
 
       // D7: galat duplikat hanya membatalkan pernyataan, bukan transaksi → coba kode baru, maks 5 kali
       let orderId = 0;
@@ -85,9 +88,9 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
           const [r] = await conn.query<ResultSetHeader>(
             `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, status, customer_name, customer_phone, note, subtotal,
                discount, service_fee, total, payment_method, payment_status, hold_until, stock_date, pickup_at)
-             VALUES (?, ?, ?, ?, 'holding', ?, ?, ?, ?, ?, ?, ?, 'cod', 'unpaid', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?, ?)`,
+             VALUES (?, ?, ?, ?, 'holding', ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?, ?)`,
             [c, userId, h.merchant.id, data.pickup_point_id, data.customer_name ?? u.full_name, data.customer_phone ?? u.phone, data.note,
-              h.subtotal, h.discount, h.service_fee, h.total, h.merchant.hold_minutes, hari,
+              h.subtotal, h.discount, h.service_fee, h.total, data.payment_method, h.merchant.hold_minutes, hari,
               data.pickup_at ? new Date(data.pickup_at) : null],
           );
           orderId = r.insertId;
@@ -146,7 +149,7 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
 export const KOLOM = `o.id, o.code, o.status, o.payment_method, o.payment_status, o.hold_until, o.pickup_at,
   GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, o.pickup_point_id, p.name AS p_name,
   o.subtotal, o.discount, o.service_fee, o.total, o.note, o.cancel_reason, o.cancelled_by, o.created_at, o.updated_at`;
-const DARI_PEMBELI = `${KOLOM}, o.merchant_id, m.business_name, m.wa_number
+const DARI_PEMBELI = `${KOLOM}, o.merchant_id, m.business_name, m.wa_number, m.qris_image_url
   FROM orders o JOIN merchants m ON m.id = o.merchant_id JOIN pickup_points p ON p.id = o.pickup_point_id`;
 
 export type Item = { menu_id: number; menu_name: string; qty: number; unit_price: number; options: unknown[]; line_total: number };
@@ -180,7 +183,8 @@ export const dasarPesanan = (o: RowDataPacket, items: Item[]) => {
 // Order §1 (tanpa payment). D2: holding yang lewat waktu tidak bisa dibatalkan
 export const petaPesanan = (o: RowDataPacket, items: Item[]) => ({
   ...dasarPesanan(o, items),
-  merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number },
+  // F10: QRIS toko untuk dibayar pembeli, diverifikasi manual penjual
+  merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number, qris_image_url: o.qris_image_url },
   can_cancel: (o.status === "holding" && Number(o.seconds_left) > 0) || (o.status === "confirmed" && o.payment_method === "cod"),
   can_complete: o.status === "ready", can_review: o.status === "completed",
 });

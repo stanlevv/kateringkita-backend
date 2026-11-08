@@ -7,7 +7,7 @@ import { lepasStok } from "./pesanan-stok.service";
 // F07 mesin status pesanan (C-15, C-16, M-04, M-08, R-03; D1–D7). Dipakai rute pembeli, rute penjual, dan job kadaluarsa F08
 // (D18: `expire` dengan aktor sistem, galat 409 ditelan). F08: notifikasi in-app pembeli (C-21) dibuat di transaksi yang sama.
 export type Status = "holding" | "confirmed" | "cooking" | "ready" | "completed" | "cancelled" | "expired";
-export type Aksi = "confirm" | "cook" | "ready" | "complete" | "reject" | "cancel" | "expire";
+export type Aksi = "confirm" | "pay" | "cook" | "ready" | "complete" | "reject" | "cancel" | "expire";
 export type Aktor = { jenis: "customer"; userId: number } | { jenis: "merchant"; userId: number; merchantId: number } | { jenis: "system" };
 
 type Jadi = "terjual" | "kembali" | "batal";
@@ -15,6 +15,8 @@ const lepas = (dari: Status): Jadi => (dari === "holding" ? "kembali" : "batal")
 
 export const ATURAN: Record<Aksi, { oleh: Aktor["jenis"][]; dari: Status[]; ke: Status; kolom: string; stok?: (dari: Status) => Jadi | null }> = {
   confirm: { oleh: ["merchant"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
+  // F10: penjual memverifikasi QRIS sekaligus menerima, agar pesanan lunas tidak pernah kedaluwarsa
+  pay: { oleh: ["merchant"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
   cook: { oleh: ["merchant"], dari: ["confirmed"], ke: "cooking", kolom: "cooking_at" },
   ready: { oleh: ["merchant"], dari: ["cooking"], ke: "ready", kolom: "ready_at" },
   complete: { oleh: ["merchant", "customer"], dari: ["ready"], ke: "completed", kolom: "completed_at" },
@@ -46,7 +48,7 @@ export async function transisi(
     await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [p.customer_id]);
   }
   const [[o]] = await conn.query<RowDataPacket[]>(
-    `SELECT id, customer_id, merchant_id, status, payment_method, payment_status, hold_until <= UTC_TIMESTAMP() AS lewat FROM orders WHERE code = ?${
+    `SELECT id, customer_id, merchant_id, status, payment_method, payment_status, total, hold_until <= UTC_TIMESTAMP() AS lewat FROM orders WHERE code = ?${
       aktor.jenis === "customer" ? " AND customer_id = ?" : aktor.jenis === "merchant" ? " AND merchant_id = ?" : ""} FOR UPDATE`,
     [code, ...(aktor.jenis === "customer" ? [aktor.userId] : aktor.jenis === "merchant" ? [aktor.merchantId] : [])],
   );
@@ -57,14 +59,21 @@ export async function transisi(
   // D2: holding lewat waktu hanya bisa di-expire (job F08)
   if (dari === "holding" && Boolean(o.lewat) !== (aksi === "expire")) throw konflik(aksi === "expire" ? undefined : "Batas waktu pesanan sudah habis.");
   if (aksi === "confirm" && o.payment_method !== "cod" && o.payment_status !== "paid") throw konflik("Pesanan belum dibayar.");
+  if (aksi === "pay" && (o.payment_method !== "qris" || o.payment_status === "paid")) throw konflik("Pesanan ini tidak menunggu pembayaran QRIS.");
+  // shortcut: tolak pesanan QRIS lunas tidak mengubah payment_status (dana dikembalikan manual); upgrade saat gateway dipasang
 
   const batal = a.ke === "cancelled" || a.ke === "expired";
   const alasan = aksi === "expire" ? "Tidak dikonfirmasi tepat waktu." : reason?.trim() || null;
   await conn.query(
     `UPDATE orders SET status = ?, ${a.kolom} = UTC_TIMESTAMP()${batal ? ", cancelled_by = ?, cancel_reason = ?" : ""}${
-      aksi === "complete" ? ", payment_status = IF(payment_method = 'cod', 'paid', payment_status)" : ""} WHERE id = ?`,
+      aksi === "complete" ? ", payment_status = IF(payment_method = 'cod', 'paid', payment_status)" : ""}${
+      aksi === "pay" ? ", payment_status = 'paid'" : ""} WHERE id = ?`,
     [a.ke, ...(batal ? [aktor.jenis, alasan] : []), o.id],
   );
+  if (aksi === "pay") {
+    await conn.query("INSERT INTO payments (order_id, method, provider, amount, status, paid_at) VALUES (?, 'qris', 'manual', ?, 'paid', UTC_TIMESTAMP())",
+      [o.id, o.total]);
+  }
   const jadi = a.stok?.(dari);
   if (jadi) await lepasStok(conn, o.id, jadi);
   await conn.query("INSERT INTO order_status_logs (order_id, from_status, to_status, actor_user_id) VALUES (?, ?, ?, ?)",
