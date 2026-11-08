@@ -4,7 +4,7 @@ import { statusSchema, updateProfileSchema } from "../dto/merchant.dto";
 import { merchantUploadSchema } from "../dto/upload.dto";
 import {
   aksiPesananTokoHandler, ambilMenuHandler, ambilPesananTokoHandler, buatMenuHandler, daftarMenuHandler, daftarPesananTokoHandler,
-  getProfileHandler, hapusMenuHandler, setOpenHandler, ubahKuotaHandler, ubahMenuHandler, updateProfileHandler, uploadFotoHandler,
+  getProfileHandler, hapusMenuHandler, laporanPerJamHandler, laporanTransaksiHandler, ringkasanLaporanHandler, setOpenHandler, ubahKuotaHandler, ubahMenuHandler, updateProfileHandler, uploadFotoHandler,
   waPesananTokoHandler,
 } from "../handlers/merchant.handler";
 import { uploadLimiter } from "../middleware/rateLimiter";
@@ -40,6 +40,13 @@ merchant.get("/orders/:code", ambilPesananTokoHandler);
 
 // F07 (M-04, M-11): tautan chat ke pembeli
 merchant.get("/orders/:code/whatsapp", waPesananTokoHandler);
+
+// F09 laporan penjualan
+merchant.get("/reports/summary", ringkasanLaporanHandler);
+
+merchant.get("/reports/hourly", laporanPerJamHandler);
+
+merchant.get("/reports/transactions", laporanTransaksiHandler);
 
 // F07 (M-04, M-08): aksi di luar 5 → lanjut ke notFoundHandler (404)
 merchant.post("/orders/:code/:aksi", aksiPesananTokoHandler);

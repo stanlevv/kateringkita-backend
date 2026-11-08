@@ -1,11 +1,13 @@
 import { RequestHandler } from "express";
 import { kuotaSchema, menuQuerySchema } from "../dto/merchant-menu.dto";
 import { daftarTokoSchema } from "../dto/merchant-order.dto";
+import { rentangSchema, tanggalSchema } from "../dto/merchant-laporan.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { fieldsDari, parse } from "../middleware/validate";
 import { ambilMenu, buatMenu, daftarMenu, hapusMenu, idToko, ubahKuota, ubahMenu } from "../services/merchant-menu.service";
 import { AKSI_TOKO, AksiToko, aksiPesananToko, ambilPesananToko, daftarPesananToko, waPesananToko } from "../services/merchant-order.service";
 import { getProfile, setOpen, updateProfile } from "../services/merchant.service";
+import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-laporan.service";
 import { buatUnggahan } from "../services/upload.service";
 import { AppError } from "../utils/errors";
 
@@ -77,4 +79,17 @@ export const aksiPesananTokoHandler: RequestHandler = async (req, res, next) => 
   const aksi = String(req.params.aksi) as AksiToko;
   if (!AKSI_TOKO.includes(aksi)) return next();
   res.json({ data: await aksiPesananToko(uid(req), String(req.params.code), aksi, req.body) });
+};
+
+// F09 laporan (LP-N1..N4)
+export const ringkasanLaporanHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await ringkasanLaporan(uid(req), parse(rentangSchema, req.query)) });
+};
+
+export const laporanPerJamHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await laporanPerJam(uid(req), parse(tanggalSchema, req.query).date) });
+};
+
+export const laporanTransaksiHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await laporanTransaksi(uid(req), parse(rentangSchema, req.query)) });
 };
