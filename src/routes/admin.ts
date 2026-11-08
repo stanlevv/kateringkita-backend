@@ -4,6 +4,7 @@ import {
   aksiPenjualHandler, ambilBiayaHandler, antrianVerifikasiHandler, buatMasterHandler, buatPromoHandler, daftarLogHandler,
   daftarMasterHandler, daftarPenjualHandler, daftarPromoHandler, detailPenjualHandler, idParam, ringkasanHandler,
   setAktifMasterHandler, setAktifPromoHandler, ubahBiayaHandler, ubahMasterHandler, ubahPromoHandler,
+  daftarMenuAdminHandler, daftarUlasanAdminHandler, moderasiMenuHandler, moderasiUlasanHandler,
 } from "../handlers/admin.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
@@ -49,6 +50,14 @@ toggle("/promos/:id", setAktifPromoHandler);
 admin.get("/settings", ambilBiayaHandler);
 admin.put("/settings/service-fee", ubahBiayaHandler);
 admin.get("/summary", ringkasanHandler);
+
+// F19 moderasi ulasan admin.get("/summary", ringkasanHandler); menu (suspend toko: /merchants/:id/suspend)
+admin.get("/reviews", daftarUlasanAdminHandler);
+admin.post("/reviews/:id/hide", validate(reasonBody), moderasiUlasanHandler(true));
+admin.post("/reviews/:id/unhide", moderasiUlasanHandler(false));
+admin.get("/menus", daftarMenuAdminHandler);
+admin.post("/menus/:id/takedown", validate(reasonBody), moderasiMenuHandler(true));
+admin.post("/menus/:id/restore", moderasiMenuHandler(false));
 
 // path admin tak dikenal berhenti di sini (404), tidak jatuh ke router v1
 admin.use(() => {

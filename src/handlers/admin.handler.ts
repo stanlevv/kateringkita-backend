@@ -5,6 +5,7 @@ import { buatMaster, daftarMaster, setAktif, ubahMaster } from "../services/admi
 import { antrianVerifikasi, daftarPenjual, detailPenjual, jalankanAksi } from "../services/admin-merchant.service";
 import { ambilBiaya, buatPromo, daftarPromo, setAktifPromo, ubahBiaya, ubahPromo } from "../services/admin-promo.service";
 import { ringkasan } from "../services/admin-summary.service";
+import { daftarMenuAdmin, daftarUlasanAdmin, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
 import { AppError } from "../utils/errors";
 
 const angka = (v: unknown, def: number, max: number) => {
@@ -80,4 +81,21 @@ export const ubahBiayaHandler: RequestHandler = async (req, res) => {
 };
 export const ringkasanHandler: RequestHandler = async (_req, res) => {
   res.json({ data: await ringkasan() });
+};
+
+// F19 moderasi: ?q=&status=active|moderated&page&limit; alasan wajib untuk hide/takedown (reasonBody di rute)
+const filterModerasi = (q: Record<string, unknown>) => ({
+  q: str(q.q)?.trim() || undefined, status: str(q.status), page: angka(q.page, 1, 1e6), limit: angka(q.limit, 20, 100),
+});
+export const daftarUlasanAdminHandler: RequestHandler = async (req, res) => {
+  res.json(await daftarUlasanAdmin(filterModerasi(req.query)));
+};
+export const moderasiUlasanHandler = (sembunyi: boolean): RequestHandler => async (req, res) => {
+  res.json({ data: await moderasiUlasan(adminId(req), req.params.id, sembunyi, sembunyi ? req.body.reason : null) });
+};
+export const daftarMenuAdminHandler: RequestHandler = async (req, res) => {
+  res.json(await daftarMenuAdmin(filterModerasi(req.query)));
+};
+export const moderasiMenuHandler = (turun: boolean): RequestHandler => async (req, res) => {
+  res.json({ data: await moderasiMenu(adminId(req), req.params.id, turun, turun ? req.body.reason : null) });
 };

@@ -147,10 +147,11 @@ export async function ulasanMenu(idRaw: unknown, h: Halaman) {
   if (!ada[0]) throw menuTidakAda();
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT r.rating, r.comment, u.full_name, r.created_at FROM reviews r JOIN users u ON u.id = r.customer_id
-     WHERE r.menu_id = ? ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`,
+     WHERE r.menu_id = ? AND r.hidden_at IS NULL ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`,
     [id, h.limit, (h.page - 1) * h.limit],
   );
-  const [c] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM reviews WHERE menu_id = ?", [id]);
+  // F19: ulasan yang disembunyikan admin tidak tampil
+  const [c] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM reviews WHERE menu_id = ? AND hidden_at IS NULL", [id]);
   return {
     data: rows.map((r) => ({
       rating: r.rating, comment: r.comment,

@@ -179,6 +179,10 @@ export async function ubahMenu(userId: number, idRaw: unknown, input: MenuInput)
   await dalamTransaksi(async (conn) => {
     await segarkanKuota(conn, mid, hariIniWib());
     const lama = await kunciMenu(conn, mid, id);
+    // F19: menu yang diturunkan admin tidak bisa diaktifkan penjual
+    if (input.is_active === true && lama.moderated_at) {
+      throw new AppError(409, "CONFLICT", `Menu ini diturunkan admin: ${lama.moderation_reason}. Hubungi admin untuk memulihkan.`);
+    }
     const sets = await kolomMenu(conn, mid, input, lama);
     const opsiBerubah = input.options ? await sinkronOpsi(conn, id, input.options) : false;
     const cols = Object.keys(sets);
