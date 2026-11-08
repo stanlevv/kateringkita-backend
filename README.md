@@ -1,20 +1,38 @@
-# KateringKita — Backend REST API
+# 🍽️ KateringKita — Backend REST API
 
-REST API untuk **KateringKita**, marketplace katering di sekitar kampus. Satu API melayani tiga pemakai:
+<div align="center">
 
-- **Dashboard web penjual dan admin** ([kateringkita-frontend](https://github.com/stanlevv/kateringkita-frontend))
-- **Aplikasi mobile pembeli** (Flutter, dibuat tim lain)
-- **Job internal** yang menjalankan pembatalan otomatis pesanan yang tidak dikonfirmasi
+![Node.js](https://img.shields.io/badge/Node.js-22.x%20|%2024.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)
+![MySQL / TiDB](https://img.shields.io/badge/TiDB%20Cloud-MySQL%208-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-489%20Passed-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
-| | Alamat |
-|---|---|
-| API production | https://ketring-45f82aef1ca0.herokuapp.com/api/v1 |
-| Cek kesehatan | https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health → `{"data":{"status":"ok","db":"ok"}}` |
-| Web penjual | https://ketringkita.edufin.app |
+**RESTful API tangguh dan berkinerja tinggi untuk KateringKita — platform marketplace katering kampus terpercaya.**
+
+[Live Production API](https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health) • [Dashboard Frontend](https://github.com/stanlevv/kateringkita-frontend) • [Dokumentasi API](#-koleksi-endpoint-api-v1)
+
+</div>
 
 ---
 
-## Status per November 2026
+## 📖 Gambaran Umum
+
+**KateringKita Backend** melayani ekosistem lengkap marketplace katering dalam satu arsitektur terpadu:
+1. **Web Dashboard Merchant & Admin** ([kateringkita-frontend](https://github.com/stanlevv/kateringkita-frontend)) — manajemen katalog, kuota atomik, pemrosesan pesanan real-time, verifikasi toko, dan laporan penjualan.
+2. **Aplikasi Mobile Pembeli** — pemesanan instan mahasiswa, penahanan porsi otomatis 5 menit, pelacakan pesanan, dan integrasi WhatsApp.
+3. **Internal Background Cron / Worker** — pembatalan otomatis pesanan kedaluwarsa (*holding expired*) dan pelepasan porsi tertahan secara aman dan konsisten.
+
+| Lingkungan | Alamat / Endpoint |
+|---|---|
+| **Production API Base** | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1` |
+| **Health Check** | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health` → `{"data":{"status":"ok","db":"ok"}}` |
+| **Merchant Dashboard** | `https://ketringkita.edufin.app` |
+
+---
+
+## 🚀 Status Implementasi Fitur
 
 | ID | Fitur | Status |
 |---|---|---|
@@ -43,24 +61,20 @@ Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
 
 ---
 
-## Teknologi
+## 🛠️ Arsitektur & Tumpukan Teknologi
 
-| Bagian | Pilihan |
-|---|---|
-| Bahasa | TypeScript 5.8, dikompilasi ke JavaScript (`tsc`) |
-| Runtime | Node.js ≥ 22.12 (Heroku memakai Node 24) |
-| Framework | Express 5.2 |
-| Database | MySQL lewat `mysql2`; production di **TiDB Cloud** (kompatibel MySQL, SSL otomatis) |
-| Validasi | Zod 4 |
-| Keamanan | `jsonwebtoken` (JWT), `bcryptjs` (hash sandi), pembatas laju buatan sendiri |
-| Penyimpanan foto | Cloudflare R2 lewat URL unggah bertanda tangan (AWS Signature V4, tanpa SDK) |
-| Uji | Vitest 5 + Supertest, terhadap database MySQL sungguhan |
-
-Tidak ada ORM. Semua kueri SQL ditulis langsung dengan parameter (`?`).
+- **Bahasa & Runtime:** TypeScript 5.8 & Node.js ≥ 22.12 (Production di Heroku dengan Node 24).
+- **Web Framework:** Express 5.2.
+- **Basis Data:** MySQL lewat driver `mysql2/promise` dengan pooling tangguh, diuji pada **TiDB Cloud** (MySQL 8 compatible, SSL aktif).
+- **Validasi Data:** Zod 4 (*runtime schema validation*).
+- **Keamanan:** JWT (`jsonwebtoken`), hash kata sandi `bcryptjs`, in-memory rate limiting, CORS terisolasi.
+- **Penyimpanan Media:** Integrasi Cloudflare R2 dengan URL bertanda tangan (AWS Signature V4, zero external heavy SDK).
+- **Pengujian:** Vitest 5 + Supertest dengan pengujian end-to-end terintegrasi database nyata.
+- **Kueri SQL:** Murni SQL terparameterisasi (`?`) tanpa ORM overhead demi performa maksimal dan kendali transaksi penuh.
 
 ---
 
-## Struktur folder
+## 📁 Struktur Direktori
 
 ```text
 src/
@@ -83,7 +97,7 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 
 ---
 
-## Aturan bisnis penting
+## ⚡ Aturan Bisnis & Mekanisme Kunci
 
 - **Kuota porsi harian.** Setiap menu punya `daily_quota`. Penghitung `sold_today` dan `held_today` direset otomatis saat tanggal WIB berganti, saat menu pertama kali dibaca hari itu.
 - **Penahanan 5 menit.** Checkout langsung mengunci porsi (`held_today`). Penjual punya waktu menurut `hold_minutes` toko (bawaan 5 menit) untuk mengonfirmasi. Dua checkout bersamaan untuk sisa 1 porsi hanya menghasilkan satu pesanan.
@@ -101,7 +115,7 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 
 ---
 
-## Endpoint
+## 📡 Koleksi Endpoint API (v1)
 
 Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar ditambah `meta: { page, limit, total }`); respons galat `{ "error": { "code", "message", "fields"? } }` dengan pesan berbahasa Indonesia.
 
@@ -132,7 +146,7 @@ Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `do
 
 ---
 
-## Variabel lingkungan
+## 🔐 Variabel Lingkungan
 
 Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kosong atau salah format.
 
@@ -153,18 +167,39 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 
 ---
 
-## Menjalankan di komputer sendiri
+## 💻 Panduan Instalasi Lokal
 
-Prasyarat: Node.js ≥ 22.12 dan MySQL 8 (lokal atau Docker).
+### Prasyarat
+- Node.js ≥ 22.12
+- MySQL 8.x (atau TiDB Cloud Serverless)
 
+### Langkah Pemasangan
 ```bash
+# 1. Clone repositori
 git clone https://github.com/stanlevv/kateringkita-backend.git
 cd kateringkita-backend
+
+# 2. Pasang dependensi
 npm install
-cp .env.example .env        # lalu isi DATABASE_URL dan JWT_SECRET
-npm run migrate             # membuat semua tabel dan data referensi
-npm run dev                 # http://localhost:5000/api/v1/health
+
+# 3. Konfigurasi file environment
+cp .env.example .env
+# Edit file .env: isi DATABASE_URL, TEST_DATABASE_URL, dan JWT_SECRET
+
+# 4. Jalankan migrasi database
+npm run migrate
+
+# 5. (Opsional) Jalankan data seeder demo
+npm run seed:demo
+
+# 6. Jalankan server mode development
+npm run dev
+# Server aktif di http://localhost:5000/api/v1/health
 ```
+
+---
+
+## 🧪 Skrip & Pengujian
 
 | Perintah | Fungsi |
 |---|---|
@@ -179,7 +214,7 @@ npm run dev                 # http://localhost:5000/api/v1/health
 
 ---
 
-## Deploy
+## ☁️ Deploy
 
 - **Heroku** (app `ketring`) tersambung ke repo ini. Setiap push ke `main` otomatis di-build (`npm run build`) lalu dijalankan dengan `web: node dist/server.js` dari `Procfile`.
 - **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–003 sudah diterapkan; `004_moderasi.sql` belum.
@@ -188,6 +223,6 @@ npm run dev                 # http://localhost:5000/api/v1/health
 
 ---
 
-## Lisensi
+## 📄 Lisensi
 
-[MIT](LICENSE)
+Proyek ini dilisensikan di bawah lisensi [MIT](LICENSE).
