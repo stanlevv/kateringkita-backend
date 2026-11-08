@@ -120,13 +120,13 @@ test("nonaktif/aktif: log, idempoten tanpa log", async () => {
 });
 
 test("biaya layanan", async () => {
-  expect((await get("/settings").expect(200)).body.data).toEqual({ service_fee: 0 });
+  expect((await get("/settings").expect(200)).body.data).toEqual({ service_fee: 0, cs_whatsapp: null });
   await put("/settings/service-fee", { value: -1 }).expect(400);
   await put("/settings/service-fee", { value: 1.5 }).expect(400);
   await put("/settings/service-fee", { value: 100001 }).expect(400);
   await put("/settings/service-fee", { value: "2000" }).expect(400);
   await put("/settings/service-fee", { value: 2000 }).expect(200);
-  expect((await get("/settings")).body.data).toEqual({ service_fee: 2000 });
+  expect((await get("/settings")).body.data).toEqual({ service_fee: 2000, cs_whatsapp: null });
   const [row] = await db.query<any[]>("SELECT setting_value FROM app_settings WHERE setting_key='service_fee'");
   expect(row[0].setting_value).toBe("2000");
   await put("/settings/service-fee", { value: 2000 }).expect(200);

@@ -1,10 +1,11 @@
 import { RequestHandler, Router } from "express";
-import { reasonBody } from "../dto/admin.dto";
+import { kontakCsSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
 import {
   aksiPenjualHandler, ambilBiayaHandler, antrianVerifikasiHandler, buatMasterHandler, buatPromoHandler, daftarLogHandler,
   daftarMasterHandler, daftarPenjualHandler, daftarPromoHandler, detailPenjualHandler, idParam, ringkasanHandler,
   setAktifMasterHandler, setAktifPromoHandler, ubahBiayaHandler, ubahMasterHandler, ubahPromoHandler,
-  daftarMenuAdminHandler, daftarUlasanAdminHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
+  daftarMenuAdminHandler, daftarUlasanAdminHandler, kirimPengumumanHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
+  ubahKontakCsHandler,
 } from "../handlers/admin.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
@@ -49,6 +50,8 @@ admin.patch("/promos/:id", ubahPromoHandler);
 toggle("/promos/:id", setAktifPromoHandler);
 admin.get("/settings", ambilBiayaHandler);
 admin.put("/settings/service-fee", ubahBiayaHandler);
+admin.put("/settings/cs-contact", validate(kontakCsSchema), ubahKontakCsHandler);
+admin.post("/broadcasts", validate(pengumumanSchema), kirimPengumumanHandler);
 admin.get("/summary", ringkasanHandler);
 
 // F20 rekap keuangan per toko

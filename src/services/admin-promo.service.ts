@@ -148,3 +148,22 @@ export async function ubahBiaya(adminId: number, body: unknown) {
     return { service_fee: value };
   });
 }
+
+// --- Kontak CS (app_settings.cs_whatsapp); "" = belum diatur ---
+export async function ambilKontakCs(): Promise<string | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT setting_value FROM app_settings WHERE setting_key = 'cs_whatsapp'");
+  return rows[0]?.setting_value || null;
+}
+
+export async function ubahKontakCs(adminId: number, wa: string) {
+  return dalamTransaksi(async (conn) => {
+    await conn.query("INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES ('cs_whatsapp', '')");
+    const [[r]] = await conn.query<RowDataPacket[]>("SELECT setting_value FROM app_settings WHERE setting_key = 'cs_whatsapp' FOR UPDATE");
+    const lama = r.setting_value || null;
+    const baru = wa || null;
+    if (lama === baru) return { cs_whatsapp: lama };
+    await conn.query("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'cs_whatsapp'", [wa]);
+    await catat(conn, { adminId, action: "settings.cs_whatsapp", targetType: "settings", targetId: "cs_whatsapp", before: { value: lama }, after: { value: baru } });
+    return { cs_whatsapp: baru };
+  });
+}

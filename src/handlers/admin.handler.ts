@@ -3,7 +3,8 @@ import { AuthedRequest } from "../middleware/auth";
 import { daftarLog, filterLog } from "../services/admin-audit.service";
 import { buatMaster, daftarMaster, setAktif, ubahMaster } from "../services/admin-master.service";
 import { antrianVerifikasi, daftarPenjual, detailPenjual, jalankanAksi } from "../services/admin-merchant.service";
-import { ambilBiaya, buatPromo, daftarPromo, setAktifPromo, ubahBiaya, ubahPromo } from "../services/admin-promo.service";
+import { ambilBiaya, ambilKontakCs, buatPromo, daftarPromo, setAktifPromo, ubahBiaya, ubahKontakCs, ubahPromo } from "../services/admin-promo.service";
+import { kirimPengumuman } from "../services/admin-pengumuman.service";
 import { ringkasan } from "../services/admin-summary.service";
 import { rekapKeuangan } from "../services/admin-keuangan.service";
 import { rentangSchema } from "../dto/merchant-laporan.dto";
@@ -77,7 +78,7 @@ export const setAktifPromoHandler = (aktif: boolean): RequestHandler => async (r
   res.json({ data: await setAktifPromo(adminId(req), req.params.id, aktif) });
 };
 export const ambilBiayaHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: { service_fee: await ambilBiaya() } });
+  res.json({ data: { service_fee: await ambilBiaya(), cs_whatsapp: await ambilKontakCs() } });
 };
 export const ubahBiayaHandler: RequestHandler = async (req, res) => {
   res.json({ data: await ubahBiaya(adminId(req), req.body) });
@@ -106,4 +107,12 @@ export const moderasiMenuHandler = (turun: boolean): RequestHandler => async (re
 // F20 rekap keuangan ?from&to (tanggal WIB, maks 92 hari)
 export const rekapKeuanganHandler: RequestHandler = async (req, res) => {
   res.json({ data: await rekapKeuangan(parse(rentangSchema, req.query)) });
+};
+
+// Kontak CS (body divalidasi kontakCsSchema) dan broadcast pengumuman (pengumumanSchema)
+export const ubahKontakCsHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await ubahKontakCs(adminId(req), req.body.wa_number) });
+};
+export const kirimPengumumanHandler: RequestHandler = async (req, res) => {
+  res.status(201).json({ data: await kirimPengumuman(adminId(req), req.body) });
 };

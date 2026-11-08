@@ -49,7 +49,7 @@ test("GET /api/v1/meta/pickup-points → urut nama, nonaktif disembunyikan", asy
 test("GET /api/v1/meta/settings → service_fee number, timezone string, mengikuti nilai admin", async () => {
   let res = await request(app).get("/api/v1/meta/settings");
   expect(res.status).toBe(200);
-  expect(res.body.data).toEqual({ service_fee: 0, timezone: "Asia/Jakarta" });
+  expect(res.body.data).toEqual({ service_fee: 0, timezone: "Asia/Jakarta", cs_whatsapp: null });
   await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
   res = await request(app).get("/api/v1/meta/settings");
   expect(res.body.data.service_fee).toBe(2000);

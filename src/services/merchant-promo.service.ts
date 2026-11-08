@@ -4,6 +4,7 @@ import { AppError } from "../utils/errors";
 import { dalamTransaksi, kunci, withBool } from "./admin-audit.service";
 import { FIELD, kodeGanda, kodeSkema, nilai, rapikan } from "./admin-promo.service";
 import { idToko } from "./merchant-menu.service";
+import { kabariPromoToko } from "./admin-pengumuman.service";
 
 // F12 promo toko: aturan isian sama dengan promo platform (rapikan); kode unik di seluruh tabel promos.
 // Berbeda dengan admin: kode boleh diubah, status lewat PATCH is_active, boleh dihapus selama belum dipakai, tanpa log audit admin.
@@ -39,6 +40,7 @@ export async function buatPromoToko(userId: number, body: unknown) {
         data.starts_at, data.ends_at, aktif],
     );
     const [[row]] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [ins.insertId]);
+    await kabariPromoToko(row);
     return withBool(row);
   } catch (e) {
     if (dup(e)) throw kodeGanda();
@@ -52,7 +54,7 @@ export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknow
   const b = objek(body);
   const aktif = aktifDari(b);
   try {
-    return await dalamTransaksi(async (conn) => {
+    const { after, dinyalakan } = await dalamTransaksi(async (conn) => {
       const before = await kunciPromoToko(conn, merchantId, idRaw);
       const merged = {
         ...Object.fromEntries(FIELD.map((k) => [k, before[k] instanceof Date ? (before[k] as Date).toISOString() : before[k]])),
@@ -71,8 +73,10 @@ export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknow
         await conn.query(`UPDATE promos SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [...cols.map((c) => baru[c]), before.id]);
       }
       const [[after]] = await conn.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [before.id]);
-      return withBool(after);
+      return { after, dinyalakan: !lama.is_active && Boolean(after.is_active) };
     });
+    if (dinyalakan) await kabariPromoToko(after);
+    return withBool(after);
   } catch (e) {
     if (dup(e)) throw kodeGanda();
     throw e;
