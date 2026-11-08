@@ -100,3 +100,23 @@ export const uploadLimiter: RequestHandler & { reset: () => void } = Object.assi
   }) as RequestHandler,
   { reset: () => perUpload.hits.clear() },
 );
+
+// F11 OTP lupa sandi: semua permintaan dihitung. Per rute+email 5/15 menit (spam email, tebak kode), per IP 30/15 menit.
+const otpEmail = newBucket(5, 15 * 60_000);
+const otpIp = newBucket(30, 15 * 60_000);
+
+export const otpLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, _res, next) => {
+    const now = Date.now();
+    // validate berjalan lebih dulu: email sudah dirapikan huruf kecil
+    const email = `${req.path}:${String(req.body.email)}`;
+    const ip = String(clientIp(req));
+    if (full(otpEmail, email, now) || full(otpIp, ip, now)) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak permintaan. Coba lagi beberapa menit lagi."));
+    }
+    hit(otpEmail, email, now);
+    hit(otpIp, ip, now);
+    next();
+  }) as RequestHandler,
+  { reset: () => { otpEmail.hits.clear(); otpIp.hits.clear(); } },
+);

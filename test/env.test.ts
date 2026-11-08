@@ -52,4 +52,11 @@ describe("loadEnv", () => {
     expect(loadEnv({ ...valid, ...r2 }).R2_PUBLIC_URL).toBe("https://foto.test");
     expect(() => loadEnv({ ...valid, ...r2, R2_PUBLIC_URL: "http://foto.test" })).toThrow(/R2_PUBLIC_URL/);
   });
+
+  test("SMTP_* semua-atau-tidak (F11)", () => {
+    const smtp = { SMTP_HOST: "smtp.test", SMTP_PORT: "465", SMTP_USER: "u", SMTP_PASS: "p", SMTP_FROM: "KateringKita <no-reply@test>" };
+    expect(() => loadEnv({ ...valid, SMTP_HOST: "smtp.test" })).toThrow("SMTP_* harus diisi semua atau dikosongkan semua");
+    expect(loadEnv({ ...valid, ...smtp }).SMTP_PORT).toBe(465);
+    expect(loadEnv({ ...valid, SMTP_HOST: "" }).SMTP_HOST).toBeUndefined();
+  });
 });

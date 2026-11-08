@@ -54,3 +54,11 @@ export type UpdateMeInput = z.infer<typeof updateMeSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterCustomerInput = z.infer<typeof registerCustomerSchema>;
 export type RegisterMerchantInput = z.infer<typeof registerMerchantSchema>;
+
+// F11 lupa sandi (OTP email)
+const KODE = "Kode berisi 6 angka.";
+const kode = z.string(KODE).regex(/^\d{6}$/, KODE);
+export const forgotPasswordSchema = z.object({ email });
+export const verifyOtpSchema = z.object({ email, code: kode });
+export const resetPasswordSchema = z.object({ email, code: kode, password });
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
