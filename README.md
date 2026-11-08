@@ -28,11 +28,18 @@ REST API untuk **KateringKita**, marketplace katering di sekitar kampus. Satu AP
 | F07 | Proses pesanan oleh penjual dan pembeli | Selesai |
 | F08 | Kedaluwarsa otomatis pesanan tertahan + notifikasi | Selesai |
 | F18 | Admin: verifikasi penjual, data master, promo platform, log | Selesai |
-| F09 | Laporan penjualan | Sedang dikerjakan |
-| F10–F14 | Pembayaran QRIS/VA, lupa sandi OTP, promo toko, ulasan, pesan lagi | Belum |
-| F17, F19, F20 | Asisten AI dan HPP, moderasi admin, keuangan admin | Belum |
+| F09 | Laporan penjualan (ringkasan, per jam, transaksi) | Selesai |
+| F10 | Pembayaran QRIS toko, diverifikasi manual penjual | Selesai (VA menunggu gateway) |
+| F11 | Lupa sandi lewat OTP email | Selesai |
+| F12 | Promo toko + kode promo di checkout | Selesai |
+| F13 | Ulasan pembeli dan rating menu/toko | Selesai |
+| F14 | Pesan lagi | Selesai |
+| F17 | Asisten AI toko (Gemini) | Selesai |
+| F19 | Moderasi admin: ulasan, menu (suspend toko dari F18) | Selesai |
+| F20 | Rekap keuangan admin | Selesai |
+| — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
 
-Uji otomatis: **51 berkas, 472 test**, semuanya lulus di database MySQL lokal.
+Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
 
 ---
 
@@ -65,10 +72,10 @@ src/
 ├── services/          <fitur>[-bagian].service.ts: aturan bisnis dan kueri SQL
 ├── dto/               <fitur>[-bagian].dto.ts: skema zod untuk body/query dan tipe inputnya
 ├── middleware/        auth.ts (sesi & peran), rateLimiter.ts, validate.ts, errorHandler.ts, requestLogger.ts
-├── utils/             errors.ts (AppError), r2.ts (penanda tangan URL Cloudflare R2)
+├── utils/             errors.ts (AppError), r2.ts (URL Cloudflare R2), mail.ts (SMTP), gemini.ts (Gemini REST)
 └── scripts/           migrate.ts, seed-demo.ts, create-admin.ts (dijalankan lewat npm run)
 database/
-└── migrations/        001_init.sql, 002_admin.sql, 003_checkout.sql
+└── migrations/        001_init.sql, 002_admin.sql, 003_checkout.sql, 004_moderasi.sql
 test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
 ```
 
@@ -86,6 +93,11 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **HPP tidak pernah keluar ke publik.** Katalog pembeli memakai pemetaan sendiri tanpa `hpp`.
 - **Toko harus diverifikasi admin** sebelum tampil di katalog dan bisa menerima pesanan.
 - **Idempotensi checkout.** Header `Idempotency-Key` yang sama menghasilkan pesanan yang sama, bukan pesanan ganda.
+- **Pembayaran QRIS manual (F10).** Pembeli membayar ke QRIS toko (`qris_image_url`). Penjual mengecek lalu menekan `pay`, yang sekaligus menandai lunas dan mengonfirmasi pesanan. QRIS ditolak bila toko belum memasang QRIS. VA belum didukung.
+- **Promo (F12).** Promo platform berlaku di semua toko, promo toko hanya di tokonya. Diperiksa: aktif, periode, kuota (diklaim atomik), minimal belanja, batas per pembeli. Kuota kembali saat pesanan batal atau kedaluwarsa.
+- **Ulasan (F13).** Satu ulasan per menu per pesanan selesai. Rating menu dan toko dihitung ulang setiap ulasan masuk atau dimoderasi.
+- **Moderasi (F19).** Ulasan yang disembunyikan admin tidak tampil dan tidak dihitung. Menu yang diturunkan admin nonaktif dan tidak bisa diaktifkan penjual sampai dipulihkan.
+- **Lupa sandi (F11).** OTP 6 digit lewat email, berlaku 10 menit, maksimal 5 percobaan, sekali pakai. Jawaban permintaan kode selalu sama agar keberadaan email tidak bocor.
 
 ---
 
@@ -98,16 +110,21 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Kesehatan | `GET /health` | publik |
 | Data referensi | `GET /meta/merchant-types`, `/meta/categories`, `/meta/pickup-points`, `/meta/settings` | publik |
 | Akun | `POST /auth/customer/register`, `/auth/merchant/register`, `/auth/login`, `/auth/logout` | publik / masuk |
+| Lupa sandi | `POST /auth/password/forgot`, `/auth/password/verify`, `/auth/password/reset` | publik |
 | Profil | `GET /me`, `PATCH /me`, `PUT /me/password`, `POST /me/avatar` | masuk |
 | Katalog | `GET /menus`, `/menus/:id`, `/menus/:id/reviews`, `/merchants/:slug` | publik |
 | Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
-| Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete` | pembeli |
+| Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder` | pembeli |
 | Notifikasi | `GET /me/notifications`, `POST /me/notifications/read` | masuk |
 | Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
 | Menu | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota` | penjual |
-| Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}` | penjual |
+| Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,pay,cook,ready,complete,reject}` | penjual |
+| Laporan toko | `GET /merchant/reports/summary`, `/hourly`, `/transactions` | penjual |
+| Promo & ulasan toko | `GET` dan `POST /merchant/promos`, `PATCH` dan `DELETE /merchant/promos/:id`, `GET /merchant/reviews` | penjual |
+| Asisten AI | `POST /merchant/assistant` | penjual |
 | Unggah foto | `POST /merchant/uploads` | penjual |
 | Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
+| Admin (lanjutan) | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact` | admin |
 
 Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `docs/API.md` pada monorepo tim.
 
@@ -130,6 +147,8 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 | `JWT_TTL_WEB`, `JWT_TTL_MOBILE` | tidak | Masa berlaku token, bawaan `1d` dan `30d` |
 | `INTERNAL_API_SECRET` | tidak | Rahasia bersama dengan server web agar pembatas laju menghitung per alamat pengunjung |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto. Kosong semua berarti endpoint unggah menjawab `503` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Kunci Google AI Studio untuk asisten AI toko; model bawaan `gemini-2.5-flash`. Kosong: asisten menjawab `503` |
 | `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |
 
 ---
@@ -163,7 +182,7 @@ npm run dev                 # http://localhost:5000/api/v1/health
 ## Deploy
 
 - **Heroku** (app `ketring`) tersambung ke repo ini. Setiap push ke `main` otomatis di-build (`npm run build`) lalu dijalankan dengan `web: node dist/server.js` dari `Procfile`.
-- **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–003 sudah diterapkan.
+- **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–003 sudah diterapkan; `004_moderasi.sql` belum.
 - **Migrasi baru tidak berjalan otomatis.** Setelah menambah berkas di `database/migrations/`, jalankan `npm run migrate` sekali terhadap database production sebelum atau segera setelah deploy.
 - **Unggah foto** belum aktif di production karena variabel R2 belum diisi.
 
