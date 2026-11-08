@@ -1,5 +1,6 @@
 import { Request, RequestHandler } from "express";
 import { alasanSchema, bodyObjek, daftarSayaSchema, kunciSchema, pesananSchema } from "../dto/pesanan.dto";
+import { kirimUlasan } from "../services/ulasan.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { bacaPesanan, batalkan, buatPesanan, daftarPesananSaya, quote, selesaikan, waPesanan } from "../services/pesanan.service";
@@ -35,4 +36,9 @@ export const batalkanHandler: RequestHandler = async (req, res) => {
 
 export const selesaikanHandler: RequestHandler = async (req, res) => {
   res.json({ data: await selesaikan(uid(req), String(req.params.code)) });
+};
+
+// F13: ulasan pesanan selesai (body sudah divalidasi ulasanSchema di rute)
+export const kirimUlasanHandler: RequestHandler = async (req, res) => {
+  res.status(201).json({ data: await kirimUlasan(uid(req), String(req.params.code), req.body) });
 };

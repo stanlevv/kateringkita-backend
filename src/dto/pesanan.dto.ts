@@ -64,3 +64,15 @@ export const daftarSayaSchema = z.object({
   ...daftarDasar,
 });
 export type DaftarSaya = z.infer<typeof daftarSayaSchema>;
+
+// F13: ulasan per menu dalam pesanan selesai
+const RATING = "Rating harus 1–5.";
+const ULASAN = "Pilih 1–20 menu untuk diulas.";
+export const ulasanSchema = z.object({
+  items: z.array(z.object({
+    menu_id: id("Menu tidak ada di pesanan ini."),
+    rating: z.number({ error: RATING }).int(RATING).min(1, RATING).max(5, RATING),
+    comment: teks("Komentar maksimal 500 karakter.", 500),
+  }, { error: ULASAN }), { error: ULASAN }).min(1, ULASAN).max(20, ULASAN),
+}, { error: "Data ulasan tidak valid." });
+export type UlasanInput = z.infer<typeof ulasanSchema>;

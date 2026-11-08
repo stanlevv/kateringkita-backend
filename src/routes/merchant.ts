@@ -4,7 +4,7 @@ import { statusSchema, updateProfileSchema } from "../dto/merchant.dto";
 import { merchantUploadSchema } from "../dto/upload.dto";
 import {
   aksiPesananTokoHandler, ambilMenuHandler, ambilPesananTokoHandler, buatMenuHandler, daftarMenuHandler, daftarPesananTokoHandler,
-  buatPromoTokoHandler, daftarPromoTokoHandler, hapusPromoTokoHandler, ubahPromoTokoHandler,
+  buatPromoTokoHandler, daftarPromoTokoHandler, daftarUlasanTokoHandler, hapusPromoTokoHandler, ubahPromoTokoHandler,
   getProfileHandler, hapusMenuHandler, laporanPerJamHandler, laporanTransaksiHandler, ringkasanLaporanHandler, setOpenHandler, ubahKuotaHandler, ubahMenuHandler, updateProfileHandler, uploadFotoHandler,
   waPesananTokoHandler,
 } from "../handlers/merchant.handler";
@@ -57,6 +57,9 @@ merchant.post("/promos", buatPromoTokoHandler);
 merchant.patch("/promos/:id", ubahPromoTokoHandler);
 
 merchant.delete("/promos/:id", hapusPromoTokoHandler);
+
+// F13 ulasan pembeli untuk menu toko
+merchant.get("/reviews", daftarUlasanTokoHandler);
 
 // F07 (M-04, M-08), F10 (pay): aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
 merchant.post("/orders/:code/:aksi", aksiPesananTokoHandler);

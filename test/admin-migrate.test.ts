@@ -29,7 +29,7 @@ describe("migrasi 002_admin (A-05)", () => {
     );
     lamaId = m.insertId;
     await conn.end();
-    expect(await migrate(url)).toEqual(["002_admin.sql", "003_checkout.sql"]);
+    expect(await migrate(url)).toEqual(["002_admin.sql", "003_checkout.sql", "004_moderasi.sql"]);
   });
 
   const query = async (sql: string, params: unknown[] = []) => {

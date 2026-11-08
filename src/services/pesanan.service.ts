@@ -163,7 +163,9 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
 export const KOLOM = `o.id, o.code, o.status, o.payment_method, o.payment_status, o.hold_until, o.pickup_at,
   GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, o.pickup_point_id, p.name AS p_name,
   o.subtotal, o.discount, o.service_fee, o.total, o.note, o.cancel_reason, o.cancelled_by, o.created_at, o.updated_at`;
-const DARI_PEMBELI = `${KOLOM}, o.merchant_id, m.business_name, m.wa_number, m.qris_image_url
+const DARI_PEMBELI = `${KOLOM}, o.merchant_id, m.business_name, m.wa_number, m.qris_image_url,
+  (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id AND NOT EXISTS
+    (SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.menu_id = i.menu_id)) AS belum_diulas
   FROM orders o JOIN merchants m ON m.id = o.merchant_id JOIN pickup_points p ON p.id = o.pickup_point_id`;
 
 export type Item = { menu_id: number; menu_name: string; qty: number; unit_price: number; options: unknown[]; line_total: number };
@@ -200,7 +202,8 @@ export const petaPesanan = (o: RowDataPacket, items: Item[]) => ({
   // F10: QRIS toko untuk dibayar pembeli, diverifikasi manual penjual
   merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number, qris_image_url: o.qris_image_url },
   can_cancel: (o.status === "holding" && Number(o.seconds_left) > 0) || (o.status === "confirmed" && o.payment_method === "cod"),
-  can_complete: o.status === "ready", can_review: o.status === "completed",
+  // F13: masih ada menu yang belum diulas
+  can_complete: o.status === "ready", can_review: o.status === "completed" && Number(o.belum_diulas) > 0,
 });
 
 // pola LIKE sebagian dengan % _ \ di-escape; pemanggil membandingkan LOWER(kolom) LIKE LOWER(?) karena TiDB bawaan utf8mb4_bin (peka huruf)
