@@ -131,7 +131,23 @@ export function periksa(k: Keranjang, data: QuoteInput, ms: number): Hasil {
   return { merchant: t, baris, subtotal, discount: 0, service_fee, total: subtotal + service_fee, kurang };
 }
 
-// D10: promo belum didukung sampai F12; posisi setelah stok (D3)
-export function cekPromo(data: QuoteInput) {
-  if (data.promo_code) throw new AppError(422, "PROMO_INVALID", "Kode promo belum bisa dipakai.");
+export const tolakPromo = (pesan: string) => new AppError(422, "PROMO_INVALID", pesan, { promo_code: [pesan] });
+
+// F12 (D10): promo platform (merchant_id NULL) atau promo toko ini; posisi setelah stok (D3). Mengisi discount & total di `h`.
+// Tanpa kunci: kuota diklaim atomik oleh buatPesanan; batas per pembeli aman karena baris users pembeli sudah dikunci.
+export async function terapkanPromo(conn: Q, h: Hasil, code: string | null, userId: number, ms: number) {
+  if (!code) return null;
+  const [[p]] = await conn.query<RowDataPacket[]>(
+    "SELECT * FROM promos WHERE code = ? AND (merchant_id IS NULL OR merchant_id = ?)", [code.toUpperCase(), h.merchant.id],
+  );
+  if (!p || !p.is_active) throw tolakPromo("Kode promo tidak ditemukan.");
+  if (ms < new Date(p.starts_at).getTime() || ms >= new Date(p.ends_at).getTime()) throw tolakPromo("Promo sedang tidak berlaku.");
+  if (p.quota !== null && p.used_count >= p.quota) throw tolakPromo("Kuota promo sudah habis.");
+  if (h.subtotal < p.min_subtotal) throw tolakPromo(`Minimal belanja Rp ${Number(p.min_subtotal).toLocaleString("id-ID")} untuk promo ini.`);
+  const [[n]] = await conn.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM promo_redemptions WHERE promo_id = ? AND user_id = ?", [p.id, userId]);
+  if (Number(n.n) >= p.per_user_limit) throw tolakPromo("Promo ini sudah mencapai batas pemakaianmu.");
+  h.discount = p.type === "percent" ? Math.min(Math.floor((h.subtotal * p.value) / 100), p.max_discount ?? Infinity)
+    : p.type === "fixed" ? Math.min(p.value, h.subtotal) : h.service_fee;
+  h.total = h.subtotal + h.service_fee - h.discount;
+  return p.id as number;
 }

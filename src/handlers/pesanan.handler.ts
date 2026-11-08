@@ -7,7 +7,7 @@ import { bacaPesanan, batalkan, buatPesanan, daftarPesananSaya, quote, selesaika
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
 
 export const quoteHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await quote(req.body) });
+  res.json({ data: await quote(uid(req), req.body) });
 };
 
 export const buatPesananHandler: RequestHandler = async (req, res) => {

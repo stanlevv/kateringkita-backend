@@ -48,7 +48,7 @@ export async function transisi(
     await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [p.customer_id]);
   }
   const [[o]] = await conn.query<RowDataPacket[]>(
-    `SELECT id, customer_id, merchant_id, status, payment_method, payment_status, total, hold_until <= UTC_TIMESTAMP() AS lewat FROM orders WHERE code = ?${
+    `SELECT id, customer_id, merchant_id, status, payment_method, payment_status, total, promo_id, hold_until <= UTC_TIMESTAMP() AS lewat FROM orders WHERE code = ?${
       aktor.jenis === "customer" ? " AND customer_id = ?" : aktor.jenis === "merchant" ? " AND merchant_id = ?" : ""} FOR UPDATE`,
     [code, ...(aktor.jenis === "customer" ? [aktor.userId] : aktor.jenis === "merchant" ? [aktor.merchantId] : [])],
   );
@@ -73,6 +73,11 @@ export async function transisi(
   if (aksi === "pay") {
     await conn.query("INSERT INTO payments (order_id, method, provider, amount, status, paid_at) VALUES (?, 'qris', 'manual', ?, 'paid', UTC_TIMESTAMP())",
       [o.id, o.total]);
+  }
+  // F12: kuota promo kembali saat batal/kedaluwarsa; sebelum lepasStok (urutan kunci promos → menus, sama dengan checkout)
+  if (batal && o.promo_id) {
+    await conn.query("UPDATE promos SET used_count = used_count - 1 WHERE id = ? AND used_count > 0", [o.promo_id]);
+    await conn.query("DELETE FROM promo_redemptions WHERE order_id = ?", [o.id]);
   }
   const jadi = a.stok?.(dari);
   if (jadi) await lepasStok(conn, o.id, jadi);

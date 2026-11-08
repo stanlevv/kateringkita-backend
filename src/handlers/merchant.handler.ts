@@ -8,6 +8,7 @@ import { ambilMenu, buatMenu, daftarMenu, hapusMenu, idToko, ubahKuota, ubahMenu
 import { AKSI_TOKO, AksiToko, aksiPesananToko, ambilPesananToko, daftarPesananToko, waPesananToko } from "../services/merchant-order.service";
 import { getProfile, setOpen, updateProfile } from "../services/merchant.service";
 import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-laporan.service";
+import { buatPromoToko, daftarPromoToko, hapusPromoToko, ubahPromoToko } from "../services/merchant-promo.service";
 import { buatUnggahan } from "../services/upload.service";
 import { AppError } from "../utils/errors";
 
@@ -92,4 +93,22 @@ export const laporanPerJamHandler: RequestHandler = async (req, res) => {
 
 export const laporanTransaksiHandler: RequestHandler = async (req, res) => {
   res.json({ data: await laporanTransaksi(uid(req), parse(rentangSchema, req.query)) });
+};
+
+// F12 promo toko
+export const daftarPromoTokoHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await daftarPromoToko(uid(req)) });
+};
+
+export const buatPromoTokoHandler: RequestHandler = async (req, res) => {
+  res.status(201).json({ data: await buatPromoToko(uid(req), req.body) });
+};
+
+export const ubahPromoTokoHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await ubahPromoToko(uid(req), req.params.id, req.body) });
+};
+
+// {data:{id}} (bukan 204) agar fe hasil() menerima sukses
+export const hapusPromoTokoHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await hapusPromoToko(uid(req), req.params.id) });
 };

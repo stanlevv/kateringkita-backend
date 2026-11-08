@@ -160,9 +160,9 @@ describe("urutan validasi D3", () => {
     }
   });
 
-  test("promo terisi → 422 PROMO_INVALID; promo kosong diabaikan", async () => {
+  test("promo tak dikenal → 422 PROMO_INVALID; promo kosong diabaikan", async () => {
     const r = await quote(satu({ promo_code: "HEMAT" })).expect(422);
-    expect(r.body.error).toMatchObject({ code: "PROMO_INVALID", message: "Kode promo belum bisa dipakai." });
+    expect(r.body.error).toMatchObject({ code: "PROMO_INVALID", message: "Kode promo tidak ditemukan." });
     await quote(satu({ promo_code: "  " })).expect(200);
   });
 });

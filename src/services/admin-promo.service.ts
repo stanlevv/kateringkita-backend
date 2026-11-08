@@ -35,10 +35,11 @@ const skema = (terpakai: number) =>
       if (d.ends_at <= d.starts_at) err("ends_at", "Waktu selesai harus setelah waktu mulai.");
     });
 
-const kodeSkema = z.string({ error: "Kode wajib diisi." }).trim().toUpperCase().regex(/^[A-Z0-9]{3,30}$/, "Kode 3–30 huruf besar atau angka.");
-const FIELD = ["description", "type", "value", "max_discount", "min_subtotal", "quota", "per_user_limit", "starts_at", "ends_at"] as const;
+export const kodeSkema = z.string({ error: "Kode wajib diisi." }).trim().toUpperCase().regex(/^[A-Z0-9]{3,30}$/, "Kode 3–30 huruf besar atau angka.");
+export const FIELD = ["description", "type", "value", "max_discount", "min_subtotal", "quota", "per_user_limit", "starts_at", "ends_at"] as const;
 
-function rapikan(input: unknown, terpakai: number, cekKode = false) {
+// F12: dipakai juga promo toko (merchant-promo.service)
+export function rapikan(input: unknown, terpakai: number, cekKode = false) {
   const body = (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>;
   const pick = Object.fromEntries(FIELD.filter((k) => k in body).map((k) => [k, body[k]]));
   const fields: Record<string, string[]> = {};
@@ -67,8 +68,8 @@ function rapikan(input: unknown, terpakai: number, cekKode = false) {
   };
 }
 
-const nilai = (v: unknown) => (v instanceof Date ? v.getTime() : v ?? null);
-const kodeGanda = () => new AppError(409, "CONFLICT", "Kode sudah dipakai.", { code: ["Kode sudah dipakai."] });
+export const nilai = (v: unknown) => (v instanceof Date ? v.getTime() : v ?? null);
+export const kodeGanda = () => new AppError(409, "CONFLICT", "Kode sudah dipakai.", { code: ["Kode sudah dipakai."] });
 
 export async function daftarPromo() {
   const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE merchant_id IS NULL ORDER BY id DESC");
