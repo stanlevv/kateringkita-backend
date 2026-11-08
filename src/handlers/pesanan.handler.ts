@@ -3,7 +3,7 @@ import { alasanSchema, bodyObjek, daftarSayaSchema, kunciSchema, pesananSchema }
 import { kirimUlasan } from "../services/ulasan.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { bacaPesanan, batalkan, buatPesanan, daftarPesananSaya, quote, selesaikan, waPesanan } from "../services/pesanan.service";
+import { bacaPesanan, batalkan, buatPesanan, daftarPesananSaya, pesanLagi, quote, selesaikan, waPesanan } from "../services/pesanan.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
 
@@ -41,4 +41,9 @@ export const selesaikanHandler: RequestHandler = async (req, res) => {
 // F13: ulasan pesanan selesai (body sudah divalidasi ulasanSchema di rute)
 export const kirimUlasanHandler: RequestHandler = async (req, res) => {
   res.status(201).json({ data: await kirimUlasan(uid(req), String(req.params.code), req.body) });
+};
+
+// F14: pesan lagi dari pesanan lama
+export const pesanLagiHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await pesanLagi(uid(req), String(req.params.code)) });
 };

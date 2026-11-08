@@ -6,7 +6,7 @@ import { AppError } from "../utils/errors";
 import { jam, jamWib, SISA } from "./katalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import { Kurang, muatKeranjang, periksa, terapkanPromo, tolakPromo } from "./pesanan-keranjang.service";
-import { DaftarSaya, PesananInput, QuoteInput } from "../dto/pesanan.dto";
+import { DaftarSaya, PesananInput, QuoteInput, quoteSchema } from "../dto/pesanan.dto";
 import { Status, transisi } from "./pesanan-status.service";
 
 // F06 pesanan pembeli (C-09, C-11, C-13)
@@ -305,4 +305,17 @@ export async function waPesanan(userId: number, code: string) {
   const [items] = await db.query<RowDataPacket[]>("SELECT qty, menu_name FROM order_items WHERE order_id = ? ORDER BY id", [o.id]);
   const message = render(PESAN_PEMBELI + (o.note ? "\nCatatan: {catatan}" : ""), nilaiWa({ ...o, items } as Parameters<typeof nilaiWa>[0]));
   return { wa_number: o.wa_number, message, url: tautanWa(o.wa_number, message) };
+}
+
+// F14 pesan lagi: isi pesanan lama disusun ulang lalu dicek quote (harga, opsi, stok, promo terkini; tanpa tulis).
+// Klien menambah payment_method lalu mengirim `request` ke POST /orders.
+export async function pesanLagi(userId: number, code: string) {
+  const [[o]] = await db.query<RowDataPacket[]>("SELECT id, pickup_point_id, note FROM orders WHERE code = ? AND customer_id = ?", [code, userId]);
+  if (!o) throw tidakAda();
+  const items = (await muatItem([o.id])).get(o.id) ?? [];
+  const request = quoteSchema.parse({
+    items: items.map((i) => ({ menu_id: i.menu_id, qty: i.qty, option_ids: (i.options as { id: number }[]).map((x) => x.id) })),
+    pickup_point_id: o.pickup_point_id, note: o.note,
+  });
+  return { request, quote: await quote(userId, request) };
 }

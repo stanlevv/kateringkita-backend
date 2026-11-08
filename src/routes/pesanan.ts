@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { quoteSchema, ulasanSchema } from "../dto/pesanan.dto";
 import {
-  bacaPesananHandler, batalkanHandler, buatPesananHandler, daftarPesananSayaHandler, kirimUlasanHandler, quoteHandler, selesaikanHandler,
+  bacaPesananHandler, batalkanHandler, buatPesananHandler, daftarPesananSayaHandler, kirimUlasanHandler, pesanLagiHandler, quoteHandler,
+  selesaikanHandler,
   waPesananHandler,
 } from "../handlers/pesanan.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -30,3 +31,6 @@ pesanan.post("/orders/:code/complete", ...pembeli, selesaikanHandler);
 
 // F13: ulasan per menu untuk pesanan selesai
 pesanan.post("/orders/:code/reviews", ...pembeli, validate(ulasanSchema), kirimUlasanHandler);
+
+// F14: susun ulang pesanan lama + quote
+pesanan.post("/orders/:code/reorder", ...pembeli, pesanLagiHandler);
