@@ -2,13 +2,14 @@ import { Router } from "express";
 import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
 import { statusSchema, updateProfileSchema } from "../dto/merchant.dto";
 import { merchantUploadSchema } from "../dto/upload.dto";
+import { tanyaSchema } from "../dto/asisten.dto";
 import {
   aksiPesananTokoHandler, ambilMenuHandler, ambilPesananTokoHandler, buatMenuHandler, daftarMenuHandler, daftarPesananTokoHandler,
-  buatPromoTokoHandler, daftarPromoTokoHandler, daftarUlasanTokoHandler, hapusPromoTokoHandler, ubahPromoTokoHandler,
+  buatPromoTokoHandler, daftarPromoTokoHandler, daftarUlasanTokoHandler, hapusPromoTokoHandler, tanyaAsistenHandler, ubahPromoTokoHandler,
   getProfileHandler, hapusMenuHandler, laporanPerJamHandler, laporanTransaksiHandler, ringkasanLaporanHandler, setOpenHandler, ubahKuotaHandler, ubahMenuHandler, updateProfileHandler, uploadFotoHandler,
   waPesananTokoHandler,
 } from "../handlers/merchant.handler";
-import { uploadLimiter } from "../middleware/rateLimiter";
+import { asistenLimiter, uploadLimiter } from "../middleware/rateLimiter";
 import { validate } from "../middleware/validate";
 
 // Penjaga (requireAuth + requireRole("merchant")) dipasang sekali di app.ts; toko selalu dari token (R-10).
@@ -60,6 +61,9 @@ merchant.delete("/promos/:id", hapusPromoTokoHandler);
 
 // F13 ulasan pembeli untuk menu toko
 merchant.get("/reviews", daftarUlasanTokoHandler);
+
+// F17 asisten AI toko
+merchant.post("/assistant", validate(tanyaSchema), asistenLimiter, tanyaAsistenHandler);
 
 // F07 (M-04, M-08), F10 (pay): aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
 merchant.post("/orders/:code/:aksi", aksiPesananTokoHandler);

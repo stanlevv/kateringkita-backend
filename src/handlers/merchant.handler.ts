@@ -10,6 +10,7 @@ import { getProfile, setOpen, updateProfile } from "../services/merchant.service
 import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-laporan.service";
 import { buatPromoToko, daftarPromoToko, hapusPromoToko, ubahPromoToko } from "../services/merchant-promo.service";
 import { daftarUlasanToko } from "../services/ulasan.service";
+import { tanyaAsisten } from "../services/asisten.service";
 import { buatUnggahan } from "../services/upload.service";
 import { AppError } from "../utils/errors";
 
@@ -117,4 +118,9 @@ export const hapusPromoTokoHandler: RequestHandler = async (req, res) => {
 // F13 ulasan toko
 export const daftarUlasanTokoHandler: RequestHandler = async (req, res) => {
   res.json({ data: await daftarUlasanToko(uid(req)) });
+};
+
+// F17 asisten AI toko (body divalidasi tanyaSchema di rute)
+export const tanyaAsistenHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await tanyaAsisten(uid(req), req.body.question) });
 };

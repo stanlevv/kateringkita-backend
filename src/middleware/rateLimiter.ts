@@ -120,3 +120,19 @@ export const otpLimiter: RequestHandler & { reset: () => void } = Object.assign(
   }) as RequestHandler,
   { reset: () => { otpEmail.hits.clear(); otpIp.hits.clear(); } },
 );
+
+// F17 asisten AI: setiap panggilan Gemini berbayar → 10 pertanyaan per toko per 10 menit
+const perAsisten = newBucket(10, 10 * 60_000);
+
+export const asistenLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, _res, next) => {
+    const now = Date.now();
+    const key = String((req as AuthedRequest).auth.userId);
+    if (full(perAsisten, key, now)) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi."));
+    }
+    hit(perAsisten, key, now);
+    next();
+  }) as RequestHandler,
+  { reset: () => perAsisten.hits.clear() },
+);

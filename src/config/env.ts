@@ -31,6 +31,9 @@ const schema = z
     SMTP_USER: opsional(z.string()),
     SMTP_PASS: opsional(z.string()),
     SMTP_FROM: opsional(z.string()),
+    // F17: Gemini untuk asisten toko; kosong = asisten 503
+    GEMINI_API_KEY: opsional(z.string()),
+    GEMINI_MODEL: z.preprocess((v) => (v === "" ? undefined : v), z.string().default("gemini-2.5-flash")),
     CORS_ORIGIN: z
       .string()
       .optional()
