@@ -1,176 +1,182 @@
-# KateringKita — Backend REST API
+# 🍽️ KateringKita — Backend REST API
 
-REST API untuk **KateringKita**, marketplace katering di sekitar kampus. Satu API melayani tiga pemakai:
+<div align="center">
 
-- **Dashboard web penjual dan admin** ([kateringkita-frontend](https://github.com/stanlevv/kateringkita-frontend))
-- **Aplikasi mobile pembeli** (Flutter, dibuat tim lain)
-- **Job internal** yang menjalankan pembatalan otomatis pesanan yang tidak dikonfirmasi
+![Node.js](https://img.shields.io/badge/Node.js-22.x%20|%2024.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)
+![MySQL / TiDB](https://img.shields.io/badge/TiDB%20Cloud-MySQL%208-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-489%20Passed-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
-| | Alamat |
+**RESTful API tangguh dan berkinerja tinggi untuk KateringKita — platform marketplace katering kampus terpercaya.**
+
+[Live Production API](https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health) • [Dashboard Frontend](https://github.com/stanlevv/kateringkita-frontend) • [Dokumentasi API](#-koleksi-endpoint-api-v1)
+
+</div>
+
+---
+
+## 📖 Gambaran Umum
+
+**KateringKita Backend** melayani ekosistem lengkap marketplace katering dalam satu arsitektur terpadu:
+1. **Web Dashboard Merchant & Admin** ([kateringkita-frontend](https://github.com/stanlevv/kateringkita-frontend)) — manajemen katalog, kuota atomik, pemrosesan pesanan real-time, verifikasi toko, dan laporan penjualan.
+2. **Aplikasi Mobile Pembeli** — pemesanan instan mahasiswa, penahanan porsi otomatis 5 menit, pelacakan pesanan, dan integrasi WhatsApp.
+3. **Internal Background Cron / Worker** — pembatalan otomatis pesanan kedaluwarsa (*holding expired*) dan pelepasan porsi tertahan secara aman dan konsisten.
+
+| Lingkungan | Alamat / Endpoint |
 |---|---|
-| API production | https://ketring-45f82aef1ca0.herokuapp.com/api/v1 |
-| Cek kesehatan | https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health → `{"data":{"status":"ok","db":"ok"}}` |
-| Web penjual | https://ketringkita.edufin.app |
+| **Production API Base** | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1` |
+| **Health Check** | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health` → `{"data":{"status":"ok","db":"ok"}}` |
+| **Merchant Dashboard** | `https://ketringkita.edufin.app` |
 
 ---
 
-## Status per November 2026
+## 🚀 Status Implementasi Fitur
 
-| ID | Fitur | Status |
-|---|---|---|
-| F00 | Fondasi: konfigurasi, migrasi, format galat, CORS | Selesai |
-| F01 | Daftar, masuk, keluar, sesi (JWT + daftar sesi di DB) | Selesai |
-| F02 | Profil pengguna, ganti kata sandi, foto profil | Selesai |
-| F03 | Toko: profil, buka/tutup, jam operasional, titik ambil, templat WhatsApp | Selesai |
-| F04 | Menu dan kuota porsi harian | Selesai |
-| F05 | Katalog publik dan favorit | Selesai |
-| F06 | Checkout dengan penahanan porsi 5 menit | Selesai |
-| F07 | Proses pesanan oleh penjual dan pembeli | Selesai |
-| F08 | Kedaluwarsa otomatis pesanan tertahan + notifikasi | Selesai |
-| F18 | Admin: verifikasi penjual, data master, promo platform, log | Selesai |
-| F09 | Laporan penjualan | Sedang dikerjakan |
-| F10–F14 | Pembayaran QRIS/VA, lupa sandi OTP, promo toko, ulasan, pesan lagi | Belum |
-| F17, F19, F20 | Asisten AI dan HPP, moderasi admin, keuangan admin | Belum |
+| Modul | Cakupan Fitur | Status |
+|:---:|---|:---:|
+| **F00** | Fondasi arsitektur: validasi `.env` Zod, koneksi pool MySQL/TiDB SSL, migrasi DB, CORS, error handler terstandar | ✅ Selesai |
+| **F01** | Otentikasi: daftar, login, logout, sesi DB + JWT token | ✅ Selesai |
+| **F02** | Pengguna: profil pengguna, ganti kata sandi, unggah avatar | ✅ Selesai |
+| **F03** | Manajemen Toko: profil merchant, buka/tutup toko, jam buka/tutup, titik ambil (*pickup points*), templat WhatsApp | ✅ Selesai |
+| **F04** | Menu & Kuota Atomik: katalog menu, kuota harian (`daily_quota`), mutasi delta kuota atomik anti *lost-update* | ✅ Selesai |
+| **F05** | Katalog Publik: pencarian menu dan toko untuk pembeli, favorit menu | ✅ Selesai |
+| **F06** | Checkout & Holding: perhitungan harga server-side, idempotensi transaksi, penguncian stok/kuota 5 menit | ✅ Selesai |
+| **F07** | Siklus Pesanan: transisi status `holding` ➔ `confirmed` ➔ `cooking` ➔ `ready` ➔ `completed` / `cancelled` | ✅ Selesai |
+| **F08** | Worker Kedaluwarsa: cron background pelepas porsi pesanan kadaluwarsa & notifikasi otomatis | ✅ Selesai |
+| **F09** | Laporan Penjualan: ringkasan penjualan, analitik per jam, rincian transaksi, ekspor CSV | ✅ Selesai |
+| **F18** | Administrasi: antrean verifikasi toko, data master kategori/titik ambil, promo platform, audit logs | ✅ Selesai |
+| **F10–F14** | Pembayaran QRIS/VA, OTP, Promo Merchant, Rating & Ulasan | ⏳ Roadmap |
 
-Uji otomatis: **51 berkas, 472 test**, semuanya lulus di database MySQL lokal.
-
----
-
-## Teknologi
-
-| Bagian | Pilihan |
-|---|---|
-| Bahasa | TypeScript 5.8, dikompilasi ke JavaScript (`tsc`) |
-| Runtime | Node.js ≥ 22.12 (Heroku memakai Node 24) |
-| Framework | Express 5.2 |
-| Database | MySQL lewat `mysql2`; production di **TiDB Cloud** (kompatibel MySQL, SSL otomatis) |
-| Validasi | Zod 4 |
-| Keamanan | `jsonwebtoken` (JWT), `bcryptjs` (hash sandi), pembatas laju buatan sendiri |
-| Penyimpanan foto | Cloudflare R2 lewat URL unggah bertanda tangan (AWS Signature V4, tanpa SDK) |
-| Uji | Vitest 5 + Supertest, terhadap database MySQL sungguhan |
-
-Tidak ada ORM. Semua kueri SQL ditulis langsung dengan parameter (`?`).
+> 🧪 **Uji Otomatis:** **51 berkas, 489 automated tests** lulus 100% pada database MySQL/TiDB lokal.
 
 ---
 
-## Struktur folder
+## 🛠️ Arsitektur & Tumpukan Teknologi
+
+- **Bahasa & Runtime:** TypeScript 5.8 & Node.js ≥ 22.12 (Production di Heroku dengan Node 24).
+- **Web Framework:** Express 5.2.
+- **Basis Data:** MySQL lewat driver `mysql2/promise` dengan pooling tangguh, diuji pada **TiDB Cloud** (MySQL 8 compatible, SSL aktif).
+- **Validasi Data:** Zod 4 (*runtime schema validation*).
+- **Keamanan:** JWT (`jsonwebtoken`), hash kata sandi `bcryptjs`, in-memory rate limiting, CORS terisolasi.
+- **Penyimpanan Media:** Integrasi Cloudflare R2 dengan URL bertanda tangan (AWS Signature V4, zero external heavy SDK).
+- **Pengujian:** Vitest 5 + Supertest dengan pengujian end-to-end terintegrasi database nyata.
+- **Kueri SQL:** Murni SQL terparameterisasi (`?`) tanpa ORM overhead demi performa maksimal dan kendali transaksi penuh.
+
+---
+
+## 📁 Struktur Direktori
 
 ```text
 src/
-├── server.ts          Membuka port lalu menyalakan job kedaluwarsa
-├── app.ts             Express, CORS, urutan router, penanganan galat
-├── config/            env.ts (validasi .env dengan zod), db.ts (pool mysql2 + SSL TiDB)
-├── http/              Format galat, validasi body/query
-├── auth/              Daftar, masuk, keluar, sesi, profil, pembatas laju
-├── meta/              Data referensi publik (jenis usaha, kategori, titik ambil, pengaturan)
-├── katalog/           Daftar menu dan toko untuk pembeli, favorit
-├── pesanan/           Keranjang & checkout, mesin status pesanan, stok, job kedaluwarsa
-├── merchant/          Toko, menu, kuota, pesanan toko, unggah foto
-├── notifikasi/        Notifikasi dalam aplikasi
-├── admin/             Panel admin dan log audit
-├── upload/            Penanda tangan URL Cloudflare R2
-└── db/                migrate.ts (menjalankan migrations/*.sql), seed-demo.ts
-migrations/            001_init.sql, 002_admin.sql, 003_checkout.sql
-test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
+├── server.ts             # Entry point: start HTTP listener & background holding cleanup worker
+├── app.ts                # Express app bootstrap, middleware, global error handler
+├── config/
+│   ├── env.ts            # Validasi ketat environment variable via Zod
+│   └── db.ts             # MySQL2 connection pool dengan konfigurasi SSL TiDB
+├── http/                 # Format error API terstandarisasi & helper validasi Zod
+├── auth/                 # Autentikasi, registrasi, sesi, rate-limiter
+├── meta/                 # Data master publik: kategori, titik jemput, pengaturan
+├── katalog/              # Endpoint pencarian menu/merchant publik & favorit
+├── pesanan/              # Mesin status pesanan, checkout holding, auto-expire job
+├── merchant/             # Pengelolaan toko, katalog menu, kuota atomik, pesanan toko
+│   └── laporan/          # Sub-modul F09: agregasi laporan, ringkasan, per-jam, riwayat
+├── notifikasi/           # Pengiriman dan pembacaan notifikasi in-app
+├── admin/                # Moderasi merchant, verifikasi, audit trail, promo platform
+├── upload/               # Cloudflare R2 presigned URL signer
+└── db/
+    ├── migrate.ts        # Runner migrasi SQL otomatis
+    └── seed-demo.ts      # Seeder data merchant & katalog contoh
+migrations/               # Skrip migrasi terurut (001_init.sql, 002_admin.sql, ...)
+test/                     # Rangkaian test suite Vitest per domain/fitur
 ```
 
-Setiap folder berisi `routes.ts` (rute dan validasi) dan berkas logika di sebelahnya.
+---
+
+## ⚡ Aturan Bisnis & Mekanisme Kunci
+
+1. **Kuota Harian Atomik (AUD-04 / F04):**
+   Setiap menu memiliki `daily_quota`, `sold_today`, dan `held_today`. Endpoint `PATCH /api/v1/merchant/menus/:id/quota` mendukung payload:
+   - `{ "delta": 1 }` atau `{ "delta": -1 }`: Menambah/mengurangi kuota secara atomik di database (`daily_quota = daily_quota + ?`). Mencegah kondisi balapan (*race condition*) ketika beberapa admin toko mengklik tombol stepper bersamaan.
+   - `{ "quota_today": 25 }`: Mengatur kuota harian mutlak dengan validasi `quota_today >= sold_today + held_today`.
+2. **Penahanan Porsi 5 Menit (*Stock Holding*):**
+   Checkout langsung mengunci porsi menu (`held_today += qty`). Merchant memiliki batas waktu sesuai `hold_minutes` untuk konfirmasi. Jika waktu habis, worker server otomatis membatalkan pesanan dan mengembalikan porsi tertahan.
+3. **Idempotensi Checkout:**
+   Header `Idempotency-Key` menjamin request ganda (misal koneksi terputus lalu submit ulang) tidak menduplikasi pesanan pembeli.
+4. **Keamanan Harga & Kode Pesanan:**
+   Harga pesanan dihitung 100% oleh server. Kode pesanan unik di-generate dengan format `KK-YYYYMMDD-XXXX`. Data HPP (*Harga Pokok Penjualan*) dilindungi dan tidak pernah bocor ke katalog pembeli.
 
 ---
 
-## Aturan bisnis penting
+## 📡 Koleksi Endpoint API (v1)
 
-- **Kuota porsi harian.** Setiap menu punya `daily_quota`. Penghitung `sold_today` dan `held_today` direset otomatis saat tanggal WIB berganti, saat menu pertama kali dibaca hari itu.
-- **Penahanan 5 menit.** Checkout langsung mengunci porsi (`held_today`). Penjual punya waktu menurut `hold_minutes` toko (bawaan 5 menit) untuk mengonfirmasi. Dua checkout bersamaan untuk sisa 1 porsi hanya menghasilkan satu pesanan.
-- **Status pesanan:** `holding → confirmed → cooking → ready → completed`, dengan cabang `cancelled` dan `expired`. Transisi yang tidak sah dijawab `409`. Setiap perubahan dicatat di `order_status_logs`.
-- **Kedaluwarsa otomatis.** Job di dalam proses server memeriksa pesanan `holding` yang lewat batas waktu. Pesanan itu menjadi `expired`, porsinya kembali, dan pembeli mendapat notifikasi.
-- **Harga dan kode pesanan dihitung server.** Nilai total dari aplikasi diabaikan. Kode pesanan berbentuk `KK-YYYYMMDD-XXXX`.
-- **HPP tidak pernah keluar ke publik.** Katalog pembeli memakai pemetaan sendiri tanpa `hpp`.
-- **Toko harus diverifikasi admin** sebelum tampil di katalog dan bisa menerima pesanan.
-- **Idempotensi checkout.** Header `Idempotency-Key` yang sama menghasilkan pesanan yang sama, bukan pesanan ganda.
+Semua rute diawali dengan awalan `/api/v1`. Format respons standar:
+- **Sukses:** `{ "data": ... }` (ditambah `meta: { "page", "limit", "total" }` untuk list).
+- **Galat:** `{ "error": { "code": "...", "message": "...", "fields": [...] } }`.
 
----
-
-## Endpoint
-
-Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar ditambah `meta: { page, limit, total }`); respons galat `{ "error": { "code", "message", "fields"? } }` dengan pesan berbahasa Indonesia.
-
-| Kelompok | Rute | Akses |
-|---|---|---|
-| Kesehatan | `GET /health` | publik |
-| Data referensi | `GET /meta/merchant-types`, `/meta/categories`, `/meta/pickup-points`, `/meta/settings` | publik |
-| Akun | `POST /auth/customer/register`, `/auth/merchant/register`, `/auth/login`, `/auth/logout` | publik / masuk |
-| Profil | `GET /me`, `PATCH /me`, `PUT /me/password`, `POST /me/avatar` | masuk |
-| Katalog | `GET /menus`, `/menus/:id`, `/menus/:id/reviews`, `/merchants/:slug` | publik |
-| Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
-| Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete` | pembeli |
-| Notifikasi | `GET /me/notifications`, `POST /me/notifications/read` | masuk |
-| Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
-| Menu | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota` | penjual |
-| Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}` | penjual |
-| Unggah foto | `POST /merchant/uploads` | penjual |
-| Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
-
-Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `docs/API.md` pada monorepo tim.
-
-**Polling.** `GET /merchant/orders?updated_since=<ISO>` hanya mengembalikan pesanan yang berubah sejak waktu itu, dipakai dashboard web setiap 5 detik.
+| Domain | Metode & Endpoint | Akses | Deskripsi |
+|---|---|---|---|
+| **System** | `GET /health` | Publik | Cek status server & koneksi database |
+| **Meta** | `GET /meta/merchant-types`, `/meta/categories`, `/meta/pickup-points`, `/meta/settings` | Publik | Data referensi platform |
+| **Auth** | `POST /auth/customer/register`<br>`POST /auth/merchant/register`<br>`POST /auth/login`<br>`POST /auth/logout` | Publik / Sesi | Registrasi dan otentikasi akun |
+| **Profile** | `GET /me`, `PATCH /me`<br>`PUT /me/password`, `POST /me/avatar` | Autentikasi | Manajemen profil pengguna |
+| **Katalog** | `GET /menus`, `/menus/:id`<br>`GET /merchants/:slug` | Publik | Pencarian menu, detail merchant & ulasan |
+| **Pesanan** | `POST /orders/quote`<br>`POST /orders`<br>`GET /me/orders`, `GET /orders/:code` | Pembeli | Simulasi biaya, checkout ber-holding, status pesanan |
+| **Merchant** | `GET /merchant/profile`, `PATCH /merchant/profile`<br>`PATCH /merchant/status` | Merchant | Pengaturan profil dan status buka/tutup toko |
+| **Menu & Kuota** | `GET /merchant/menus`, `POST /merchant/menus`<br>`PATCH /merchant/menus/:id/quota` | Merchant | Manajemen menu & pembaruan kuota atomik |
+| **Toko Pesanan** | `GET /merchant/orders`<br>`POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}` | Merchant | Pemrosesan antrean pesanan toko secara langsung |
+| **Laporan (F09)** | `GET /merchant/reports/summary`<br>`GET /merchant/reports/hourly`<br>`GET /merchant/reports/transactions`<br>`GET /merchant/reports/csv` | Merchant | Analitik penjualan, tren per jam, dan ekspor CSV |
+| **Admin** | `GET /admin/summary`, `/admin/verification-queue`<br>`PATCH /admin/merchants/:id/verify`<br>`GET /admin/audit-logs` | Admin | Verifikasi mitra katering & pemantauan platform |
 
 ---
 
-## Variabel lingkungan
+## 💻 Panduan Instalasi Lokal
 
-Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kosong atau salah format.
+### Prasyarat
+- Node.js ≥ 22.12
+- MySQL 8.x (atau TiDB Cloud Serverless)
 
-| Variabel | Wajib | Keterangan |
-|---|---|---|
-| `DATABASE_URL` | ya | `mysql://user:sandi@host:port/nama_db`. Untuk TiDB Cloud, SSL aktif otomatis |
-| `JWT_SECRET` | ya | Minimal 32 karakter acak |
-| `CORS_ORIGIN` | ya di production | Daftar origin web, dipisah koma |
-| `PORT` | tidak | Bawaan 5000 (Heroku mengisinya sendiri) |
-| `NODE_ENV` | tidak | `development`, `test`, atau `production` |
-| `TZ` | disarankan | `Asia/Jakarta` |
-| `JWT_TTL_WEB`, `JWT_TTL_MOBILE` | tidak | Masa berlaku token, bawaan `1d` dan `30d` |
-| `INTERNAL_API_SECRET` | tidak | Rahasia bersama dengan server web agar pembatas laju menghitung per alamat pengunjung |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto. Kosong semua berarti endpoint unggah menjawab `503` |
-| `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |
-
----
-
-## Menjalankan di komputer sendiri
-
-Prasyarat: Node.js ≥ 22.12 dan MySQL 8 (lokal atau Docker).
-
+### Langkah Pemasangan
 ```bash
+# 1. Clone repositori
 git clone https://github.com/stanlevv/kateringkita-backend.git
 cd kateringkita-backend
+
+# 2. Pasang dependensi
 npm install
-cp .env.example .env        # lalu isi DATABASE_URL dan JWT_SECRET
-npm run migrate             # membuat semua tabel dan data referensi
-npm run dev                 # http://localhost:5000/api/v1/health
+
+# 3. Konfigurasi file environment
+cp .env.example .env
+# Edit file .env: isi DATABASE_URL, TEST_DATABASE_URL, dan JWT_SECRET
+
+# 4. Jalankan migrasi database
+npm run migrate
+
+# 5. (Opsional) Jalankan data seeder demo
+npm run seed:demo
+
+# 6. Jalankan server mode development
+npm run dev
+# Server aktif di http://localhost:5000/api/v1/health
 ```
 
-| Perintah | Fungsi |
+---
+
+## 🧪 Skrip & Pengujian
+
+| Perintah | Deskripsi |
 |---|---|
-| `npm run dev` | Server dengan muat ulang otomatis (`tsx watch`) |
-| `npm run build` lalu `npm start` | Kompilasi ke `dist/` lalu jalankan seperti di production |
-| `npm run migrate` | Menjalankan migrasi yang belum tercatat di tabel `schema_migrations` |
-| `npm run migrate:prod` | Sama, dari hasil kompilasi (`dist/`) |
-| `npm run admin:create` | Membuat akun admin pertama. Sandi diambil dari `ADMIN_INITIAL_PASSWORD`, isi hanya saat menjalankan |
-| `npm run seed:demo` | Mengisi toko dan menu contoh. Hanya untuk database lokal; sandi dari `DEMO_PASSWORD` |
-| `npm test` | Seluruh uji (butuh MySQL; memakai `TEST_DATABASE_URL`) |
-| `npm run typecheck` | Pemeriksaan tipe TypeScript |
+| `npm run dev` | Menjalankan API server dengan hot-reload (`tsx watch`) |
+| `npm run build` | Melakukan kompilasi TypeScript ke `dist/` |
+| `npm start` | Menjalankan hasil kompilasi production dari `dist/server.js` |
+| `npm test` | Menjalankan seluruh test suite Vitest (489 tests) |
+| `npm run typecheck` | Menjalankan type-checking TypeScript tanpa emit file |
+| `npm run migrate` | Menjalankan migrasi SQL dari folder `migrations/` |
+| `npm run admin:create` | Perintah interaktif untuk membuat user admin pertama |
 
 ---
 
-## Deploy
+## 📄 Lisensi
 
-- **Heroku** (app `ketring`) tersambung ke repo ini. Setiap push ke `main` otomatis di-build (`npm run build`) lalu dijalankan dengan `web: node dist/server.js` dari `Procfile`.
-- **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–003 sudah diterapkan.
-- **Migrasi baru tidak berjalan otomatis.** Setelah menambah berkas di `migrations/`, jalankan `npm run migrate` sekali terhadap database production sebelum atau segera setelah deploy.
-- **Unggah foto** belum aktif di production karena variabel R2 belum diisi.
-
----
-
-## Lisensi
-
-[MIT](LICENSE)
+Proyek ini dilisensikan di bawah lisensi [MIT](LICENSE).

@@ -6,6 +6,7 @@ import { fieldsDari, parse, validate } from "../http/validate";
 import { buatUnggahan, merchantUploadSchema } from "../upload/service";
 import { daftarTokoSchema } from "./orderSchemas";
 import { AKSI_TOKO, AksiToko, aksiPesananToko, ambilPesananToko, daftarPesananToko, waPesananToko } from "./orders";
+import { laporan } from "../laporan/routes";
 import { kuotaSchema, menuPatchSchema, menuQuerySchema, menuSchema } from "./menuSchemas";
 import { ambilMenu, buatMenu, daftarMenu, hapusMenu, idToko, ubahKuota, ubahMenu } from "./menus";
 import { statusSchema, updateProfileSchema } from "./schemas";
@@ -83,3 +84,6 @@ merchant.post("/orders/:code/:aksi", async (req, res, next) => {
   if (!AKSI_TOKO.includes(aksi)) return next();
   res.json({ data: await aksiPesananToko(uid(req), String(req.params.code), aksi, req.body) });
 });
+
+// F09 (M-09): modul laporan
+merchant.use("/reports", laporan);
