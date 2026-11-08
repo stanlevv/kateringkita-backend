@@ -6,7 +6,7 @@ import { idToko } from "./merchant-menu.service";
 // F09 laporan toko (LP-N1..N4): hanya pesanan completed, dihitung per completed_at; tanggal WIB → rentang UTC [from, to).
 // shortcut: diskon promo tidak mengurangi omzet laporan toko; upgrade bila penjual minta laba bersih (rincian diskon di F20)
 const awalWib = (d: string) => new Date(Date.parse(`${d}T00:00:00+07:00`));
-const rentangUtc = ({ from, to }: Rentang) => [awalWib(from), new Date(awalWib(to).getTime() + 86400e3)];
+export const rentangUtc = ({ from, to }: Rentang) => [awalWib(from), new Date(awalWib(to).getTime() + 86400e3)];
 
 const SELESAI = `FROM orders o JOIN order_items i ON i.order_id = o.id
   WHERE o.merchant_id = ? AND o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?`;

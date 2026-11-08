@@ -4,7 +4,7 @@ import {
   aksiPenjualHandler, ambilBiayaHandler, antrianVerifikasiHandler, buatMasterHandler, buatPromoHandler, daftarLogHandler,
   daftarMasterHandler, daftarPenjualHandler, daftarPromoHandler, detailPenjualHandler, idParam, ringkasanHandler,
   setAktifMasterHandler, setAktifPromoHandler, ubahBiayaHandler, ubahMasterHandler, ubahPromoHandler,
-  daftarMenuAdminHandler, daftarUlasanAdminHandler, moderasiMenuHandler, moderasiUlasanHandler,
+  daftarMenuAdminHandler, daftarUlasanAdminHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
 } from "../handlers/admin.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
@@ -51,7 +51,10 @@ admin.get("/settings", ambilBiayaHandler);
 admin.put("/settings/service-fee", ubahBiayaHandler);
 admin.get("/summary", ringkasanHandler);
 
-// F19 moderasi ulasan admin.get("/summary", ringkasanHandler); menu (suspend toko: /merchants/:id/suspend)
+// F20 rekap keuangan per toko
+admin.get("/finance", rekapKeuanganHandler);
+
+// F19 moderasi ulasan & menu (suspend toko: /merchants/:id/suspend)
 admin.get("/reviews", daftarUlasanAdminHandler);
 admin.post("/reviews/:id/hide", validate(reasonBody), moderasiUlasanHandler(true));
 admin.post("/reviews/:id/unhide", moderasiUlasanHandler(false));

@@ -5,6 +5,9 @@ import { buatMaster, daftarMaster, setAktif, ubahMaster } from "../services/admi
 import { antrianVerifikasi, daftarPenjual, detailPenjual, jalankanAksi } from "../services/admin-merchant.service";
 import { ambilBiaya, buatPromo, daftarPromo, setAktifPromo, ubahBiaya, ubahPromo } from "../services/admin-promo.service";
 import { ringkasan } from "../services/admin-summary.service";
+import { rekapKeuangan } from "../services/admin-keuangan.service";
+import { rentangSchema } from "../dto/merchant-laporan.dto";
+import { parse } from "../middleware/validate";
 import { daftarMenuAdmin, daftarUlasanAdmin, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
 import { AppError } from "../utils/errors";
 
@@ -98,4 +101,9 @@ export const daftarMenuAdminHandler: RequestHandler = async (req, res) => {
 };
 export const moderasiMenuHandler = (turun: boolean): RequestHandler => async (req, res) => {
   res.json({ data: await moderasiMenu(adminId(req), req.params.id, turun, turun ? req.body.reason : null) });
+};
+
+// F20 rekap keuangan ?from&to (tanggal WIB, maks 92 hari)
+export const rekapKeuanganHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await rekapKeuangan(parse(rentangSchema, req.query)) });
 };
