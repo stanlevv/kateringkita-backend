@@ -2,16 +2,17 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env";
 import { AppError } from "./errors";
 
-// F10: Virtual Account lewat Midtrans Core API. Key sandbox ("SB-Mid-server-...") → host sandbox.
+// F10: Virtual Account lewat Midtrans Core API. Sandbox kecuali MIDTRANS_IS_PRODUCTION=true
+// (awalan key tidak bisa dipakai: key sandbox akun baru juga berawalan "Mid-server-").
 export const BANK_VA = ["bca", "bni", "bri"] as const;
 export type BankVa = (typeof BANK_VA)[number];
 
-const host = (key: string) => (key.startsWith("SB-") ? "https://api.sandbox.midtrans.com" : "https://api.midtrans.com");
+const host = () => (env.MIDTRANS_IS_PRODUCTION === "true" ? "https://api.midtrans.com" : "https://api.sandbox.midtrans.com");
 
 async function panggil(path: string, body?: unknown): Promise<Record<string, any>> {
   const key = env.MIDTRANS_SERVER_KEY;
   if (!key) throw new AppError(503, "SERVICE_UNAVAILABLE", "Pembayaran Virtual Account belum diaktifkan.");
-  const res = await fetch(`${host(key)}${path}`, {
+  const res = await fetch(`${host()}${path}`, {
     method: body ? "POST" : "GET",
     headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}` },
     body: body ? JSON.stringify(body) : undefined,

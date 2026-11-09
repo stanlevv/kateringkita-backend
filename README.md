@@ -166,7 +166,8 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto. Kosong semua berarti endpoint unggah menjawab `503` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Kunci Google AI Studio untuk asisten AI toko; model bawaan `gemini-2.5-flash`. Kosong: asisten menjawab `503` |
-| `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA; key sandbox (`SB-Mid-server-...`) memakai host sandbox. Kosong: checkout VA menjawab `409` |
+| `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA menjawab `409` |
+| `MIDTRANS_IS_PRODUCTION` | tidak | `true` untuk transaksi sungguhan. Bawaan `false` (sandbox), jadi key production yang salah pasang hanya gagal, tidak menarik uang |
 | `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |
 
 ---

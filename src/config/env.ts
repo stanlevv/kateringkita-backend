@@ -34,8 +34,10 @@ const schema = z
     // F17: Gemini untuk asisten toko; kosong = asisten 503
     GEMINI_API_KEY: opsional(z.string()),
     GEMINI_MODEL: z.preprocess((v) => (v === "" ? undefined : v), z.string().default("gemini-2.5-flash")),
-    // F10: VA lewat Midtrans Core API; kosong = VA dimatikan (checkout VA → 409). Key sandbox berawalan "SB-"
+    // F10: VA lewat Midtrans Core API; kosong = VA dimatikan (checkout VA → 409)
     MIDTRANS_SERVER_KEY: opsional(z.string()),
+    // "true" = transaksi sungguhan (api.midtrans.com); bawaan sandbox agar key production yang salah pasang tidak menarik uang
+    MIDTRANS_IS_PRODUCTION: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["true", "false"]).default("false")),
     CORS_ORIGIN: z
       .string()
       .optional()

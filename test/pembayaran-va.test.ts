@@ -39,6 +39,9 @@ const siapVa = async () => {
 
 beforeAll(async () => {
   s = await siapCheckout();
+  // abaikan nilai dari .env lokal: tanpa key di awal, selalu sandbox
+  env.MIDTRANS_SERVER_KEY = undefined;
+  env.MIDTRANS_IS_PRODUCTION = "false";
 });
 // batas 3 holding per pembeli (D11)
 afterEach(async () => {
