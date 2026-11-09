@@ -59,8 +59,9 @@ export async function transisi(
   // D2: holding lewat waktu hanya bisa di-expire (job F08)
   if (dari === "holding" && Boolean(o.lewat) !== (aksi === "expire")) throw konflik(aksi === "expire" ? undefined : "Batas waktu pesanan sudah habis.");
   if (aksi === "confirm" && o.payment_method !== "cod" && o.payment_status !== "paid") throw konflik("Pesanan belum dibayar.");
-  const metodeLunas = aktor.jenis === "system" ? "va" : "qris";
-  if (aksi === "pay" && (o.payment_method !== metodeLunas || o.payment_status === "paid")) throw konflik("Pesanan ini tidak menunggu pembayaran QRIS.");
+  // QRIS dilunasi penjual; VA (F10) dan Snap meja (F21) dilunasi notifikasi Midtrans
+  const metodeLunas = aktor.jenis === "system" ? ["va", "online"] : ["qris"];
+  if (aksi === "pay" && (!metodeLunas.includes(o.payment_method) || o.payment_status === "paid")) throw konflik("Pesanan ini tidak menunggu pembayaran QRIS.");
   // shortcut: tolak pesanan QRIS lunas tidak mengubah payment_status (dana dikembalikan manual); upgrade saat gateway dipasang
 
   const batal = a.ke === "cancelled" || a.ke === "expired";

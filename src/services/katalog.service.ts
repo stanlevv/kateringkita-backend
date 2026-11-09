@@ -23,7 +23,7 @@ export const jam = { sekarang: () => Date.now() };
 export const jamWib = (ms: number): string => `${new Date(ms + 7 * 3600e3).toISOString().slice(11, 16)}:00`;
 
 // D1 (R-14, BE-11): menu aktif & belum terhapus, toko terverifikasi, pemilik aktif
-const TOKO_TAMPIL = "m.verification_status = 'verified' AND u.is_active";
+export const TOKO_TAMPIL = "m.verification_status = 'verified' AND u.is_active";
 export const TAMPIL = `x.is_active AND x.deleted_at IS NULL AND ${TOKO_TAMPIL}`;
 
 // D2: saklar + jam WIB, sama dengan sedangBuka() (tepat jam tutup = tutup; buka > tutup = lewat tengah malam). 4 parameter jam.

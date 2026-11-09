@@ -136,3 +136,20 @@ export const asistenLimiter: RequestHandler & { reset: () => void } = Object.ass
   }) as RequestHandler,
   { reset: () => perAsisten.hits.clear() },
 );
+
+// F21 pesanan meja tanpa login: per meja (token di URL), 15 pesanan per 10 menit. Per meja, bukan per IP:
+// permintaan datang lewat server web sehingga IP tamu tidak selalu terlihat.
+const perMeja = newBucket(15, 10 * 60_000);
+
+export const mejaLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, _res, next) => {
+    const now = Date.now();
+    const key = String(req.params.token);
+    if (full(perMeja, key, now)) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak pesanan dari meja ini. Coba lagi beberapa menit lagi."));
+    }
+    hit(perMeja, key, now);
+    next();
+  }) as RequestHandler,
+  { reset: () => perMeja.hits.clear() },
+);

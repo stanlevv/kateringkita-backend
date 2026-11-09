@@ -6,6 +6,7 @@ import { meta } from './routes/meta';
 import { admin } from './routes/admin';
 import { merchant } from './routes/merchant';
 import { katalog } from './routes/katalog';
+import { meja } from './routes/meja';
 import { pesanan } from './routes/pesanan';
 import { notifikasi } from './routes/notifikasi';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -29,6 +30,8 @@ app.get('/api/v1/health', healthHandler);
 // admin dipasang sebelum v1; path admin tak dikenal: tanpa token 401, bukan admin 403, admin 404 (notFound)
 app.use('/api/v1/admin', requireAuth, requireRole('admin'), admin);
 app.use('/api/v1/merchant', requireAuth, requireRole('merchant'), merchant);
+// F21: menu & pesanan meja tanpa login
+app.use('/api/v1', meja);
 app.use('/api/v1', katalog);
 app.use('/api/v1', pesanan);
 app.use('/api/v1', notifikasi);

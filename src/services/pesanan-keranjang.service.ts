@@ -62,7 +62,8 @@ const jamTitik = (t: unknown) => String(t).slice(0, 5).replace(":", ".");
 const HARI = 86400e3;
 
 // Urutan D3 tanpa stok & promo: stok dikembalikan di `kurang` (quote = peringatan, pesanan = 409), promo dicek pemanggil.
-export function periksa(k: Keranjang, data: QuoteInput, ms: number): Hasil {
+// F21: pesanan meja tidak memakai titik temu (`tanpaTitikTemu`).
+export function periksa(k: Keranjang, data: QuoteInput, ms: number, o: { tanpaTitikTemu?: boolean } = {}): Hasil {
   const f: Record<string, string[]> = {};
   data.items.forEach((it, i) => {
     const m = k.menus.get(it.menu_id);
@@ -77,7 +78,7 @@ export function periksa(k: Keranjang, data: QuoteInput, ms: number): Hasil {
   if (!tokoBuka(t, ms)) {
     throw new AppError(409, "MERCHANT_CLOSED", `Toko sedang tutup. Buka pukul ${jamTitik(t.open_time)}–${jamTitik(t.close_time)} WIB.`);
   }
-  if (!t.p_id) salah({ pickup_point_id: ["Titik temu tidak dilayani toko ini."] });
+  if (!o.tanpaTitikTemu && !t.p_id) salah({ pickup_point_id: ["Titik temu tidak dilayani toko ini."] });
 
   const ambil = data.pickup_at ? Date.parse(data.pickup_at) : null;
   if (ambil !== null && (ambil <= ms || ambil > ms + 7 * HARI)) {

@@ -3,6 +3,8 @@ import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
 import { statusSchema, updateProfileSchema } from "../dto/merchant.dto";
 import { merchantUploadSchema } from "../dto/upload.dto";
 import { tanyaSchema } from "../dto/asisten.dto";
+import { mejaSchema, ubahMejaSchema } from "../dto/meja.dto";
+import { buatMejaHandler, daftarMejaHandler, ubahMejaHandler } from "../handlers/meja.handler";
 import {
   aksiPesananTokoHandler, ambilMenuHandler, ambilPesananTokoHandler, buatMenuHandler, daftarMenuHandler, daftarPesananTokoHandler,
   buatPromoTokoHandler, daftarPromoTokoHandler, daftarUlasanTokoHandler, hapusPromoTokoHandler, tanyaAsistenHandler, ubahPromoTokoHandler,
@@ -66,4 +68,9 @@ merchant.get("/reviews", daftarUlasanTokoHandler);
 merchant.post("/assistant", validate(tanyaSchema), asistenLimiter, tanyaAsistenHandler);
 
 // F07 (M-04, M-08), F10 (pay): aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
+// F21: meja & QR pesan dari meja
+merchant.get("/tables", daftarMejaHandler);
+merchant.post("/tables", validate(mejaSchema), buatMejaHandler);
+merchant.patch("/tables/:id", validate(ubahMejaSchema), ubahMejaHandler);
+
 merchant.post("/orders/:code/:aksi", aksiPesananTokoHandler);

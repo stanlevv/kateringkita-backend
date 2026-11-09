@@ -36,6 +36,8 @@ export const updateProfileSchema = z.object({
   wa_template: waTemplate,
   logo_url: urlFoto,
   qris_image_url: urlFoto,
+  // F21: terima pesanan dari meja (QR)
+  dine_in_enabled: z.boolean({ error: "Pilihan pesan dari meja tidak valid." }),
   pickup_point_ids: z.array(z.unknown(), { error: "Pilih minimal satu titik temu." })
     .min(1, "Pilih minimal satu titik temu.").max(50, "Maksimal 50 titik temu.")
     // galat per elemen dilaporkan di pickup_point_ids, bukan pickup_point_ids.0

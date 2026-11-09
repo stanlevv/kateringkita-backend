@@ -9,7 +9,7 @@ export async function getProfile(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT m.id, m.business_name, m.description, m.address, m.wa_number, m.logo_url, m.service_mode, m.is_open,
             TIME_FORMAT(m.open_time, '%H:%i') AS open_time, TIME_FORMAT(m.close_time, '%H:%i') AS close_time,
-            m.hold_minutes, m.daily_revenue_target, m.qris_image_url, m.wa_template, t.id AS type_id, t.name AS type_name
+            m.hold_minutes, m.daily_revenue_target, m.qris_image_url, m.wa_template, m.dine_in_enabled, t.id AS type_id, t.name AS type_name
      FROM merchants m JOIN merchant_types t ON t.id = m.merchant_type_id WHERE m.user_id = ?`,
     [userId],
   );
@@ -36,6 +36,8 @@ export async function getProfile(userId: number) {
     qris_image_url: m.qris_image_url,
     wa_template: m.wa_template,
     pickup_point_ids: pts.map((p) => p.id as number),
+    // F21: pesan dari meja (QR)
+    dine_in_enabled: Boolean(m.dine_in_enabled),
   };
 }
 
@@ -52,6 +54,7 @@ const COLUMNS = ["business_name", "description", "address", "wa_number", "servic
 export async function updateProfile(userId: number, input: UpdateProfileInput) {
   const sets: Record<string, string | number | null> = {};
   for (const c of COLUMNS) if (input[c] !== undefined) sets[c] = input[c];
+  if (input.dine_in_enabled !== undefined) sets.dine_in_enabled = input.dine_in_enabled ? 1 : 0;
   if (sets.description === "") sets.description = null;
   const ids = input.pickup_point_ids === undefined ? undefined : [...new Set(input.pickup_point_ids)].sort((a, b) => a - b);
   if (Object.keys(sets).length === 0 && !ids) throw new AppError(400, "VALIDATION_ERROR", "Tidak ada data yang diubah.");

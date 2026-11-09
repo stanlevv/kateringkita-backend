@@ -12,7 +12,7 @@ const k: Record<string, string> = {};
 const KUNCI = [
   "cancel_reason", "cancelled_at", "cancelled_by", "code", "completed_at", "confirmed_at", "cooking_at", "created_at", "customer_name",
   "customer_phone", "discount", "hold_until", "items", "note", "payment_method", "payment_status", "pickup_at", "pickup_point", "ready_at",
-  "seconds_left", "service_fee", "status", "subtotal", "total", "updated_at",
+  "seconds_left", "service_fee", "status", "subtotal", "table", "total", "updated_at",
 ];
 const daftar = (qs = "", token = s.tA) => request(app).get(`/api/v1/merchant/orders${qs}`).set("Authorization", `Bearer ${token}`);
 const kodeDari = (r: request.Response) => r.body.data.map((o: { code: string }) => o.code).sort();

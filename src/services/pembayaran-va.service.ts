@@ -53,9 +53,10 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
   if (!baru) return; // pending: belum ada yang berubah
   const code = String(n.order_id);
   await dalamTransaksi(async (conn) => {
+    // VA (pembeli, F10) atau Snap 'online' (pesanan meja, F21)
     const [[p]] = await conn.query<RowDataPacket[]>(
       `SELECT p.id, p.status, p.amount FROM payments p JOIN orders o ON o.id = p.order_id
-       WHERE o.code = ? AND p.method = 'va' AND p.provider = 'midtrans'`,
+       WHERE o.code = ? AND p.method IN ('va', 'online') AND p.provider = 'midtrans' ORDER BY p.id LIMIT 1`,
       [code],
     );
     if (!p || p.status === "paid") return;
@@ -71,9 +72,11 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
         console.error(`VA ${code} lunas tetapi pesanan tidak bisa dikonfirmasi: ${e.message}`);
       });
     }
+    // Snap baru tahu transaction_id dari notifikasi
     await conn.query(
-      "UPDATE payments SET status = ?, paid_at = IF(? = 'paid', UTC_TIMESTAMP(), paid_at), raw_payload = ? WHERE id = ? AND status <> 'paid'",
-      [baru, baru, JSON.stringify(n), p.id],
+      `UPDATE payments SET status = ?, paid_at = IF(? = 'paid', UTC_TIMESTAMP(), paid_at), raw_payload = ?, provider_ref = COALESCE(provider_ref, ?)
+       WHERE id = ? AND status <> 'paid'`,
+      [baru, baru, JSON.stringify(n), typeof n.transaction_id === "string" ? n.transaction_id : null, p.id],
     );
   });
 }

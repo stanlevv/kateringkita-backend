@@ -16,10 +16,11 @@ export const PESAN_STATUS: Partial<Record<Status, (p: Isi) => { title: string; b
 
 // Dipanggil di dalam transaksi transisi (D10), setelah users pembeli dikunci (D11)
 export async function buatNotifikasiPesanan(
-  conn: Pick<PoolConnection, "query">, o: { customer_id: number; merchant_id: number; code: string }, ke: Status, alasan: string | null,
+  conn: Pick<PoolConnection, "query">, o: { customer_id: number | null; merchant_id: number; code: string }, ke: Status, alasan: string | null,
 ): Promise<void> {
   const pesan = PESAN_STATUS[ke];
-  if (!pesan) return;
+  // F21: pesanan meja tanpa akun; tamu memantau status lewat halaman pesanannya
+  if (!pesan || !o.customer_id) return;
   const [[m]] = await conn.query<RowDataPacket[]>("SELECT business_name FROM merchants WHERE id = ?", [o.merchant_id]);
   const { title, body } = pesan({ kode: o.code, toko: m.business_name, alasan });
   await conn.query(

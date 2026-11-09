@@ -55,6 +55,7 @@
 | F17 | Asisten AI toko (Gemini) | Selesai |
 | F19 | Moderasi admin: ulasan, menu (suspend toko dari F18) | Selesai |
 | F20 | Rekap keuangan admin | Selesai |
+| F21 | Pesan dari meja: QR per meja, menu tanpa login, bayar online (Midtrans Snap) | Selesai |
 | — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
@@ -109,6 +110,7 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **Idempotensi checkout.** Header `Idempotency-Key` yang sama menghasilkan pesanan yang sama, bukan pesanan ganda.
 - **Pembayaran QRIS manual (F10).** Pembeli membayar ke QRIS toko (`qris_image_url`). Penjual mengecek lalu menekan `pay`, yang sekaligus menandai lunas dan mengonfirmasi pesanan. QRIS ditolak bila toko belum memasang QRIS.
 - **Virtual Account Midtrans (F10).** Checkout `payment_method: "va"`, lalu pembeli memilih bank (BCA, BNI, BRI) lewat `POST /orders/:code/va`; masa berlaku VA tidak melewati batas tahan pesanan. Notifikasi `settlement` dari Midtrans (signature SHA512 dicek) menandai lunas dan mengonfirmasi pesanan otomatis, sama dengan `pay` pada QRIS. Tanpa `MIDTRANS_SERVER_KEY`, checkout VA ditolak `409`.
+- **Pesan dari meja (F21).** Penjual menyalakan `dine_in_enabled` dan membuat meja; tiap meja punya token QR (`/meja/<token>` di web). Tamu memesan tanpa akun: pesanan tanpa `customer_id` dan titik temu, menyimpan `table_id` dan hash token tamu, maksimal 5 pesanan menunggu per meja. Bayar lewat halaman Snap (QRIS, e-wallet, VA); notifikasi `settlement` mengonfirmasi pesanan otomatis. Menu pre-order tidak dijual di meja.
 - **Promo (F12).** Promo platform berlaku di semua toko, promo toko hanya di tokonya. Diperiksa: aktif, periode, kuota (diklaim atomik), minimal belanja, batas per pembeli. Kuota kembali saat pesanan batal atau kedaluwarsa.
 - **Ulasan (F13).** Satu ulasan per menu per pesanan selesai. Rating menu dan toko dihitung ulang setiap ulasan masuk atau dimoderasi.
 - **Moderasi (F19).** Ulasan yang disembunyikan admin tidak tampil dan tidak dihitung. Menu yang diturunkan admin nonaktif dan tidak bisa diaktifkan penjual sampai dipulihkan.
@@ -131,6 +133,8 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
 | Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder` | pembeli |
 | Pembayaran VA | `POST /orders/:code/va` | pembeli |
+| Meja (penjual) | `GET` dan `POST /merchant/tables`, `PATCH /merchant/tables/:id` | penjual |
+| Pesan dari meja | `GET /tables/:token`, `POST /tables/:token/orders`, `GET /guest/orders/:code`, `POST /guest/orders/:code/pay` (header `X-Guest-Token`) | publik |
 | Notifikasi Midtrans | `POST /payments/midtrans` (diverifikasi signature) | publik |
 | Notifikasi | `GET /me/notifications`, `POST /me/notifications/read` | masuk |
 | Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
