@@ -8,6 +8,7 @@ export const notFoundHandler = (_req: Request, _res: Response, next: NextFunctio
 export const errorHandler = (err: unknown, _req: Request, res: Response, _next: NextFunction): void => {
   const rid = res.getHeader("X-Request-Id");
   if (err instanceof AppError) {
+    if (err.status >= 500) res.locals.galat = `${err.code}: ${err.message}`; // F23: 502/503 penyedia luar ikut tercatat
     res.status(err.status).json({ error: { code: err.code, message: err.message, fields: err.fields } });
     return;
   }
@@ -26,5 +27,7 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
   const db = err as { sql?: unknown; code?: string; message?: string };
   if (db?.sql !== undefined) console.error(`[${rid}] Galat DB ${db.code}: ${db.message}`);
   else console.error(`[${rid}]`, err);
+  // F23: ringkasan galat untuk server_logs (tanpa SQL/parameter yang bisa memuat data pembeli)
+  res.locals.galat = db?.sql !== undefined ? `Galat DB ${db.code}` : String((err as Error)?.message ?? err).slice(0, 500);
   res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Terjadi kesalahan pada server." } });
 };

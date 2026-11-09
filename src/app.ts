@@ -10,7 +10,7 @@ import { meja } from './routes/meja';
 import { pesanan } from './routes/pesanan';
 import { notifikasi } from './routes/notifikasi';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import { requestId, requestLogger } from './middleware/requestLogger';
+import { catatLogServer, requestId, requestLogger } from './middleware/requestLogger';
 import { healthHandler } from './handlers/health.handler';
 import { env } from './config/env';
 
@@ -19,6 +19,7 @@ const app: Application = express();
 // production wajib mengisi CORS_ORIGIN (divalidasi di env.ts); dev default ke web lokal
 app.use(cors({ origin: env.CORS_ORIGIN.length ? env.CORS_ORIGIN : ['http://localhost:3000'] }));
 app.use(requestId);
+app.use(catatLogServer);
 app.use(express.json());
 
 if (env.NODE_ENV !== 'test') {

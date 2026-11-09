@@ -9,6 +9,7 @@ import {
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { buatAiHandler, daftarAiHandler, hapusAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
+import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
@@ -73,6 +74,10 @@ admin.post("/ai-providers", validate(aiSchema), buatAiHandler);
 admin.patch("/ai-providers/:id", validate(ubahAiSchema), ubahAiHandler);
 admin.delete("/ai-providers/:id", hapusAiHandler);
 admin.post("/ai-providers/:id/test", ujiAiHandler);
+
+// F23 dashboard server: status, error 5xx & request lambat
+admin.get("/server-status", statusServerHandler);
+admin.get("/server-logs", daftarLogServerHandler);
 
 // path admin tak dikenal berhenti di sini (404), tidak jatuh ke router v1
 admin.use(() => {
