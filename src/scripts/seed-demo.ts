@@ -90,7 +90,10 @@ export async function jalankan(env: NodeJS.ProcessEnv, args: string[] = []): Pro
     console.error("Data demo tidak boleh dibuat di lingkungan produksi.");
     return 1;
   }
-  if (!hostLokal(env.DATABASE_URL ?? config.DATABASE_URL) && !args.includes("--paksa")) {
+  const url = env.DATABASE_URL ?? config.DATABASE_URL;
+  // DB uji (nama berakhiran _test, mis. di TiDB) juga boleh: isinya memang dikosongkan setiap uji
+  const dbUji = (() => { try { return new URL(url).pathname.endsWith("_test"); } catch { return false; } })();
+  if (!hostLokal(url) && !dbUji && !args.includes("--paksa")) {
     console.error("Data demo hanya untuk database lokal. Tambahkan --paksa bila memang disengaja.");
     return 1;
   }

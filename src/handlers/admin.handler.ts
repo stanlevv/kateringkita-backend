@@ -7,7 +7,7 @@ import { ambilBiaya, ambilKontakCs, buatPromo, daftarPromo, setAktifPromo, ubahB
 import { kirimPengumuman } from "../services/admin-pengumuman.service";
 import { ringkasan } from "../services/admin-summary.service";
 import { rekapKeuangan } from "../services/admin-keuangan.service";
-import { rentangSchema } from "../dto/merchant-laporan.dto";
+import { rentangAdminSchema } from "../dto/merchant-laporan.dto";
 import { parse } from "../middleware/validate";
 import { daftarMenuAdmin, daftarUlasanAdmin, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
 import { AppError } from "../utils/errors";
@@ -106,7 +106,7 @@ export const moderasiMenuHandler = (turun: boolean): RequestHandler => async (re
 
 // F20 rekap keuangan ?from&to (tanggal WIB, maks 92 hari)
 export const rekapKeuanganHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await rekapKeuangan(parse(rentangSchema, req.query)) });
+  res.json({ data: await rekapKeuangan(parse(rentangAdminSchema, req.query)) });
 };
 
 // Kontak CS (body divalidasi kontakCsSchema) dan broadcast pengumuman (pengumumanSchema)

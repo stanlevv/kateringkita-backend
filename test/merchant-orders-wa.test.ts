@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import request from "supertest";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
@@ -44,7 +44,9 @@ test("templat toko dipakai; placeholder asing dibiarkan; nama dengan & # ter-enc
 });
 
 test("TEMPLAT_BAWAAN sama persis dengan fe/lib/wa-template.ts", () => {
-  const fe = readFileSync(join(__dirname, "../../fe/lib/wa-template.ts"), "utf8");
+  // monorepo tim memakai fe/, monorepo C:\DIEGO-UATAMA memakai frontend/
+  const berkas = ["fe", "frontend"].map((d) => join(__dirname, "../..", d, "lib/wa-template.ts")).find((p) => existsSync(p));
+  const fe = readFileSync(berkas ?? join(__dirname, "../../fe/lib/wa-template.ts"), "utf8");
   const literal = /export const TEMPLATE_BAWAAN = `([^`]*)`;/.exec(fe)![1].replace(/\r\n/g, "\n");
   expect(TEMPLAT_BAWAAN).toBe(literal);
 });

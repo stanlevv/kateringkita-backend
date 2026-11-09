@@ -13,13 +13,18 @@ const cekTidakLewat = (ctx: z.RefinementCtx, field: string, d: string) => {
   if (sah(d) && d > hariIniWib()) ctx.addIssue({ code: "custom", path: [field], message: "Tanggal tidak boleh melewati hari ini." });
 };
 
-export const rentangSchema = z.object({ from: tanggal, to: tanggal }).superRefine((r, ctx) => {
+const rentang = (tolakMasaDepan: boolean) => z.object({ from: tanggal, to: tanggal }).superRefine((r, ctx) => {
   if (!sah(r.from, r.to)) return;
   if (r.to < r.from) return ctx.addIssue({ code: "custom", path: ["to"], message: "Tanggal akhir harus setelah tanggal awal." });
-  cekTidakLewat(ctx, "from", r.from);
-  cekTidakLewat(ctx, "to", r.to);
+  if (tolakMasaDepan) {
+    cekTidakLewat(ctx, "from", r.from);
+    cekTidakLewat(ctx, "to", r.to);
+  }
   if (jumlahHari(r.from, r.to) > MAKS_HARI) ctx.addIssue({ code: "custom", path: ["to"], message: `Rentang maksimal ${MAKS_HARI} hari.` });
 });
+export const rentangSchema = rentang(true);
+// F20: rekap keuangan admin menerima rentang yang mencakup hari depan (hasilnya kosong), sesuai uji F20
+export const rentangAdminSchema = rentang(false);
 export type Rentang = z.infer<typeof rentangSchema>;
 
 export const tanggalSchema = z.object({ date: tanggal }).superRefine((r, ctx) => cekTidakLewat(ctx, "date", r.date));
