@@ -72,7 +72,8 @@ export async function updateProfile(userId: number, input: UpdateProfileInput) {
       throw invalid({ close_time: ["Jam tutup harus setelah jam buka."] });
     }
     if (ids) {
-      const [ok] = await conn.query<RowDataPacket[]>("SELECT id FROM pickup_points WHERE id IN (?) AND is_active FOR SHARE", [ids]);
+      // FOR UPDATE, bukan FOR SHARE: TiDB (production) menolak FOR SHARE (ER_NOT_SUPPORTED_YET)
+      const [ok] = await conn.query<RowDataPacket[]>("SELECT id FROM pickup_points WHERE id IN (?) AND is_active FOR UPDATE", [ids]);
       if (ok.length !== ids.length) throw invalid({ pickup_point_ids: ["Titik temu tidak tersedia."] });
       const [lama] = await conn.query<RowDataPacket[]>("SELECT pickup_point_id AS id FROM merchant_pickup_points WHERE merchant_id = ? ORDER BY 1", [m.id]);
       // hanya selisih yang ditulis: DELETE/INSERT seluruh set antar-penjual bisa deadlock lewat gap lock

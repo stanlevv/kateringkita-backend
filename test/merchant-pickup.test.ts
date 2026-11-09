@@ -111,12 +111,13 @@ test("admin menonaktifkan titik temu saat penjual menambahkannya bersamaan → 4
   try {
     await conn.beginTransaction();
     await conn.query("SELECT id FROM merchants WHERE id = ? FOR UPDATE", [idA]);
-    await conn.query("SELECT id FROM pickup_points WHERE id = 3 AND is_active FOR SHARE");
+    await conn.query("SELECT id FROM pickup_points WHERE id = 3 AND is_active FOR UPDATE"); // sama dengan merchant.service
     await conn.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 3)", [idA]);
     const pending = Promise.resolve(admin(request(app).post("/api/v1/admin/master/pickup-points/3/deactivate")).then((r) => r));
     for (let i = 0; i < 100; i++) {
-      // innodb_trx tidak menampilkan transaksi admin yang menunggu di sini; data_lock_waits andal
-      const [w] = await db.query<any[]>("SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits");
+      // innodb_trx tidak menampilkan transaksi admin yang menunggu di sini; data_lock_waits andal (TiDB: di information_schema)
+      const tabel = process.env.DATABASE_URL?.includes("tidbcloud.com") ? "information_schema" : "performance_schema";
+      const [w] = await db.query<any[]>(`SELECT COUNT(*) AS n FROM ${tabel}.data_lock_waits`);
       if (Number(w[0].n) > 0) break;
       await new Promise((r) => setTimeout(r, 50));
     }

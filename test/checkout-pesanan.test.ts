@@ -179,7 +179,8 @@ test("pickup_at ikut di Order (ISO UTC)", async () => {
   expect(r.body.data.pickup_at).toBe(new Date(`${hariIniWib()}T13:30:00+07:00`).toISOString());
 });
 
-describe("galat di tengah transaksi (D6, D7)", () => {
+// Injeksi galat memakai CREATE TRIGGER; TiDB tidak punya trigger, jadi blok ini hanya jalan di MySQL
+describe.skipIf(process.env.DATABASE_URL?.includes("tidbcloud.com"))("galat di tengah transaksi (D6, D7)", () => {
   afterEach(async () => {
     await db.query("DROP TRIGGER IF EXISTS uji_gagal");
   });

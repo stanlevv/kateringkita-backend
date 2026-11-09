@@ -108,7 +108,8 @@ async function cekTitikTemuTerakhir(conn: Conn, idRaw: unknown) {
   if (tokoIds.length) await conn.query("SELECT id FROM merchants WHERE id IN (?) ORDER BY id FOR UPDATE", [tokoIds]);
   const row = await kunci(conn, "pickup_points", id);
   // titik temu sudah terkunci: tautan baru dari penjual tidak bisa masuk lagi, jadi baca ulang dan tolak bila ada toko yang terlewat
-  const [terkini] = await conn.query<RowDataPacket[]>("SELECT merchant_id FROM merchant_pickup_points WHERE pickup_point_id = ? FOR SHARE", [id]);
+  // FOR UPDATE, bukan FOR SHARE: TiDB (production) menolak FOR SHARE (ER_NOT_SUPPORTED_YET)
+  const [terkini] = await conn.query<RowDataPacket[]>("SELECT merchant_id FROM merchant_pickup_points WHERE pickup_point_id = ? FOR UPDATE", [id]);
   if (terkini.some((l) => !tokoIds.includes(l.merchant_id))) throw new AppError(409, "CONFLICT", "Data titik temu berubah. Coba lagi.");
   if (!row.is_active || !tokoIds.length) return; // sudah nonaktif: setAktif membalas tanpa perubahan
   // Locking read setelah kunci toko: membaca data terbaru, bukan snapshot.
