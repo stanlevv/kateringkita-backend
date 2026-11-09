@@ -120,10 +120,10 @@ test("OUT_OF_STOCK: 409 dengan sisa per baris, tidak ada pesanan, held_today tet
 });
 
 describe("validasi", () => {
-  test("payment_method selain cod/qris / tidak ada → 400", async () => {
-    for (const pm of ["va", "tunai", undefined]) {
+  test("payment_method selain cod/qris/va / tidak ada → 400", async () => {
+    for (const pm of ["transfer", "tunai", undefined]) {
       const r = await pesan(isi({ payment_method: pm })).expect(400);
-      expect(r.body.error.fields.payment_method).toEqual(["Pilih bayar tunai atau QRIS."]);
+      expect(r.body.error.fields.payment_method).toEqual(["Pilih bayar tunai, QRIS, atau Virtual Account."]);
     }
   });
 

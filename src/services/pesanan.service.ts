@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
+import { env } from "../config/env";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { jam, jamWib, SISA } from "./katalog.service";
@@ -87,6 +88,9 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
       }
       if (data.payment_method === "qris" && !h.merchant.qris_image_url) {
         throw new AppError(409, "CONFLICT", "Toko belum memasang QRIS. Pilih bayar tunai.");
+      }
+      if (data.payment_method === "va" && !env.MIDTRANS_SERVER_KEY) {
+        throw new AppError(409, "CONFLICT", "Pembayaran Virtual Account belum tersedia. Pilih metode lain.");
       }
 
       // D7: galat duplikat hanya membatalkan pernyataan, bukan transaksi → coba kode baru, maks 5 kali
@@ -252,7 +256,13 @@ export async function bacaPesanan(userId: number, code: string) {
   const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${DARI_PEMBELI} WHERE o.code = ? AND o.customer_id = ?`, [code, userId]);
   if (!o) throw tidakAda();
   const items = await muatItem([o.id]);
-  return { ...petaPesanan(o, items.get(o.id) ?? []), payment: { method: o.payment_method, status: o.payment_status, amount: o.total } };
+  const payment = { method: o.payment_method, status: o.payment_status, amount: o.total };
+  if (o.payment_method !== "va") return { ...petaPesanan(o, items.get(o.id) ?? []), payment };
+  // F10: VA null sampai pembeli memilih bank lewat POST /orders/:code/va
+  const [[va]] = await db.query<RowDataPacket[]>(
+    "SELECT bank, va_number, expires_at FROM payments WHERE order_id = ? AND method = 'va' ORDER BY id DESC LIMIT 1", [o.id],
+  );
+  return { ...petaPesanan(o, items.get(o.id) ?? []), payment: { ...payment, va: va ? { bank: va.bank, va_number: va.va_number, expires_at: va.expires_at } : null } };
 }
 
 // C-15, C-16 (D1, D8): transisi lalu bentuk terkini milik pembeli

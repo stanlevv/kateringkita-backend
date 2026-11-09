@@ -47,7 +47,7 @@
 | F08 | Kedaluwarsa otomatis pesanan tertahan + notifikasi | Selesai |
 | F18 | Admin: verifikasi penjual, data master, promo platform, log | Selesai |
 | F09 | Laporan penjualan (ringkasan, per jam, transaksi) | Selesai |
-| F10 | Pembayaran QRIS toko, diverifikasi manual penjual | Selesai (VA menunggu gateway) |
+| F10 | Pembayaran QRIS toko (verifikasi manual penjual) dan Virtual Account Midtrans | Selesai |
 | F11 | Lupa sandi lewat OTP email | Selesai |
 | F12 | Promo toko + kode promo di checkout | Selesai |
 | F13 | Ulasan pembeli dan rating menu/toko | Selesai |
@@ -107,7 +107,8 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **HPP tidak pernah keluar ke publik.** Katalog pembeli memakai pemetaan sendiri tanpa `hpp`.
 - **Toko harus diverifikasi admin** sebelum tampil di katalog dan bisa menerima pesanan.
 - **Idempotensi checkout.** Header `Idempotency-Key` yang sama menghasilkan pesanan yang sama, bukan pesanan ganda.
-- **Pembayaran QRIS manual (F10).** Pembeli membayar ke QRIS toko (`qris_image_url`). Penjual mengecek lalu menekan `pay`, yang sekaligus menandai lunas dan mengonfirmasi pesanan. QRIS ditolak bila toko belum memasang QRIS. VA belum didukung.
+- **Pembayaran QRIS manual (F10).** Pembeli membayar ke QRIS toko (`qris_image_url`). Penjual mengecek lalu menekan `pay`, yang sekaligus menandai lunas dan mengonfirmasi pesanan. QRIS ditolak bila toko belum memasang QRIS.
+- **Virtual Account Midtrans (F10).** Checkout `payment_method: "va"`, lalu pembeli memilih bank (BCA, BNI, BRI) lewat `POST /orders/:code/va`; masa berlaku VA tidak melewati batas tahan pesanan. Notifikasi `settlement` dari Midtrans (signature SHA512 dicek) menandai lunas dan mengonfirmasi pesanan otomatis, sama dengan `pay` pada QRIS. Tanpa `MIDTRANS_SERVER_KEY`, checkout VA ditolak `409`.
 - **Promo (F12).** Promo platform berlaku di semua toko, promo toko hanya di tokonya. Diperiksa: aktif, periode, kuota (diklaim atomik), minimal belanja, batas per pembeli. Kuota kembali saat pesanan batal atau kedaluwarsa.
 - **Ulasan (F13).** Satu ulasan per menu per pesanan selesai. Rating menu dan toko dihitung ulang setiap ulasan masuk atau dimoderasi.
 - **Moderasi (F19).** Ulasan yang disembunyikan admin tidak tampil dan tidak dihitung. Menu yang diturunkan admin nonaktif dan tidak bisa diaktifkan penjual sampai dipulihkan.
@@ -129,6 +130,8 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Katalog | `GET /menus`, `/menus/:id`, `/menus/:id/reviews`, `/merchants/:slug` | publik |
 | Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
 | Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder` | pembeli |
+| Pembayaran VA | `POST /orders/:code/va` | pembeli |
+| Notifikasi Midtrans | `POST /payments/midtrans` (diverifikasi signature) | publik |
 | Notifikasi | `GET /me/notifications`, `POST /me/notifications/read` | masuk |
 | Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
 | Menu | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota` | penjual |
@@ -163,6 +166,7 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto. Kosong semua berarti endpoint unggah menjawab `503` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Kunci Google AI Studio untuk asisten AI toko; model bawaan `gemini-2.5-flash`. Kosong: asisten menjawab `503` |
+| `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA; key sandbox (`SB-Mid-server-...`) memakai host sandbox. Kosong: checkout VA menjawab `409` |
 | `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |
 
 ---
@@ -217,9 +221,10 @@ npm run dev
 ## ☁️ Deploy
 
 - **Heroku** (app `ketring`) tersambung ke repo ini. Setiap push ke `main` otomatis di-build (`npm run build`) lalu fase `release` di `Procfile` menjalankan `npm run migrate:prod` sebelum `web: node dist/server.js` dinyalakan.
-- **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–003 sudah diterapkan; `004_moderasi.sql` belum.
+- **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–004 sudah diterapkan. TiDB tidak mendukung `FOR SHARE`, trigger, dan `ALTER` yang memakai `AFTER` ke kolom baru di pernyataan yang sama; hindari di kode dan migrasi.
 - **Migrasi berjalan otomatis saat deploy** lewat fase `release`. Bila migrasi gagal, Heroku membatalkan rilis dan versi lama tetap jalan; periksa dengan `heroku releases` dan `heroku logs --ps release`.
 - **Unggah foto** belum aktif di production karena variabel R2 belum diisi.
+- **Midtrans:** isi `MIDTRANS_SERVER_KEY` di Heroku, lalu di dashboard Midtrans (Settings → Payment → Notification URL) isi `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/payments/midtrans`.
 
 ---
 

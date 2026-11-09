@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { quoteSchema, ulasanSchema } from "../dto/pesanan.dto";
+import { quoteSchema, ulasanSchema, vaSchema } from "../dto/pesanan.dto";
 import {
-  bacaPesananHandler, batalkanHandler, buatPesananHandler, daftarPesananSayaHandler, kirimUlasanHandler, pesanLagiHandler, quoteHandler,
-  selesaikanHandler,
-  waPesananHandler,
+  bacaPesananHandler, batalkanHandler, buatPesananHandler, buatVaHandler, daftarPesananSayaHandler, kirimUlasanHandler, notifikasiMidtransHandler,
+  pesanLagiHandler, quoteHandler, selesaikanHandler, waPesananHandler,
 } from "../handlers/pesanan.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate } from "../middleware/validate";
@@ -34,3 +33,7 @@ pesanan.post("/orders/:code/reviews", ...pembeli, validate(ulasanSchema), kirimU
 
 // F14: susun ulang pesanan lama + quote
 pesanan.post("/orders/:code/reorder", ...pembeli, pesanLagiHandler);
+
+// F10: VA Midtrans untuk pesanan VA (bank dipilih pembeli); notifikasi Midtrans tanpa token, diverifikasi signature
+pesanan.post("/orders/:code/va", ...pembeli, validate(vaSchema), buatVaHandler);
+pesanan.post("/payments/midtrans", notifikasiMidtransHandler);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BANK_VA } from "../utils/midtrans";
 
 // F06 (C-09): field harga/total dari client tidak dideklarasikan sehingga dibuang z.object (R-07, D1)
 const ITEMS = "Pilih 1–20 menu.";
@@ -31,10 +32,10 @@ export const quoteSchema = z.object({
   pickup_at: z.iso.datetime({ offset: true, error: WAKTU }).nullish().transform((s) => s ?? null),
 }, { error: "Data pesanan tidak valid." });
 
-// F10: tunai atau QRIS toko yang diverifikasi manual penjual; va_bank tidak dideklarasikan → dibuang
-// shortcut: VA butuh gateway; upgrade saat Midtrans dipasang
-const BAYAR = "Pilih bayar tunai atau QRIS.";
-export const pesananSchema = quoteSchema.extend({ payment_method: z.enum(["cod", "qris"], { error: BAYAR }) });
+// F10: tunai, QRIS toko (diverifikasi manual penjual), atau VA Midtrans (bank dipilih di POST /orders/:code/va)
+const BAYAR = "Pilih bayar tunai, QRIS, atau Virtual Account.";
+export const pesananSchema = quoteSchema.extend({ payment_method: z.enum(["cod", "qris", "va"], { error: BAYAR }) });
+export const vaSchema = z.object({ bank: z.enum(BANK_VA, { error: "Pilih bank BCA, BNI, atau BRI." }) }, { error: "Pilih bank BCA, BNI, atau BRI." });
 
 // D6: Idempotency-Key UUID, huruf kecil
 export const kunciSchema = z.uuid({ error: "Muat ulang aplikasi lalu coba lagi." }).transform((s) => s.toLowerCase());

@@ -4,8 +4,20 @@ import { kirimUlasan } from "../services/ulasan.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { bacaPesanan, batalkan, buatPesanan, daftarPesananSaya, pesanLagi, quote, selesaikan, waPesanan } from "../services/pesanan.service";
+import { buatVa, terimaNotifikasiMidtrans } from "../services/pembayaran-va.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
+
+// F10: body sudah divalidasi vaSchema di rute
+export const buatVaHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await buatVa(uid(req), String(req.params.code), req.body.bank) });
+};
+
+// F10: Midtrans mengulang notifikasi sampai dijawab 2xx
+export const notifikasiMidtransHandler: RequestHandler = async (req, res) => {
+  await terimaNotifikasiMidtrans(bodyObjek(req.body) as Record<string, unknown>);
+  res.json({ data: { ok: true } });
+};
 
 export const quoteHandler: RequestHandler = async (req, res) => {
   res.json({ data: await quote(uid(req), req.body) });

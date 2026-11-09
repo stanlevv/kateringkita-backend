@@ -15,8 +15,8 @@ const lepas = (dari: Status): Jadi => (dari === "holding" ? "kembali" : "batal")
 
 export const ATURAN: Record<Aksi, { oleh: Aktor["jenis"][]; dari: Status[]; ke: Status; kolom: string; stok?: (dari: Status) => Jadi | null }> = {
   confirm: { oleh: ["merchant"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
-  // F10: penjual memverifikasi QRIS sekaligus menerima, agar pesanan lunas tidak pernah kedaluwarsa
-  pay: { oleh: ["merchant"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
+  // F10: lunas sekaligus diterima, agar pesanan lunas tidak pernah kedaluwarsa: QRIS diverifikasi penjual, VA oleh notifikasi Midtrans (sistem)
+  pay: { oleh: ["merchant", "system"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
   cook: { oleh: ["merchant"], dari: ["confirmed"], ke: "cooking", kolom: "cooking_at" },
   ready: { oleh: ["merchant"], dari: ["cooking"], ke: "ready", kolom: "ready_at" },
   complete: { oleh: ["merchant", "customer"], dari: ["ready"], ke: "completed", kolom: "completed_at" },
@@ -59,7 +59,8 @@ export async function transisi(
   // D2: holding lewat waktu hanya bisa di-expire (job F08)
   if (dari === "holding" && Boolean(o.lewat) !== (aksi === "expire")) throw konflik(aksi === "expire" ? undefined : "Batas waktu pesanan sudah habis.");
   if (aksi === "confirm" && o.payment_method !== "cod" && o.payment_status !== "paid") throw konflik("Pesanan belum dibayar.");
-  if (aksi === "pay" && (o.payment_method !== "qris" || o.payment_status === "paid")) throw konflik("Pesanan ini tidak menunggu pembayaran QRIS.");
+  const metodeLunas = aktor.jenis === "system" ? "va" : "qris";
+  if (aksi === "pay" && (o.payment_method !== metodeLunas || o.payment_status === "paid")) throw konflik("Pesanan ini tidak menunggu pembayaran QRIS.");
   // shortcut: tolak pesanan QRIS lunas tidak mengubah payment_status (dana dikembalikan manual); upgrade saat gateway dipasang
 
   const batal = a.ke === "cancelled" || a.ke === "expired";
@@ -70,7 +71,8 @@ export async function transisi(
       aksi === "pay" ? ", payment_status = 'paid'" : ""} WHERE id = ?`,
     [a.ke, ...(batal ? [aktor.jenis, alasan] : []), o.id],
   );
-  if (aksi === "pay") {
+  // VA: baris payments sudah ada sejak VA dibuat, ditandai lunas oleh penerima notifikasi
+  if (aksi === "pay" && aktor.jenis === "merchant") {
     await conn.query("INSERT INTO payments (order_id, method, provider, amount, status, paid_at) VALUES (?, 'qris', 'manual', ?, 'paid', UTC_TIMESTAMP())",
       [o.id, o.total]);
   }
