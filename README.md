@@ -56,6 +56,7 @@
 | F19 | Moderasi admin: ulasan, menu (suspend toko dari F18) | Selesai |
 | F20 | Rekap keuangan admin | Selesai |
 | F21 | Pesan dari meja: QR per meja, menu tanpa login, bayar online (Midtrans Snap) | Selesai |
+| F22 | AI gateway: penyedia AI gratis (Gemini, Groq, OpenRouter, NVIDIA NIM) dikelola admin, fallback otomatis | Selesai |
 | — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
@@ -111,6 +112,7 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **Pembayaran QRIS manual (F10).** Pembeli membayar ke QRIS toko (`qris_image_url`). Penjual mengecek lalu menekan `pay`, yang sekaligus menandai lunas dan mengonfirmasi pesanan. QRIS ditolak bila toko belum memasang QRIS.
 - **Virtual Account Midtrans (F10).** Checkout `payment_method: "va"`, lalu pembeli memilih bank (BCA, BNI, BRI) lewat `POST /orders/:code/va`; masa berlaku VA tidak melewati batas tahan pesanan. Notifikasi `settlement` dari Midtrans (signature SHA512 dicek) menandai lunas dan mengonfirmasi pesanan otomatis, sama dengan `pay` pada QRIS. Tanpa `MIDTRANS_SERVER_KEY`, checkout VA ditolak `409`.
 - **Pesan dari meja (F21).** Penjual menyalakan `dine_in_enabled` dan membuat meja; tiap meja punya token QR (`/meja/<token>` di web). Tamu memesan tanpa akun: pesanan tanpa `customer_id` dan titik temu, menyimpan `table_id` dan hash token tamu, maksimal 5 pesanan menunggu per meja. Bayar lewat halaman Snap (QRIS, e-wallet, VA); notifikasi `settlement` mengonfirmasi pesanan otomatis. Menu pre-order tidak dijual di meja.
+- **AI gateway (F22).** Semua fitur AI lewat satu pintu (`ai.tanya`). Admin mengatur penyedia di `/admin/ai-providers`: jenis penyedia dari daftar tetap (alamat API dikunci di kode), model, prioritas, aktif. API key disimpan terenkripsi AES-256-GCM (kunci turunan `JWT_SECRET`) dan hanya `key_hint` (4 karakter terakhir) yang keluar. Penyedia dicoba urut prioritas; 429 (pakai Retry-After), key ditolak, error, atau timeout → penyedia diistirahatkan lalu yang berikutnya dicoba. `GEMINI_API_KEY` env = cadangan terakhir.
 - **Promo (F12).** Promo platform berlaku di semua toko, promo toko hanya di tokonya. Diperiksa: aktif, periode, kuota (diklaim atomik), minimal belanja, batas per pembeli. Kuota kembali saat pesanan batal atau kedaluwarsa.
 - **Ulasan (F13).** Satu ulasan per menu per pesanan selesai. Rating menu dan toko dihitung ulang setiap ulasan masuk atau dimoderasi.
 - **Moderasi (F19).** Ulasan yang disembunyikan admin tidak tampil dan tidak dihitung. Menu yang diturunkan admin nonaktif dan tidak bisa diaktifkan penjual sampai dipulihkan.
@@ -145,6 +147,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Asisten AI | `POST /merchant/assistant` | penjual |
 | Unggah foto | `POST /merchant/uploads` | penjual |
 | Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
+| AI gateway | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test` | admin |
 | Admin (lanjutan) | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact` | admin |
 
 Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `docs/API.md` pada monorepo tim.
@@ -169,7 +172,7 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 | `INTERNAL_API_SECRET` | tidak | Rahasia bersama dengan server web agar pembatas laju menghitung per alamat pengunjung |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto. Kosong semua berarti endpoint unggah menjawab `503` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Kunci Google AI Studio untuk asisten AI toko; model bawaan `gemini-2.5-flash`. Kosong: asisten menjawab `503` |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Cadangan terakhir AI gateway (penyedia utama diatur admin di dashboard); model bawaan `gemini-2.5-flash`. Tanpa penyedia sama sekali: asisten menjawab `503`. Mengganti `JWT_SECRET` membuat API key AI tersimpan harus diisi ulang |
 | `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA menjawab `409` |
 | `MIDTRANS_IS_PRODUCTION` | tidak | `true` untuk transaksi sungguhan. Bawaan `false` (sandbox), jadi key production yang salah pasang hanya gagal, tidak menarik uang |
 | `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |

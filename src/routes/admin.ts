@@ -7,6 +7,8 @@ import {
   daftarMenuAdminHandler, daftarUlasanAdminHandler, kirimPengumumanHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
   ubahKontakCsHandler,
 } from "../handlers/admin.handler";
+import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
+import { buatAiHandler, daftarAiHandler, hapusAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
@@ -64,6 +66,13 @@ admin.post("/reviews/:id/unhide", moderasiUlasanHandler(false));
 admin.get("/menus", daftarMenuAdminHandler);
 admin.post("/menus/:id/takedown", validate(reasonBody), moderasiMenuHandler(true));
 admin.post("/menus/:id/restore", moderasiMenuHandler(false));
+
+// F22 AI gateway: penyedia AI, urutan fallback, uji koneksi
+admin.get("/ai-providers", daftarAiHandler);
+admin.post("/ai-providers", validate(aiSchema), buatAiHandler);
+admin.patch("/ai-providers/:id", validate(ubahAiSchema), ubahAiHandler);
+admin.delete("/ai-providers/:id", hapusAiHandler);
+admin.post("/ai-providers/:id/test", ujiAiHandler);
 
 // path admin tak dikenal berhenti di sini (404), tidak jatuh ke router v1
 admin.use(() => {

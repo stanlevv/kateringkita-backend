@@ -1,6 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { gemini } from "../utils/gemini";
+import { ai } from "./ai.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import { ringkasanToko } from "./merchant-laporan.service";
 import { idToko } from "./merchant-menu.service";
@@ -34,6 +34,6 @@ export async function tanyaAsisten(userId: number, question: string) {
       nama: m.name, harga: m.price, hpp: m.hpp, kuota_harian: m.daily_quota, aktif: Boolean(m.is_active), terjual_30_hari: Number(m.terjual_30_hari),
     })),
   };
-  const answer = await gemini.tanya(SISTEM, `DATA_TOKO:\n${JSON.stringify(data)}\n\nPERTANYAAN PENJUAL:\n${question}`);
+  const answer = await ai.tanya(SISTEM, `DATA_TOKO:\n${JSON.stringify(data)}\n\nPERTANYAAN PENJUAL:\n${question}`);
   return { answer };
 }
