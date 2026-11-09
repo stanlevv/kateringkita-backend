@@ -12,6 +12,7 @@
     "migrate": "tsx src/scripts/migrate.ts",
     "admin:create": "tsx src/scripts/create-admin.ts",
     "seed:demo": "tsx src/scripts/seed-demo.ts",
+    "sql": "tsx src/scripts/sql.ts",
     "migrate:prod": "node dist/scripts/migrate.js"
   },
   "engines": {
