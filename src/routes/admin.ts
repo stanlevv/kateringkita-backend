@@ -8,7 +8,7 @@ import {
   ubahKontakCsHandler,
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
-import { buatAiHandler, daftarAiHandler, hapusAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
+import { buatAiHandler, daftarAiHandler, hapusAiHandler, pemakaianAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
 import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
@@ -74,6 +74,8 @@ admin.post("/ai-providers", validate(aiSchema), buatAiHandler);
 admin.patch("/ai-providers/:id", validate(ubahAiSchema), ubahAiHandler);
 admin.delete("/ai-providers/:id", hapusAiHandler);
 admin.post("/ai-providers/:id/test", ujiAiHandler);
+// F25 pemakaian AI: token, panggilan, gagal, latensi
+admin.get("/ai-usage", pemakaianAiHandler);
 
 // F23 dashboard server: status, error 5xx & request lambat
 admin.get("/server-status", statusServerHandler);

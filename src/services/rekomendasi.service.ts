@@ -128,7 +128,7 @@ export async function rekomendasi(userId: number, input: RekomendasiInput) {
   const pesan = `KANDIDAT:\n${JSON.stringify(data)}\n\nANGGARAN: ${input.budget ?? "tidak disebut"}\nPORSI: ${input.portions ?? "tidak disebut"}\n\nPERMINTAAN:\n${input.question}`;
   let summary = "Asisten AI sedang tidak tersedia. Ini menu paling cocok yang masih tersedia.";
   try {
-    const j = bacaJawaban(await ai.tanya(SISTEM, pesan));
+    const j = bacaJawaban(await ai.tanya(SISTEM, pesan, { fitur: "rekomendasi", userId }));
     // AI sengaja tidak memilih (mis. anggaran kurang, pantangan): hormati, jangan diganti cadangan
     if (j && !j.items.length) return { source: "ai" as const, summary: j.summary, groups: [], total: 0 };
     const hasil = j ? susun(j.items, kandidat, input.budget) : null;

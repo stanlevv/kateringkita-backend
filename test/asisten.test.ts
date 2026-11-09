@@ -44,13 +44,13 @@ describe("asisten", () => {
     env.GEMINI_API_KEY = "kunci-uji";
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Halo " }, { text: "toko" }] } }] })));
     vi.stubGlobal("fetch", fetch);
-    expect(await ai.tanya("sistem", "pesan")).toBe("Halo toko");
+    expect(await ai.tanya("sistem", "pesan", { fitur: "asisten" })).toBe("Halo toko");
     const [url, init] = fetch.mock.calls[0];
     expect(url).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`);
     expect(init.headers["x-goog-api-key"]).toBe("kunci-uji");
     expect(JSON.parse(init.body)).toMatchObject({ systemInstruction: { parts: [{ text: "sistem" }] }, contents: [{ role: "user", parts: [{ text: "pesan" }] }] });
     fetch.mockResolvedValue(new Response("{}", { status: 500 }));
-    await expect(ai.tanya("s", "p")).rejects.toMatchObject({ status: 502 });
+    await expect(ai.tanya("s", "p", { fitur: "asisten" })).rejects.toMatchObject({ status: 502 });
   });
 
   test("validasi, peran, batas 10 per 10 menit", async () => {

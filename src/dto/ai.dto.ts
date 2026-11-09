@@ -26,3 +26,6 @@ export type AiInput = z.infer<typeof aiSchema>;
 export const ubahAiSchema = z.object({ label, model, api_key: apiKey, priority: prioritas, is_active: aktif }, { error: "Data penyedia AI tidak valid." })
   .partial().refine((o) => Object.keys(o).length > 0, "Tidak ada perubahan.");
 export type UbahAiInput = z.infer<typeof ubahAiSchema>;
+
+// F25: rentang dasbor pemakaian; nilai aneh → 7 hari (seperti halaman/limit)
+export const pemakaianAiSchema = z.object({ days: z.coerce.number().int().min(1).max(90).catch(7) });

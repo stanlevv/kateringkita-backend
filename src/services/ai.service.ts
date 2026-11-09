@@ -5,6 +5,7 @@ import { AppError } from "../utils/errors";
 import { dekripsi, enkripsi } from "../utils/kripto";
 import type { AiInput, UbahAiInput } from "../dto/ai.dto";
 import { catat, dalamTransaksi, type Conn } from "./admin-audit.service";
+import { hariIniWib } from "./merchant-kuota.service";
 
 // F22 AI gateway: penyedia dari DB (dikelola admin) dicoba urut prioritas; gagal (kuota/error/timeout) → istirahat sebentar
 // → penyedia berikutnya. GEMINI_API_KEY di env = cadangan terakhir (perilaku F17 lama tetap jalan tanpa isian admin).
@@ -16,6 +17,9 @@ export const JENIS = {
 } as const;
 export type Jenis = keyof typeof JENIS;
 type Penyedia = { id: number | null; jenis: Jenis; label: string; model: string; key: string };
+type Token = { prompt: number | null; completion: number | null; total: number | null };
+/** Fitur pemakai AI (F25: dasbor pemakaian per fitur). */
+export type Konteks = { fitur: "asisten" | "rekomendasi" | "uji"; userId?: number | null };
 
 class GagalPenyedia extends Error {
   constructor(message: string, readonly istirahatDetik: number) {
@@ -45,9 +49,16 @@ async function kirim(url: string, init: RequestInit): Promise<any> {
   });
 }
 
-// Gemini: REST generateContent (sama dengan F17); lainnya format OpenAI chat completions
-async function panggil(p: Penyedia, system: string, pesan: string): Promise<string> {
+const angka = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
+const token = (masuk: unknown, keluar: unknown, total: unknown): Token => {
+  const a = angka(masuk), b = angka(keluar);
+  return { prompt: a, completion: b, total: angka(total) ?? (a !== null && b !== null ? a + b : null) };
+};
+
+// Gemini: REST generateContent (sama dengan F17); lainnya format OpenAI chat completions. Token dari usageMetadata / usage.
+async function panggil(p: Penyedia, system: string, pesan: string): Promise<{ teks: string; token: Token }> {
   let teks: string | undefined;
+  let t: Token;
   if (p.jenis === "gemini") {
     const body = await kirim(`${JENIS.gemini.url}/${encodeURIComponent(p.model)}:generateContent`, {
       method: "POST",
@@ -59,6 +70,7 @@ async function panggil(p: Penyedia, system: string, pesan: string): Promise<stri
       }),
     });
     teks = body?.candidates?.[0]?.content?.parts?.map((x: { text?: string }) => x.text ?? "").join("").trim();
+    t = token(body?.usageMetadata?.promptTokenCount, body?.usageMetadata?.candidatesTokenCount, body?.usageMetadata?.totalTokenCount);
   } else {
     const body = await kirim(JENIS[p.jenis].url, {
       method: "POST",
@@ -69,9 +81,20 @@ async function panggil(p: Penyedia, system: string, pesan: string): Promise<stri
       }),
     });
     teks = body?.choices?.[0]?.message?.content?.trim();
+    t = token(body?.usage?.prompt_tokens, body?.usage?.completion_tokens, body?.usage?.total_tokens);
   }
   if (!teks) throw new GagalPenyedia("Jawaban penyedia kosong.", 30);
-  return teks;
+  return { teks, token: t };
+}
+
+// F25: satu baris per percobaan; gagal mencatat tidak boleh menggagalkan jawaban AI
+async function catatPakai(p: Penyedia, k: Konteks, ms: number, h: { token?: Token; error?: string }) {
+  await db.query(
+    `INSERT INTO ai_usage (provider_id, provider, label, model, fitur, ok, latency_ms, prompt_tokens, completion_tokens, total_tokens, error, user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [p.id, p.jenis, p.label.slice(0, 60), p.model.slice(0, 120), k.fitur, !h.error, ms,
+      h.token?.prompt ?? null, h.token?.completion ?? null, h.token?.total ?? null, h.error?.slice(0, 255) ?? null, k.userId ?? null],
+  ).catch((e) => console.error("[ai] gagal mencatat pemakaian:", (e as Error).message));
 }
 
 // istirahat penyedia env disimpan di memori proses (tidak ada barisnya di DB)
@@ -112,19 +135,22 @@ async function penyedia(): Promise<{ siap: Penyedia[]; ada: boolean }> {
   return { siap, ada: rows.length > 0 || !!env.GEMINI_API_KEY };
 }
 
-/** Satu pintu AI untuk semua fitur (asisten penjual F17, dan rekomendasi pembeli nanti). Objek agar test bisa memata-matai. */
+/** Satu pintu AI untuk semua fitur (asisten penjual F17, rekomendasi pembeli F24). Objek agar test bisa memata-matai. */
 export const ai = {
-  async tanya(system: string, pesan: string): Promise<string> {
+  async tanya(system: string, pesan: string, k: Konteks): Promise<string> {
     const { siap, ada } = await penyedia();
     if (!ada) throw new AppError(503, "SERVICE_UNAVAILABLE", "Asisten AI belum diaktifkan.");
     for (const p of siap) {
+      const mulai = Date.now();
       try {
-        const teks = await panggil(p, system, pesan);
+        const { teks, token } = await panggil(p, system, pesan);
         await tandaiOk(p);
+        await catatPakai(p, k, Date.now() - mulai, { token });
         return teks;
       } catch (e) {
         if (!(e instanceof GagalPenyedia)) throw e;
         await tandaiGagal(p, e.message, e.istirahatDetik);
+        await catatPakai(p, k, Date.now() - mulai, { error: e.message });
       }
     }
     throw new AppError(502, "UPSTREAM_ERROR", "Asisten AI sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
@@ -203,12 +229,55 @@ export async function ujiAi(idRaw: unknown) {
   }
   const mulai = Date.now();
   try {
-    const teks = await panggil(p, "Jawab sangat singkat.", "Balas dengan kata: OK");
+    const { teks, token } = await panggil(p, "Jawab sangat singkat.", "Balas dengan kata: OK");
     await tandaiOk(p);
+    await catatPakai(p, { fitur: "uji" }, Date.now() - mulai, { token });
     return { ok: true, ms: Date.now() - mulai, sample: teks.slice(0, 80) };
   } catch (e) {
     if (!(e instanceof GagalPenyedia)) throw e;
     await tandaiGagal(p, e.message, e.istirahatDetik);
+    await catatPakai(p, { fitur: "uji" }, Date.now() - mulai, { error: e.message });
     return { ok: false, message: e.message };
   }
+}
+
+// ---------- F25 pemakaian (admin) ----------
+const n = (v: unknown) => Number(v ?? 0);
+const msAtauNull = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+const HITUNG = "COUNT(*) AS panggilan, COALESCE(SUM(NOT ok), 0) AS gagal, COALESCE(SUM(total_tokens), 0) AS token";
+const RATA = "ROUND(AVG(CASE WHEN ok THEN latency_ms END)) AS rata_ms";
+
+/** Ringkasan `hari` hari terakhir (WIB, termasuk hari ini): total, per penyedia, per fitur, per hari, 10 gagal terakhir. */
+export async function pemakaianAi(hari: number) {
+  const nol = Date.parse(`${hariIniWib()}T00:00:00Z`);
+  const tanggal = Array.from({ length: hari }, (_, i) => new Date(nol - (hari - 1 - i) * 86400e3).toISOString().slice(0, 10));
+  const dari = new Date(Date.parse(`${tanggal[0]}T00:00:00+07:00`));
+  const q = (sql: string) => db.query<RowDataPacket[]>(sql, [dari]).then(([rows]) => rows);
+  const [[r], prov, fitur, harian, gagal] = await Promise.all([
+    q(`SELECT ${HITUNG}, COALESCE(SUM(prompt_tokens), 0) AS token_masuk, COALESCE(SUM(completion_tokens), 0) AS token_keluar, ${RATA}
+       FROM ai_usage WHERE created_at >= ?`),
+    q(`SELECT provider_id, provider, label, model, ${HITUNG}, ${RATA}, MAX(created_at) AS terakhir FROM ai_usage WHERE created_at >= ?
+       GROUP BY provider_id, provider, label, model ORDER BY token DESC, panggilan DESC`),
+    q(`SELECT fitur, ${HITUNG} FROM ai_usage WHERE created_at >= ? GROUP BY fitur ORDER BY token DESC, panggilan DESC`),
+    q(`SELECT DATE_FORMAT(DATE_ADD(created_at, INTERVAL 7 HOUR), '%Y-%m-%d') AS tanggal, ${HITUNG} FROM ai_usage WHERE created_at >= ? GROUP BY tanggal`),
+    q("SELECT created_at, label, model, fitur, error FROM ai_usage WHERE created_at >= ? AND NOT ok ORDER BY created_at DESC, id DESC LIMIT 10"),
+  ]);
+  const perTanggal = new Map(harian.map((h) => [String(h.tanggal), h]));
+  return {
+    hari,
+    ringkas: {
+      panggilan: n(r.panggilan), gagal: n(r.gagal), token: n(r.token), token_masuk: n(r.token_masuk), token_keluar: n(r.token_keluar),
+      rata_ms: msAtauNull(r.rata_ms),
+    },
+    per_penyedia: prov.map((p) => ({
+      provider_id: p.provider_id, provider: p.provider as Jenis, label: p.label, model: p.model,
+      panggilan: n(p.panggilan), gagal: n(p.gagal), token: n(p.token), rata_ms: msAtauNull(p.rata_ms), terakhir: p.terakhir,
+    })),
+    per_fitur: fitur.map((f) => ({ fitur: f.fitur, panggilan: n(f.panggilan), gagal: n(f.gagal), token: n(f.token) })),
+    per_hari: tanggal.map((t) => {
+      const h = perTanggal.get(t);
+      return { tanggal: t, panggilan: n(h?.panggilan), gagal: n(h?.gagal), token: n(h?.token) };
+    }),
+    gagal_terakhir: gagal.map((g) => ({ created_at: g.created_at, label: g.label, model: g.model, fitur: g.fitur, error: g.error })),
+  };
 }

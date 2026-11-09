@@ -59,6 +59,7 @@
 | F22 | AI gateway: penyedia AI gratis (Gemini, Groq, OpenRouter, NVIDIA NIM) dikelola admin, fallback otomatis | Selesai |
 | F23 | Log server: error 5xx & request lambat (> 2 dtk) tercatat, dashboard admin, simpan 30 hari | Selesai |
 | F24 | Rekomendasi AI pembeli (RAG dari menu & stok terkini, divalidasi ulang backend, cadangan tanpa AI) | Selesai |
+| F25 | Pemakaian AI: token, panggilan, gagal, latensi per penyedia/fitur/hari (simpan 90 hari) | Selesai |
 | — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
@@ -150,7 +151,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Rekomendasi AI | `POST /assistant/recommendations` (kontrak: [`docs/rekomendasi-ai.md`](docs/rekomendasi-ai.md)) | pembeli |
 | Unggah foto | `POST /merchant/uploads` | penjual |
 | Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
-| AI gateway | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test` | admin |
+| AI gateway | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test`, `GET /admin/ai-usage?days=1..90` | admin |
 | Server | `GET /admin/server-status`, `GET /admin/server-logs?level=&q=&page=&limit=` | admin |
 | Admin (lanjutan) | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact` | admin |
 

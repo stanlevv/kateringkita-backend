@@ -1,6 +1,8 @@
 import { Request, RequestHandler } from "express";
+import { pemakaianAiSchema } from "../dto/ai.dto";
 import { AuthedRequest } from "../middleware/auth";
-import { buatAi, daftarAi, hapusAi, ubahAi, ujiAi } from "../services/ai.service";
+import { parse } from "../middleware/validate";
+import { buatAi, daftarAi, hapusAi, pemakaianAi, ubahAi, ujiAi } from "../services/ai.service";
 
 // F22 AI gateway (admin). Body sudah divalidasi skema di rute.
 const adminId = (req: Request) => (req as AuthedRequest).auth.userId;
@@ -24,4 +26,9 @@ export const hapusAiHandler: RequestHandler = async (req, res) => {
 
 export const ujiAiHandler: RequestHandler = async (req, res) => {
   res.json({ data: await ujiAi(req.params.id) });
+};
+
+// F25 pemakaian AI: ?days=1..90 (bawaan 7)
+export const pemakaianAiHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await pemakaianAi(parse(pemakaianAiSchema, req.query).days) });
 };

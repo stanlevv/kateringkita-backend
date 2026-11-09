@@ -34,6 +34,6 @@ export async function tanyaAsisten(userId: number, question: string) {
       nama: m.name, harga: m.price, hpp: m.hpp, kuota_harian: m.daily_quota, aktif: Boolean(m.is_active), terjual_30_hari: Number(m.terjual_30_hari),
     })),
   };
-  const answer = await ai.tanya(SISTEM, `DATA_TOKO:\n${JSON.stringify(data)}\n\nPERTANYAAN PENJUAL:\n${question}`);
+  const answer = await ai.tanya(SISTEM, `DATA_TOKO:\n${JSON.stringify(data)}\n\nPERTANYAAN PENJUAL:\n${question}`, { fitur: "asisten", userId });
   return { answer };
 }

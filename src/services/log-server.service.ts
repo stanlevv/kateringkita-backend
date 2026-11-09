@@ -70,6 +70,8 @@ export async function statusServer() {
 
 export async function bersihkanLog(): Promise<void> {
   await db.query(`DELETE FROM server_logs WHERE created_at < UTC_TIMESTAMP() - INTERVAL ${SIMPAN_HARI} DAY LIMIT 10000`);
+  // F25: riwayat pemakaian AI disimpan 90 hari
+  await db.query("DELETE FROM ai_usage WHERE created_at < UTC_TIMESTAMP() - INTERVAL 90 DAY LIMIT 10000");
 }
 
 /** Pembersihan berkala (saat mulai & tiap 6 jam); gagal hanya dicatat ke konsol. */
