@@ -6,6 +6,7 @@ export const notFoundHandler = (_req: Request, _res: Response, next: NextFunctio
 };
 
 export const errorHandler = (err: unknown, _req: Request, res: Response, _next: NextFunction): void => {
+  const rid = res.getHeader("X-Request-Id");
   if (err instanceof AppError) {
     res.status(err.status).json({ error: { code: err.code, message: err.message, fields: err.fields } });
     return;
@@ -23,7 +24,7 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
   }
   // galat mysql2 membawa `sql` berisi data pembeli: catat kode + pesan saja
   const db = err as { sql?: unknown; code?: string; message?: string };
-  if (db?.sql !== undefined) console.error(`Galat DB ${db.code}: ${db.message}`);
-  else console.error(err);
+  if (db?.sql !== undefined) console.error(`[${rid}] Galat DB ${db.code}: ${db.message}`);
+  else console.error(`[${rid}]`, err);
   res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Terjadi kesalahan pada server." } });
 };

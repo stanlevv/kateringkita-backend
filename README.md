@@ -216,9 +216,9 @@ npm run dev
 
 ## ☁️ Deploy
 
-- **Heroku** (app `ketring`) tersambung ke repo ini. Setiap push ke `main` otomatis di-build (`npm run build`) lalu dijalankan dengan `web: node dist/server.js` dari `Procfile`.
+- **Heroku** (app `ketring`) tersambung ke repo ini. Setiap push ke `main` otomatis di-build (`npm run build`) lalu fase `release` di `Procfile` menjalankan `npm run migrate:prod` sebelum `web: node dist/server.js` dinyalakan.
 - **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–003 sudah diterapkan; `004_moderasi.sql` belum.
-- **Migrasi baru tidak berjalan otomatis.** Setelah menambah berkas di `database/migrations/`, jalankan `npm run migrate` sekali terhadap database production sebelum atau segera setelah deploy.
+- **Migrasi berjalan otomatis saat deploy** lewat fase `release`. Bila migrasi gagal, Heroku membatalkan rilis dan versi lama tetap jalan; periksa dengan `heroku releases` dan `heroku logs --ps release`.
 - **Unggah foto** belum aktif di production karena variabel R2 belum diisi.
 
 ---
