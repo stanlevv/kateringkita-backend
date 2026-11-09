@@ -57,6 +57,8 @@
 | F20 | Rekap keuangan admin | Selesai |
 | F21 | Pesan dari meja: QR per meja, menu tanpa login, bayar online (Midtrans Snap) | Selesai |
 | F22 | AI gateway: penyedia AI gratis (Gemini, Groq, OpenRouter, NVIDIA NIM) dikelola admin, fallback otomatis | Selesai |
+| F23 | Log server: error 5xx & request lambat (> 2 dtk) tercatat, dashboard admin, simpan 30 hari | Selesai |
+| F24 | Rekomendasi AI pembeli (RAG dari menu & stok terkini, divalidasi ulang backend, cadangan tanpa AI) | Selesai |
 | — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
@@ -145,9 +147,11 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Laporan toko | `GET /merchant/reports/summary`, `/hourly`, `/transactions` | penjual |
 | Promo & ulasan toko | `GET` dan `POST /merchant/promos`, `PATCH` dan `DELETE /merchant/promos/:id`, `GET /merchant/reviews` | penjual |
 | Asisten AI | `POST /merchant/assistant` | penjual |
+| Rekomendasi AI | `POST /assistant/recommendations` (kontrak: [`docs/rekomendasi-ai.md`](docs/rekomendasi-ai.md)) | pembeli |
 | Unggah foto | `POST /merchant/uploads` | penjual |
 | Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
 | AI gateway | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test` | admin |
+| Server | `GET /admin/server-status`, `GET /admin/server-logs?level=&q=&page=&limit=` | admin |
 | Admin (lanjutan) | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact` | admin |
 
 Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `docs/API.md` pada monorepo tim.

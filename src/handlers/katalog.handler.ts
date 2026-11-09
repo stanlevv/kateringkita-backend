@@ -4,6 +4,7 @@ import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { daftarFavorit, hapusFavorit, simpanFavorit } from "../services/katalog-favorit.service";
 import { daftarKatalog, detailMenu, profilToko, ulasanMenu } from "../services/katalog.service";
+import { rekomendasi } from "../services/rekomendasi.service";
 
 // D14: is_favorite hanya untuk sesi pembeli; tanpa token/peran lain → null
 const pembeli = (req: Request) => {
@@ -41,4 +42,9 @@ export const simpanFavoritHandler: RequestHandler = async (req, res) => {
 export const hapusFavoritHandler: RequestHandler = async (req, res) => {
   await hapusFavorit(uid(req), req.params.menuId);
   res.status(204).end();
+};
+
+// F24: body sudah divalidasi rekomendasiSchema di rute
+export const rekomendasiHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await rekomendasi(uid(req), req.body) });
 };
