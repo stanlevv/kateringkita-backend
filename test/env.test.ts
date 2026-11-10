@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { loadEnv } from "../src/config/env";
 
 const valid = {
@@ -46,8 +46,13 @@ describe("loadEnv", () => {
 
   test("R2_* semua-atau-tidak (D13)", () => {
     const r2 = { R2_ACCOUNT_ID: "acc", R2_ACCESS_KEY_ID: "id", R2_SECRET_ACCESS_KEY: "rahasia", R2_BUCKET: "b", R2_PUBLIC_URL: "https://foto.test/" };
-    expect(() => loadEnv({ ...valid, R2_BUCKET: "b" })).toThrow("R2_* harus diisi semua atau dikosongkan semua");
-    expect(() => loadEnv({ ...valid, ...r2, R2_SECRET_ACCESS_KEY: "" })).toThrow("R2_* harus diisi semua atau dikosongkan semua");
+    // terisi sebagian: tidak menggagalkan release, semua R2 dikosongkan (unggah mati) + peringatan nama variabel
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(loadEnv({ ...valid, R2_BUCKET: "b" }).R2_BUCKET).toBeUndefined();
+    expect(loadEnv({ ...valid, ...r2, R2_SECRET_ACCESS_KEY: "" }).R2_ACCOUNT_ID).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("kosong: R2_SECRET_ACCESS_KEY"));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("rahasia");
+    warn.mockRestore();
     expect(loadEnv({ ...valid, R2_ACCOUNT_ID: "", R2_BUCKET: "" }).R2_BUCKET).toBeUndefined();
     expect(loadEnv({ ...valid, ...r2 }).R2_PUBLIC_URL).toBe("https://foto.test");
     expect(() => loadEnv({ ...valid, ...r2, R2_PUBLIC_URL: "http://foto.test" })).toThrow(/R2_PUBLIC_URL/);

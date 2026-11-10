@@ -47,10 +47,6 @@ const schema = z
     path: ["CORS_ORIGIN"],
     message: "wajib diisi di production",
   })
-  .refine((e) => new Set(R2_KEYS.map((k) => e[k] === undefined)).size === 1, {
-    path: ["R2"],
-    message: "R2_* harus diisi semua atau dikosongkan semua",
-  })
   .refine((e) => new Set(SMTP_KEYS.map((k) => e[k] === undefined)).size === 1, {
     path: ["SMTP"],
     message: "SMTP_* harus diisi semua atau dikosongkan semua",
@@ -63,6 +59,13 @@ export function loadEnv(source: Record<string, string | undefined>): Env {
   if (!result.success) {
     const details = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     throw new Error(`Konfigurasi .env tidak valid — ${details}`);
+  }
+  // R2 terisi sebagian tidak menggagalkan start/release (unggah foto saja yang mati, lihat utils/r2.ts);
+  // cukup peringatan berisi NAMA variabel (tanpa nilai) supaya salah pasang di Config Vars mudah dilacak.
+  const r2Ada = R2_KEYS.filter((k) => result.data[k] !== undefined);
+  if (r2Ada.length > 0 && r2Ada.length < R2_KEYS.length) {
+    console.warn(`R2 terisi sebagian (${r2Ada.join(", ")}); kosong: ${R2_KEYS.filter((k) => !r2Ada.includes(k)).join(", ")}. Unggah foto dimatikan.`);
+    for (const k of R2_KEYS) result.data[k] = undefined;
   }
   return result.data;
 }
