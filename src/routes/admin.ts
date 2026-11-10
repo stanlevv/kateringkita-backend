@@ -1,11 +1,11 @@
 import { RequestHandler, Router } from "express";
-import { kontakCsSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
+import { buatAdminSchema, kontakCsSchema, levelAdminSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
 import {
   aksiPenjualHandler, ambilBiayaHandler, antrianVerifikasiHandler, buatMasterHandler, buatPromoHandler, daftarLogHandler,
   daftarMasterHandler, daftarPenjualHandler, daftarPromoHandler, detailPenjualHandler, idParam, ringkasanHandler,
   setAktifMasterHandler, setAktifPromoHandler, ubahBiayaHandler, ubahMasterHandler, ubahPromoHandler,
   daftarMenuAdminHandler, daftarUlasanAdminHandler, kirimPengumumanHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
-  ubahKontakCsHandler,
+  ubahKontakCsHandler, daftarAdminHandler, buatAdminHandler, ubahLevelAdminHandler, setAktifAdminHandler, resetSandiAdminHandler,
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { buatAiHandler, daftarAiHandler, hapusAiHandler, pemakaianAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
@@ -25,6 +25,13 @@ const toggle = (path: string, handler: (aktif: boolean) => RequestHandler) => {
 };
 
 admin.get("/audit-logs", daftarLogHandler);
+
+// Fase 1 kelola admin (khusus super; lihat middleware/admin-akses.ts)
+admin.get("/admins", daftarAdminHandler);
+admin.post("/admins", validate(buatAdminSchema), buatAdminHandler);
+admin.patch("/admins/:id/level", validate(levelAdminSchema), ubahLevelAdminHandler);
+toggle("/admins/:id", setAktifAdminHandler);
+admin.post("/admins/:id/reset-password", resetSandiAdminHandler);
 
 admin.get("/merchants", daftarPenjualHandler);
 

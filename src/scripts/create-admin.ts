@@ -2,20 +2,19 @@ import "dotenv/config"; // harus pertama: env.ts (lewat db.ts) membaca process.e
 import { z } from "zod";
 import db from "../config/db";
 import { fullName, password, phone } from "../dto/auth.dto";
-import { insertUser } from "../services/auth.service";
+import { dalamTransaksi } from "../services/admin-audit.service";
+import { simpanAdmin } from "../services/admin-akun.service";
 
 const adminSchema = z.object({ fullName, phone, password });
 
 export async function createAdmin(input: { phone: string; fullName: string; password: string }): Promise<{ id: number }> {
   const parsed = adminSchema.safeParse(input);
   if (!parsed.success) throw new Error(parsed.error.issues[0].message);
-  try {
-    const user = await insertUser(db, "admin", { full_name: parsed.data.fullName, phone: parsed.data.phone, password: parsed.data.password });
-    return { id: user.id };
-  } catch (err) {
-    if ((err as { code?: string }).code === "ER_DUP_ENTRY") throw new Error("Nomor sudah terdaftar.");
-    throw err;
-  }
+  // bootstrap: admin super, sandi dipilih operator lewat env jadi tidak wajib diganti
+  const id = await dalamTransaksi((conn) =>
+    simpanAdmin(conn, { full_name: parsed.data.fullName, phone: parsed.data.phone, password: parsed.data.password }, "super", false),
+  );
+  return { id };
 }
 
 const opsi = (argv: string[], nama: string) => {

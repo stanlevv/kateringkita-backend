@@ -10,6 +10,7 @@ import { rekapKeuangan } from "../services/admin-keuangan.service";
 import { rentangAdminSchema } from "../dto/merchant-laporan.dto";
 import { parse } from "../middleware/validate";
 import { daftarMenuAdmin, daftarUlasanAdmin, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
+import { buatAdmin, daftarAdmin, resetSandiAdmin, setAktifAdmin, ubahLevel } from "../services/admin-akun.service";
 import { AppError } from "../utils/errors";
 
 const angka = (v: unknown, def: number, max: number) => {
@@ -115,4 +116,21 @@ export const ubahKontakCsHandler: RequestHandler = async (req, res) => {
 };
 export const kirimPengumumanHandler: RequestHandler = async (req, res) => {
   res.status(201).json({ data: await kirimPengumuman(adminId(req), req.body) });
+};
+
+// Fase 1 kelola admin (khusus super, dijaga aksesAdmin)
+export const daftarAdminHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await daftarAdmin() });
+};
+export const buatAdminHandler: RequestHandler = async (req, res) => {
+  res.status(201).json({ data: await buatAdmin(adminId(req), req.body) });
+};
+export const ubahLevelAdminHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await ubahLevel(adminId(req), req.params.id, req.body.admin_level) });
+};
+export const setAktifAdminHandler = (aktif: boolean): RequestHandler => async (req, res) => {
+  res.json({ data: await setAktifAdmin(adminId(req), req.params.id, aktif) });
+};
+export const resetSandiAdminHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await resetSandiAdmin(adminId(req), req.params.id) });
 };

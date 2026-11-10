@@ -18,6 +18,8 @@ export type PublicUser = {
   phone: string;
   avatar_url: string | null;
   favorite_pickup_point_id: number | null;
+  admin_level?: "super" | "ops" | "support" | null; // hanya untuk role admin
+  must_change_password?: boolean;
 };
 
 export type PublicMerchant = {
@@ -113,6 +115,7 @@ const toPublicUser = (r: RowDataPacket): PublicUser => ({
   phone: r.phone,
   avatar_url: r.avatar_url,
   favorite_pickup_point_id: r.favorite_pickup_point_id,
+  ...(r.role === "admin" && { admin_level: r.admin_level ?? null, must_change_password: Boolean(r.must_change_password) }),
 });
 
 export async function getMe(userId: number): Promise<{ user: PublicUser; merchant: PublicMerchant | null }> {
@@ -225,5 +228,5 @@ export async function changePassword(userId: number, currentJti: string, input: 
     "UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND jti <> ? AND revoked_at IS NULL",
     [userId, currentJti],
   );
-  await db.query("UPDATE users SET password_hash = ? WHERE id = ?", [hash, userId]);
+  await db.query("UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?", [hash, userId]);
 }

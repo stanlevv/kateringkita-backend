@@ -6,7 +6,10 @@ import { env } from "../config/env";
 import { AppError } from "../utils/errors";
 import { PublicUser } from "../services/auth.service";
 
-export type AuthedRequest = Request & { auth: { userId: number; role: PublicUser["role"]; jti: string } };
+export type AdminLevel = "super" | "ops" | "support";
+export type AuthedRequest = Request & {
+  auth: { userId: number; role: PublicUser["role"]; jti: string; adminLevel: AdminLevel | null; mustChangePassword: boolean };
+};
 
 const unauthenticated = () => new AppError(401, "UNAUTHENTICATED", "Silakan masuk terlebih dahulu.");
 
@@ -24,12 +27,15 @@ export async function bacaSesi(req: Request): Promise<AuthedRequest["auth"] | nu
   if (typeof payload === "string" || !payload.jti || !payload.sub) return null;
 
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT u.id, u.role FROM auth_sessions s JOIN users u ON u.id = s.user_id
+    `SELECT u.id, u.role, u.admin_level, u.must_change_password FROM auth_sessions s JOIN users u ON u.id = s.user_id
      WHERE s.jti = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP() AND u.is_active = TRUE`,
     [payload.jti],
   );
   if (rows.length === 0) return null;
-  return { userId: rows[0].id, role: rows[0].role, jti: payload.jti };
+  return {
+    userId: rows[0].id, role: rows[0].role, jti: payload.jti,
+    adminLevel: rows[0].admin_level ?? null, mustChangePassword: Boolean(rows[0].must_change_password),
+  };
 }
 
 export const requireAuth: RequestHandler = async (req, _res, next) => {

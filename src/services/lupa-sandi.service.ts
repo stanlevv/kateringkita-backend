@@ -45,5 +45,5 @@ export async function resetSandi(input: ResetPasswordInput) {
   if (!pakai.affectedRows) throw salahKode();
   // semua sesi dicabut lebih dulu, sama dengan changePassword
   await db.query("UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL", [r.user_id]);
-  await db.query("UPDATE users SET password_hash = ? WHERE id = ?", [await bcrypt.hash(input.password, BCRYPT_COST), r.user_id]);
+  await db.query("UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?", [await bcrypt.hash(input.password, BCRYPT_COST), r.user_id]);
 }

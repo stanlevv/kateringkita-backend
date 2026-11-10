@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fullName, phone } from "./auth.dto";
 
 export const reasonBody = z.object({
   reason: z.string({ error: "Alasan wajib diisi." }).trim().min(1, "Alasan wajib diisi.").max(500, "Alasan maksimal 500 karakter."),
@@ -16,3 +17,8 @@ export type PengumumanInput = z.infer<typeof pengumumanSchema>;
 export const kontakCsSchema = z.object({
   wa_number: z.string({ error: "Nomor WA tidak valid." }).trim().regex(/^(08\d{8,11})?$/, "Nomor WA harus diawali 08 dan 10–13 digit."),
 });
+
+// Fase 1 kelola admin
+const adminLevel = z.enum(["super", "ops", "support"], { error: "Pilih tingkat admin." });
+export const buatAdminSchema = z.object({ full_name: fullName, phone, admin_level: adminLevel });
+export const levelAdminSchema = z.object({ admin_level: adminLevel });
