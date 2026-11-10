@@ -181,7 +181,7 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 | `TZ` | disarankan | `Asia/Jakarta` |
 | `JWT_TTL_WEB`, `JWT_TTL_MOBILE` | tidak | Masa berlaku token, bawaan `1d` dan `30d` |
 | `INTERNAL_API_SECRET` | tidak | Rahasia bersama dengan server web agar pembatas laju menghitung per alamat pengunjung |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto. Kosong semua berarti endpoint unggah menjawab `503` |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto (cara mengisi: bagian Deploy). Bila ada yang kosong, endpoint unggah menjawab `503` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Cadangan terakhir AI gateway (penyedia utama diatur admin di dashboard); model bawaan `gemini-2.5-flash`. Tanpa penyedia sama sekali: asisten menjawab `503`. Mengganti `JWT_SECRET` membuat API key AI tersimpan harus diisi ulang |
 | `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA dan bayar online Snap (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA/online menjawab `409`, hanya tunai yang jalan |
@@ -242,7 +242,22 @@ npm run dev
 - **Heroku** (app `ketring`) tersambung ke repo ini. Setiap push ke `main` otomatis di-build (`npm run build`) lalu fase `release` di `Procfile` menjalankan `npm run migrate:prod` sebelum `web: node dist/server.js` dinyalakan.
 - **TiDB Cloud** (cluster `pbl-ketring`, database `kateringkita`) menyimpan data production. Migrasi 001–004 sudah diterapkan. TiDB tidak mendukung `FOR SHARE`, trigger, dan `ALTER` yang memakai `AFTER` ke kolom baru di pernyataan yang sama; hindari di kode dan migrasi.
 - **Migrasi berjalan otomatis saat deploy** lewat fase `release`. Bila migrasi gagal, Heroku membatalkan rilis dan versi lama tetap jalan; periksa dengan `heroku releases` dan `heroku logs --ps release`.
-- **Unggah foto** belum aktif di production karena variabel R2 belum diisi.
+- **Unggah foto (Cloudflare R2):** backend hanya membuat URL PUT bertanda tangan (`POST /merchant/uploads`, berlaku 300 detik);
+  browser mengunggah berkas langsung ke bucket. Siapkan bucket sekali:
+  1. **Kunci S3:** R2 → Manage API tokens → Create API token, izin *Object Read & Write* untuk bucket ini. Salin **Access Key ID**
+     (32 karakter) ke `R2_ACCESS_KEY_ID` dan **Secret Access Key** (64 karakter heks) ke `R2_SECRET_ACCESS_KEY`.
+     Nilai token `cfat_…` bukan kunci S3. `R2_ACCOUNT_ID` = ID akun Cloudflare pemilik bucket, `R2_BUCKET` = nama bucket.
+  2. **Akses publik:** bucket → Settings → aktifkan Public Development URL (`https://pub-….r2.dev`) atau sambungkan domain sendiri
+     (disarankan untuk production; r2.dev dibatasi lajunya). Alamat itu diisi ke `R2_PUBLIC_URL`.
+  3. **CORS bucket:** bucket → Settings → CORS policy. Tanpa ini browser menolak PUT dan web menampilkan "Foto gagal diunggah".
+     ```json
+     [{ "AllowedOrigins": ["https://ketringkita.edufin.app", "https://ketringkita-frontend.vercel.app"],
+        "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+     ```
+     Tambahkan `http://localhost:3000` bila menguji dari lokal.
+
+  Bila sebagian `R2_*` kosong, log release menulis `R2 terisi sebagian (...)` dan unggah menjawab `503`. Mengubah Config Vars
+  me-restart app, tidak perlu push.
 - **Midtrans:** isi `MIDTRANS_SERVER_KEY` di Heroku, lalu di dashboard Midtrans (Settings → Payment → Notification URL) isi `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/payments/midtrans`.
 
 ---
