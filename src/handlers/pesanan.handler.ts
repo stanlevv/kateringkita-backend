@@ -1,16 +1,22 @@
 import { Request, RequestHandler } from "express";
-import { alasanSchema, bodyObjek, daftarSayaSchema, kunciSchema, pesananSchema } from "../dto/pesanan.dto";
+import { alasanSchema, bayarOnlineSchema, bodyObjek, daftarSayaSchema, kunciSchema, pesananSchema } from "../dto/pesanan.dto";
 import { kirimUlasan } from "../services/ulasan.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { bacaPesanan, batalkan, buatPesanan, daftarPesananSaya, pesanLagi, quote, selesaikan, waPesanan } from "../services/pesanan.service";
-import { buatVa, terimaNotifikasiMidtrans } from "../services/pembayaran-va.service";
+import { bayarOnline, buatVa, terimaNotifikasiMidtrans } from "../services/pembayaran-va.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
 
 // F10: body sudah divalidasi vaSchema di rute
 export const buatVaHandler: RequestHandler = async (req, res) => {
   res.json({ data: await buatVa(uid(req), String(req.params.code), req.body.bank) });
+};
+
+// F26: body opsional (kosong = {})
+export const bayarOnlineHandler: RequestHandler = async (req, res) => {
+  const { kembali } = parse(bayarOnlineSchema, bodyObjek(req.body));
+  res.json({ data: await bayarOnline(uid(req), String(req.params.code), kembali) });
 };
 
 // F10: Midtrans mengulang notifikasi sampai dijawab 2xx

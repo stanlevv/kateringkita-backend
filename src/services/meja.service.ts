@@ -1,11 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { env } from "../config/env";
 import { AppError } from "../utils/errors";
-import { buatSnap } from "../utils/midtrans";
 import { PesananMejaInput, UbahMejaInput } from "../dto/meja.dto";
 import { dalamTransaksi } from "./admin-audit.service";
+import { asalSah, bukaSnap, KOLOM_SNAP, URL_BAYAR } from "./pembayaran-va.service";
 import { DARI, jam, JOIN_FAVORIT, kartu, KOLOM_KARTU, TAMPIL, tokoBuka, TOKO_TAMPIL } from "./katalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import { idToko } from "./merchant-menu.service";
@@ -148,8 +147,6 @@ export async function pesanMeja(token: string, data: PesananMejaInput) {
   return { guest_token: tamu, ...(await statusMeja(code, tamu)) };
 }
 
-const URL_BAYAR = "(SELECT redirect_url FROM payments p WHERE p.order_id = o.id AND p.method = 'online' ORDER BY p.id DESC LIMIT 1)";
-
 export async function statusMeja(code: string, tamu: string) {
   const [[o]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.status, o.payment_status, o.customer_name, o.note, o.subtotal, o.service_fee, o.total, o.hold_until, o.created_at,
@@ -169,35 +166,10 @@ export async function statusMeja(code: string, tamu: string) {
   };
 }
 
-// `kembali` harus web kita sendiri (CORS_ORIGIN): mencegah halaman bayar mengalihkan tamu ke situs lain
-const asalSah = (url: string) => {
-  try {
-    return (env.CORS_ORIGIN.length ? env.CORS_ORIGIN : ["http://localhost:3000"]).includes(new URL(url).origin);
-  } catch {
-    return false;
-  }
-};
-
-// Snap dipanggil di luar transaksi; idempoten: halaman bayar yang sudah dibuat dikembalikan.
+// Halaman bayar Snap tamu (logika bersama pre-order F26 di bukaSnap)
 export async function bayarMeja(code: string, tamu: string, kembali: string) {
   if (!asalSah(kembali)) throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { kembali: ["Alamat kembali tidak diizinkan."] });
-  const [[o]] = await db.query<RowDataPacket[]>(
-    `SELECT o.id, o.total, o.status, o.payment_status, TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), o.hold_until) AS menit, ${URL_BAYAR} AS url
-     FROM orders o WHERE o.code = ? AND o.guest_token_hash = ?`,
-    [code, hash(tamu)],
-  );
+  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_SNAP} FROM orders o WHERE o.code = ? AND o.guest_token_hash = ?`, [code, hash(tamu)]);
   if (!o) throw pesananTidakAda();
-  if (o.status !== "holding" || o.payment_status === "paid") throw konflik("Pesanan ini tidak menunggu pembayaran.");
-  if (o.url) return { payment_url: o.url as string };
-  // menit dibulatkan ke bawah: halaman bayar tutup sebelum hold habis
-  const menit = Number(o.menit);
-  if (menit < 1) throw konflik("Batas waktu pesanan sudah habis.");
-  const { redirect_url } = await buatSnap(code, o.total, menit, kembali);
-  await db.query(
-    `INSERT INTO payments (order_id, method, provider, amount, status, expires_at, redirect_url)
-     VALUES (?, 'online', 'midtrans', ?, 'pending', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?)`,
-    [o.id, o.total, menit, redirect_url],
-  );
-  await db.query("UPDATE orders SET payment_status = 'pending' WHERE id = ? AND payment_status = 'unpaid'", [o.id]);
-  return { payment_url: redirect_url };
+  return { payment_url: await bukaSnap(o, code, kembali) };
 }

@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env";
 import { AppError } from "./errors";
 
-// F10: Virtual Account lewat Midtrans Core API. Sandbox kecuali MIDTRANS_IS_PRODUCTION=true
+// F10: Virtual Account lewat Midtrans Core API. F26: semua pembayaran non-tunai lewat Midtrans. Sandbox kecuali MIDTRANS_IS_PRODUCTION=true
 // (awalan key tidak bisa dipakai: key sandbox akun baru juga berawalan "Mid-server-").
 export const BANK_VA = ["bca", "bni", "bri"] as const;
 export type BankVa = (typeof BANK_VA)[number];
@@ -43,13 +43,13 @@ export async function buatVaMidtrans(code: string, amount: number, bank: BankVa,
   return { transaction_id: String(r.transaction_id), bank: String(va.bank), va_number: String(va.va_number) };
 }
 
-// F21: halaman bayar Snap (QRIS, e-wallet, VA) untuk pesanan meja; kartu kredit tidak dibuka (alur capture/fraud).
-// Masa berlaku = sisa hold pesanan; `kembali` = halaman status pesanan di web setelah bayar.
-export async function buatSnap(code: string, amount: number, menit: number, kembali: string) {
+// F21/F26: halaman bayar Snap (QRIS, e-wallet, VA) untuk pesanan meja dan pre-order; kartu kredit tidak dibuka (alur capture/fraud).
+// Masa berlaku = sisa hold pesanan; `kembali` = halaman status di web setelah bayar (aplikasi mobile tanpa `kembali`: URL bawaan Midtrans).
+export async function buatSnap(code: string, amount: number, menit: number, kembali?: string) {
   const r = await panggil(`${hostSnap()}/snap/v1/transactions`, {
     transaction_details: { order_id: code, gross_amount: amount },
     expiry: { unit: "minute", duration: menit },
-    callbacks: { finish: kembali },
+    ...(kembali ? { callbacks: { finish: kembali } } : {}),
     enabled_payments: ["other_qris", "gopay", "shopeepay", "bca_va", "bni_va", "bri_va"],
   });
   if (!r.token || !r.redirect_url) {

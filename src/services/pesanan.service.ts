@@ -129,11 +129,9 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
         );
         if (!r.affectedRows) throw tolakPromo("Kuota promo sudah habis.");
       }
-      if (data.payment_method === "qris" && !h.merchant.qris_image_url) {
-        throw new AppError(409, "CONFLICT", "Toko belum memasang QRIS. Pilih bayar tunai.");
-      }
-      if (data.payment_method === "va" && !env.MIDTRANS_SERVER_KEY) {
-        throw new AppError(409, "CONFLICT", "Pembayaran Virtual Account belum tersedia. Pilih metode lain.");
+      // F26: semua non-tunai lewat Midtrans
+      if (data.payment_method !== "cod" && !env.MIDTRANS_SERVER_KEY) {
+        throw new AppError(409, "CONFLICT", `Pembayaran ${data.payment_method === "va" ? "Virtual Account" : "online"} belum tersedia. Pilih metode lain.`);
       }
 
       const { orderId, code: c } = await sisipPesanan(conn, hari,
@@ -174,7 +172,7 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
 export const KOLOM = `o.id, o.code, o.status, o.payment_method, o.payment_status, o.hold_until, o.pickup_at,
   GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, o.pickup_point_id, p.name AS p_name,
   o.subtotal, o.discount, o.service_fee, o.total, o.note, o.cancel_reason, o.cancelled_by, o.created_at, o.updated_at`;
-const DARI_PEMBELI = `${KOLOM}, o.merchant_id, m.business_name, m.wa_number, m.qris_image_url,
+const DARI_PEMBELI = `${KOLOM}, o.merchant_id, m.business_name, m.wa_number,
   (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id AND NOT EXISTS
     (SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.menu_id = i.menu_id)) AS belum_diulas
   FROM orders o JOIN merchants m ON m.id = o.merchant_id JOIN pickup_points p ON p.id = o.pickup_point_id`;
@@ -210,8 +208,7 @@ export const dasarPesanan = (o: RowDataPacket, items: Item[]) => {
 // Order §1 (tanpa payment). D2: holding yang lewat waktu tidak bisa dibatalkan
 export const petaPesanan = (o: RowDataPacket, items: Item[]) => ({
   ...dasarPesanan(o, items),
-  // F10: QRIS toko untuk dibayar pembeli, diverifikasi manual penjual
-  merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number, qris_image_url: o.qris_image_url },
+  merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number },
   can_cancel: (o.status === "holding" && Number(o.seconds_left) > 0) || (o.status === "confirmed" && o.payment_method === "cod"),
   // F13: masih ada menu yang belum diulas
   can_complete: o.status === "ready", can_review: o.status === "completed" && Number(o.belum_diulas) > 0,
@@ -264,6 +261,14 @@ export async function bacaPesanan(userId: number, code: string) {
   if (!o) throw tidakAda();
   const items = await muatItem([o.id]);
   const payment = { method: o.payment_method, status: o.payment_status, amount: o.total };
+  if (o.payment_method === "online") {
+    // F26: halaman bayar Snap; null sampai POST /orders/:code/online, dan setelah lunas/tidak menunggu bayar lagi
+    const [[p]] = await db.query<RowDataPacket[]>(
+      "SELECT redirect_url FROM payments WHERE order_id = ? AND method = 'online' ORDER BY id DESC LIMIT 1", [o.id],
+    );
+    const menunggu = o.status === "holding" && o.payment_status !== "paid";
+    return { ...petaPesanan(o, items.get(o.id) ?? []), payment: { ...payment, payment_url: menunggu ? p?.redirect_url ?? null : null } };
+  }
   if (o.payment_method !== "va") return { ...petaPesanan(o, items.get(o.id) ?? []), payment };
   // F10: VA null sampai pembeli memilih bank lewat POST /orders/:code/va
   const [[va]] = await db.query<RowDataPacket[]>(
@@ -283,7 +288,8 @@ export const selesaikan = (userId: number, code: string) => ubahSaya(userId, cod
 // D15 (C-13): teks tetap bersuara pembeli; wa_template toko (bersuara penjual) dipakai GET /merchant/orders/:code/whatsapp di F07
 const PESAN_PEMBELI = "Halo {toko}, saya {nama} memesan lewat KateringKita.\n\nKode: {kode}\nMenu: {menu}\nTotal: {total}\n"
   + "Cara bayar: {metode_bayar}\nAmbil di: {titik_temu}\nWaktu ambil: {waktu_ambil}";
-const METODE: Record<string, string> = { qris: "QRIS", va: "Virtual Account", cod: "Tunai" };
+// qris: pesanan lama sebelum F26
+const METODE: Record<string, string> = { qris: "QRIS toko", va: "Virtual Account", cod: "Tunai", online: "Bayar online" };
 
 // Nilai placeholder; format sama dengan fe/lib/wa-template.ts (Rp 30.000, HH.MM WIB / Secepatnya, Tunai)
 export function nilaiWa(o: {

@@ -1,12 +1,56 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
+import { env } from "../config/env";
 import { AppError } from "../utils/errors";
-import { BankVa, buatVaMidtrans, notifikasiSah } from "../utils/midtrans";
+import { BankVa, buatSnap, buatVaMidtrans, notifikasiSah } from "../utils/midtrans";
 import { dalamTransaksi } from "./admin-audit.service";
 import { bacaPesanan } from "./pesanan.service";
 import { transisi } from "./pesanan-status.service";
 
+// Pembayaran Midtrans: VA (F10), halaman Snap untuk pesanan meja (F21) dan pre-order (F26), notifikasi untuk semuanya.
 const konflik = (pesan: string) => new AppError(409, "CONFLICT", pesan);
+
+// `kembali` harus web kita sendiri (CORS_ORIGIN): mencegah halaman bayar mengalihkan pembeli ke situs lain
+export const asalSah = (url: string) => {
+  try {
+    return (env.CORS_ORIGIN.length ? env.CORS_ORIGIN : ["http://localhost:3000"]).includes(new URL(url).origin);
+  } catch {
+    return false;
+  }
+};
+const tolakKembali = () => new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { kembali: ["Alamat kembali tidak diizinkan."] });
+
+export const URL_BAYAR = "(SELECT redirect_url FROM payments p WHERE p.order_id = o.id AND p.method = 'online' ORDER BY p.id DESC LIMIT 1)";
+// kolom yang dibutuhkan bukaSnap; o = orders
+export const KOLOM_SNAP = `o.id, o.total, o.status, o.payment_method, o.payment_status,
+  TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), o.hold_until) AS menit, ${URL_BAYAR} AS url`;
+
+// Snap dipanggil di luar transaksi; idempoten: halaman bayar yang sudah dibuat dikembalikan.
+export async function bukaSnap(o: RowDataPacket, code: string, kembali?: string): Promise<string> {
+  if (o.status !== "holding" || o.payment_status === "paid") throw konflik("Pesanan ini tidak menunggu pembayaran.");
+  if (o.url) return o.url as string;
+  // menit dibulatkan ke bawah: halaman bayar tutup sebelum hold habis
+  const menit = Number(o.menit);
+  if (menit < 1) throw konflik("Batas waktu pesanan sudah habis.");
+  const { redirect_url } = await buatSnap(code, o.total, menit, kembali);
+  await db.query(
+    `INSERT INTO payments (order_id, method, provider, amount, status, expires_at, redirect_url)
+     VALUES (?, 'online', 'midtrans', ?, 'pending', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?)`,
+    [o.id, o.total, menit, redirect_url],
+  );
+  await db.query("UPDATE orders SET payment_status = 'pending' WHERE id = ? AND payment_status = 'unpaid'", [o.id]);
+  return redirect_url;
+}
+
+// F26: halaman bayar online (QRIS, e-wallet, VA) untuk pre-order pembeli; `kembali` opsional (web), mobile cukup membuka payment_url
+export async function bayarOnline(userId: number, code: string, kembali?: string) {
+  if (kembali !== undefined && !asalSah(kembali)) throw tolakKembali();
+  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_SNAP} FROM orders o WHERE o.code = ? AND o.customer_id = ?`, [code, userId]);
+  if (!o) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
+  if (o.payment_method !== "online") throw konflik("Pesanan ini tidak memakai bayar online.");
+  await bukaSnap(o, code, kembali);
+  return bacaPesanan(userId, code);
+}
 
 // F10: VA untuk pesanan VA milik pembeli yang masih holding. Midtrans dipanggil di luar transaksi agar kunci tidak ditahan
 // selama HTTP; idempoten: VA yang sudah ada dikembalikan.
@@ -53,7 +97,7 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
   if (!baru) return; // pending: belum ada yang berubah
   const code = String(n.order_id);
   await dalamTransaksi(async (conn) => {
-    // VA (pembeli, F10) atau Snap 'online' (pesanan meja, F21)
+    // VA (pembeli, F10) atau Snap 'online' (pesanan meja F21, pre-order F26)
     const [[p]] = await conn.query<RowDataPacket[]>(
       `SELECT p.id, p.status, p.amount FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE o.code = ? AND p.method IN ('va', 'online') AND p.provider = 'midtrans' ORDER BY p.id LIMIT 1`,
@@ -66,7 +110,7 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
     }
     if (baru === "paid") {
       // urutan kunci sama dengan transisi lain (users → orders → menus), payments terakhir
-      // shortcut: lunas setelah hold habis/batal → 409 ditelan, payments tetap lunas; dana dikembalikan manual (lihat log ini)
+      // lunas setelah hold habis/batal → 409 ditelan, payments tetap lunas → muncul di daftar refund admin (F26)
       await transisi(conn, code, "pay", { jenis: "system" }).catch((e: unknown) => {
         if (!(e instanceof AppError) || e.status !== 409) throw e;
         console.error(`VA ${code} lunas tetapi pesanan tidak bisa dikonfirmasi: ${e.message}`);

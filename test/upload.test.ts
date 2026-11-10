@@ -74,8 +74,8 @@ describe("endpoint unggah (D12–D14)", () => {
     expect(exp).toBeLessThanOrEqual(Date.now() + 301_000);
     const lagi = await up(tA, MENU).expect(200);
     expect(lagi.body.data.public_url).not.toBe(public_url);
-    expect((await up(tA, { ...MENU, purpose: "qris", content_type: "image/jpeg" }).expect(200)).body.data.public_url)
-      .toMatch(new RegExp(`/merchants/${idA}/qris/[0-9a-f-]{36}\\.jpg$`));
+    expect((await up(tA, { ...MENU, purpose: "logo", content_type: "image/jpeg" }).expect(200)).body.data.public_url)
+      .toMatch(new RegExp(`/merchants/${idA}/logo/[0-9a-f-]{36}\\.jpg$`));
   });
 
   test("validasi tipe, ukuran, purpose", async () => {
@@ -85,6 +85,8 @@ describe("endpoint unggah (D12–D14)", () => {
     expect(besar.body.error.fields.size).toEqual(["Ukuran foto maksimal 5 MB."]);
     expect((await up(tA, { ...MENU, size: 0 }).expect(400)).body.error.fields.size).toBeDefined();
     expect((await up(tA, { ...MENU, purpose: "avatar" }).expect(400)).body.error.fields.purpose).toBeDefined();
+    // F26: QRIS toko dihapus
+    expect((await up(tA, { ...MENU, purpose: "qris" }).expect(400)).body.error.fields.purpose).toEqual(["Jenis foto tidak dikenal."]);
     await up(tA, { ...MENU, size: 5242880 }).expect(200);
   });
 

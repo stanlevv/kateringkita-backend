@@ -47,7 +47,7 @@
 | F08 | Kedaluwarsa otomatis pesanan tertahan + notifikasi | Selesai |
 | F18 | Admin: verifikasi penjual, data master, promo platform, log | Selesai |
 | F09 | Laporan penjualan (ringkasan, per jam, transaksi) | Selesai |
-| F10 | Pembayaran QRIS toko (verifikasi manual penjual) dan Virtual Account Midtrans | Selesai |
+| F10 | Pembayaran Virtual Account Midtrans (QRIS toko manual dihapus di F26) | Selesai |
 | F11 | Lupa sandi lewat OTP email | Selesai |
 | F12 | Promo toko + kode promo di checkout | Selesai |
 | F13 | Ulasan pembeli dan rating menu/toko | Selesai |
@@ -60,6 +60,7 @@
 | F23 | Log server: error 5xx & request lambat (> 2 dtk) tercatat, dashboard admin, simpan 30 hari | Selesai |
 | F24 | Rekomendasi AI pembeli (RAG dari menu & stok terkini, divalidasi ulang backend, cadangan tanpa AI) | Selesai |
 | F25 | Pemakaian AI: token, panggilan, gagal, latensi per penyedia/fitur/hari (simpan 90 hari) | Selesai |
+| F26 | Semua non-tunai lewat Midtrans (VA + bayar online Snap untuk pre-order), rekening & pencairan dana toko, daftar refund admin | Selesai |
 | — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
@@ -94,7 +95,7 @@ src/
 ├── utils/             errors.ts (AppError), r2.ts (URL Cloudflare R2), mail.ts (SMTP), gemini.ts (Gemini REST)
 └── scripts/           migrate.ts, seed-demo.ts, create-admin.ts (dijalankan lewat npm run)
 database/
-└── migrations/        001_init.sql, 002_admin.sql, 003_checkout.sql, 004_moderasi.sql
+└── migrations/        001_init.sql … 010_pencairan.sql (berurutan, satu kali jalan per database)
 test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
 ```
 
@@ -112,8 +113,11 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **HPP tidak pernah keluar ke publik.** Katalog pembeli memakai pemetaan sendiri tanpa `hpp`.
 - **Toko harus diverifikasi admin** sebelum tampil di katalog dan bisa menerima pesanan.
 - **Idempotensi checkout.** Header `Idempotency-Key` yang sama menghasilkan pesanan yang sama, bukan pesanan ganda.
-- **Pembayaran QRIS manual (F10).** Pembeli membayar ke QRIS toko (`qris_image_url`). Penjual mengecek lalu menekan `pay`, yang sekaligus menandai lunas dan mengonfirmasi pesanan. QRIS ditolak bila toko belum memasang QRIS.
-- **Virtual Account Midtrans (F10).** Checkout `payment_method: "va"`, lalu pembeli memilih bank (BCA, BNI, BRI) lewat `POST /orders/:code/va`; masa berlaku VA tidak melewati batas tahan pesanan. Notifikasi `settlement` dari Midtrans (signature SHA512 dicek) menandai lunas dan mengonfirmasi pesanan otomatis, sama dengan `pay` pada QRIS. Tanpa `MIDTRANS_SERVER_KEY`, checkout VA ditolak `409`.
+- **Metode bayar (F10, F26).** Checkout `payment_method`: `cod` (tunai, penjual menekan Konfirmasi), `va`, atau `online`. QRIS statis toko dengan verifikasi manual penjual dihapus di F26; `qris` hanya ada di data lama dan ditolak `400` di checkout. Kontrak mobile: [`docs/pembayaran.md`](docs/pembayaran.md).
+- **Virtual Account Midtrans (F10).** Checkout `payment_method: "va"`, lalu pembeli memilih bank (BCA, BNI, BRI) lewat `POST /orders/:code/va`; masa berlaku VA tidak melewati batas tahan pesanan. Notifikasi `settlement` dari Midtrans (signature SHA512 dicek) menandai lunas dan mengonfirmasi pesanan otomatis. Tanpa `MIDTRANS_SERVER_KEY`, checkout VA/online ditolak `409`.
+- **Bayar online pre-order (F26).** Checkout `payment_method: "online"`, lalu `POST /orders/:code/online` membuat halaman Snap (QRIS, GoPay, ShopeePay, VA) dan mengembalikan `payment.payment_url`. Idempoten; halaman bayar tutup sebelum batas tahan. Penjual tidak bisa mengonfirmasi pesanan VA/online yang belum lunas (`409`).
+- **Pencairan dana (F26).** Uang VA/online masuk akun Midtrans platform. Bagian toko per pesanan selesai = `subtotal` − diskon promo toko; biaya layanan, promo platform, dan biaya Midtrans milik/ditanggung platform. Tunai tidak ikut. Penjual mengisi rekening (`PUT /merchant/payout-account`, wajib kata sandi). Admin super melihat saldo per toko (`GET /admin/payouts/balances`, berisi `as_of`), mentransfer lewat bank, lalu mencatat (`POST /admin/payouts` dengan `amount` dan `until` = `as_of`). Saldo yang berubah atau catatan ganda ditolak `409`; pesanan yang tercatat diberi `payout_id`.
+- **Pengembalian dana (F26).** Pembayaran Midtrans yang lunas pada pesanan `cancelled`/`expired` (ditolak, dibatalkan, atau lunas setelah batas waktu) tetap lunas dan muncul di `GET /admin/refunds`. Admin mengembalikan dana di luar aplikasi lalu menandai `POST /admin/refunds/:code` dengan nomor referensi; status menjadi `refunded`.
 - **Pesan dari meja (F21).** Penjual menyalakan `dine_in_enabled` dan membuat meja; tiap meja punya token QR (`/meja/<token>` di web). Tamu memesan tanpa akun: pesanan tanpa `customer_id` dan titik temu, menyimpan `table_id` dan hash token tamu, maksimal 5 pesanan menunggu per meja. Bayar lewat halaman Snap (QRIS, e-wallet, VA); notifikasi `settlement` mengonfirmasi pesanan otomatis. Menu pre-order tidak dijual di meja.
 - **AI gateway (F22).** Semua fitur AI lewat satu pintu (`ai.tanya`). Admin mengatur penyedia di `/admin/ai-providers`: jenis penyedia dari daftar tetap (alamat API dikunci di kode), model, prioritas, aktif. API key disimpan terenkripsi AES-256-GCM (kunci turunan `JWT_SECRET`) dan hanya `key_hint` (4 karakter terakhir) yang keluar. Penyedia dicoba urut prioritas; 429 (pakai Retry-After), key ditolak, error, atau timeout → penyedia diistirahatkan lalu yang berikutnya dicoba. `GEMINI_API_KEY` env = cadangan terakhir.
 - **Promo (F12).** Promo platform berlaku di semua toko, promo toko hanya di tokonya. Diperiksa: aktif, periode, kuota (diklaim atomik), minimal belanja, batas per pembeli. Kuota kembali saat pesanan batal atau kedaluwarsa.
@@ -137,22 +141,24 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Katalog | `GET /menus`, `/menus/:id`, `/menus/:id/reviews`, `/merchants/:slug` | publik |
 | Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
 | Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder` | pembeli |
-| Pembayaran VA | `POST /orders/:code/va` | pembeli |
+| Pembayaran Midtrans | `POST /orders/:code/va`, `POST /orders/:code/online` (kontrak: [`docs/pembayaran.md`](docs/pembayaran.md)) | pembeli |
 | Meja (penjual) | `GET` dan `POST /merchant/tables`, `PATCH /merchant/tables/:id` | penjual |
 | Pesan dari meja | `GET /tables/:token`, `POST /tables/:token/orders`, `GET /guest/orders/:code`, `POST /guest/orders/:code/pay` (header `X-Guest-Token`) | publik |
 | Notifikasi Midtrans | `POST /payments/midtrans` (diverifikasi signature) | publik |
 | Notifikasi | `GET /me/notifications`, `POST /me/notifications/read` | masuk |
 | Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
 | Menu | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota` | penjual |
-| Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,pay,cook,ready,complete,reject}` | penjual |
+| Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}` | penjual |
 | Laporan toko | `GET /merchant/reports/summary`, `/hourly`, `/transactions` | penjual |
 | Promo & ulasan toko | `GET` dan `POST /merchant/promos`, `PATCH` dan `DELETE /merchant/promos/:id`, `GET /merchant/reviews` | penjual |
+| Rekening & pencairan | `GET /merchant/payouts`, `PUT /merchant/payout-account` | penjual |
 | Asisten AI | `POST /merchant/assistant` | penjual |
 | Rekomendasi AI | `POST /assistant/recommendations` (kontrak: [`docs/rekomendasi-ai.md`](docs/rekomendasi-ai.md)) | pembeli |
 | Unggah foto | `POST /merchant/uploads` | penjual |
 | Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
 | AI gateway | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test`, `GET /admin/ai-usage?days=1..90` | admin |
 | Server | `GET /admin/server-status`, `GET /admin/server-logs?level=&q=&page=&limit=` | admin |
+| Pencairan & refund | `GET /admin/payouts/balances`, `GET` dan `POST /admin/payouts`, `GET /admin/refunds`, `POST /admin/refunds/:code` | admin super |
 | Admin (lanjutan) | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact` | admin |
 
 Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `docs/API.md` pada monorepo tim.
@@ -178,7 +184,7 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto. Kosong semua berarti endpoint unggah menjawab `503` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Cadangan terakhir AI gateway (penyedia utama diatur admin di dashboard); model bawaan `gemini-2.5-flash`. Tanpa penyedia sama sekali: asisten menjawab `503`. Mengganti `JWT_SECRET` membuat API key AI tersimpan harus diisi ulang |
-| `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA menjawab `409` |
+| `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA dan bayar online Snap (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA/online menjawab `409`, hanya tunai yang jalan |
 | `MIDTRANS_IS_PRODUCTION` | tidak | `true` untuk transaksi sungguhan. Bawaan `false` (sandbox), jadi key production yang salah pasang hanya gagal, tidak menarik uang |
 | `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |
 

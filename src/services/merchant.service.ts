@@ -9,7 +9,7 @@ export async function getProfile(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT m.id, m.business_name, m.description, m.address, m.wa_number, m.logo_url, m.service_mode, m.is_open,
             TIME_FORMAT(m.open_time, '%H:%i') AS open_time, TIME_FORMAT(m.close_time, '%H:%i') AS close_time,
-            m.hold_minutes, m.daily_revenue_target, m.qris_image_url, m.wa_template, m.dine_in_enabled, t.id AS type_id, t.name AS type_name
+            m.hold_minutes, m.daily_revenue_target, m.wa_template, m.dine_in_enabled, t.id AS type_id, t.name AS type_name
      FROM merchants m JOIN merchant_types t ON t.id = m.merchant_type_id WHERE m.user_id = ?`,
     [userId],
   );
@@ -33,7 +33,6 @@ export async function getProfile(userId: number) {
     close_time: m.close_time,
     hold_minutes: m.hold_minutes,
     daily_revenue_target: m.daily_revenue_target,
-    qris_image_url: m.qris_image_url,
     wa_template: m.wa_template,
     pickup_point_ids: pts.map((p) => p.id as number),
     // F21: pesan dari meja (QR)
@@ -49,7 +48,7 @@ export async function setOpen(userId: number, isOpen: boolean): Promise<{ is_ope
 }
 
 const invalid = (fields: Record<string, string[]>) => new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
-const COLUMNS = ["business_name", "description", "address", "wa_number", "service_mode", "open_time", "close_time", "hold_minutes", "daily_revenue_target", "wa_template", "logo_url", "qris_image_url"] as const;
+const COLUMNS = ["business_name", "description", "address", "wa_number", "service_mode", "open_time", "close_time", "hold_minutes", "daily_revenue_target", "wa_template", "logo_url"] as const;
 
 export async function updateProfile(userId: number, input: UpdateProfileInput) {
   const sets: Record<string, string | number | null> = {};
@@ -63,13 +62,12 @@ export async function updateProfile(userId: number, input: UpdateProfileInput) {
     let berubah = false;
     // urutan kunci: toko lalu titik temu (sama dengan cekTitikTemuTerakhir admin)
     const [r] = await conn.query<RowDataPacket[]>(
-      "SELECT id, TIME_FORMAT(open_time, '%H:%i') AS o, TIME_FORMAT(close_time, '%H:%i') AS c, logo_url, qris_image_url FROM merchants WHERE user_id = ? FOR UPDATE",
+      "SELECT id, TIME_FORMAT(open_time, '%H:%i') AS o, TIME_FORMAT(close_time, '%H:%i') AS c, logo_url FROM merchants WHERE user_id = ? FOR UPDATE",
       [userId],
     );
     const m = r[0];
     if (!m) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
     cekUrlGambar(input.logo_url, m.logo_url, `merchants/${m.id}/logo/`, "logo_url");
-    cekUrlGambar(input.qris_image_url, m.qris_image_url, `merchants/${m.id}/qris/`, "qris_image_url");
     // jam tutup harus setelah jam buka; yang tidak dikirim dibandingkan dengan nilai tersimpan
     if ((input.open_time !== undefined || input.close_time !== undefined) && (input.close_time ?? m.c) <= (input.open_time ?? m.o)) {
       throw invalid({ close_time: ["Jam tutup harus setelah jam buka."] });

@@ -98,14 +98,14 @@ test("templat WA", async () => {
   expect((await patch({ wa_template: "{harga} {diskon}" }).expect(400)).body.error.fields.wa_template).toEqual(["Kata kunci {harga}, {diskon} tidak dikenal."]);
 });
 
-// F04 D10/D15: logo & QRIS hanya dari unggahan milik toko sendiri (dulu diabaikan, F03 D4 dicabut)
-test("logo_url & qris_image_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400", async () => {
+// F04 D10/D15: logo hanya dari unggahan milik toko sendiri (dulu diabaikan, F03 D4 dicabut). F26: QRIS toko dihapus.
+test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400; qris_image_url tidak diterima lagi", async () => {
   isiR2();
   const logo = fotoUrl(`merchants/${idA}/logo/`);
-  const r = await patch({ logo_url: logo, qris_image_url: fotoUrl(`merchants/${idA}/qris/`, "jpg") }).expect(200);
+  const r = await patch({ logo_url: logo }).expect(200);
   expect(r.body.data.logo_url).toBe(logo);
+  expect(r.body.data).not.toHaveProperty("qris_image_url");
   await patch({ logo_url: logo }).expect(200); // sama dengan tersimpan
-  expect((await patch({ qris_image_url: null }).expect(200)).body.data.qris_image_url).toBeNull();
   const before = await row(idA);
   const uuid = "0b9a4b7e-1f3e-4c55-9d1a-2f6a0e3c9b11";
   for (const bad of [
@@ -123,15 +123,15 @@ test("logo_url & qris_image_url: URL unggahan sendiri diterima, null mengosongka
     const x = await patch({ logo_url: bad }).expect(400);
     expect(x.body.error.fields.logo_url).toEqual(["Foto tidak valid. Unggah ulang foto."]);
   }
-  expect((await patch({ qris_image_url: "https://evil.example/q.png" }).expect(400)).body.error.fields.qris_image_url)
-    .toEqual(["Foto tidak valid. Unggah ulang foto."]);
+  // field dibuang zod: tidak ada yang diubah
+  expect((await patch({ qris_image_url: "https://evil.example/q.png" }).expect(400)).body.error.message).toBe("Tidak ada data yang diubah.");
   expect(await row(idA)).toEqual(before);
 });
 
-test("logo_url/qris_image_url \"\" mengosongkan seperti null", async () => {
-  await db.query("UPDATE merchants SET logo_url = '/logo/lama.png', qris_image_url = '/q.png' WHERE id = ?", [idA]);
-  const r = await patch({ logo_url: "", qris_image_url: "" }).expect(200);
-  expect(r.body.data).toMatchObject({ logo_url: null, qris_image_url: null });
+test("logo_url \"\" mengosongkan seperti null", async () => {
+  await db.query("UPDATE merchants SET logo_url = '/logo/lama.png' WHERE id = ?", [idA]);
+  const r = await patch({ logo_url: "" }).expect(200);
+  expect(r.body.data).toMatchObject({ logo_url: null });
 });
 
 test("logo_url saat unggah belum tersedia: hanya null atau nilai tersimpan", async () => {

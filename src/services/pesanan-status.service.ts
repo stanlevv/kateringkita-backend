@@ -15,8 +15,8 @@ const lepas = (dari: Status): Jadi => (dari === "holding" ? "kembali" : "batal")
 
 export const ATURAN: Record<Aksi, { oleh: Aktor["jenis"][]; dari: Status[]; ke: Status; kolom: string; stok?: (dari: Status) => Jadi | null }> = {
   confirm: { oleh: ["merchant"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
-  // F10: lunas sekaligus diterima, agar pesanan lunas tidak pernah kedaluwarsa: QRIS diverifikasi penjual, VA oleh notifikasi Midtrans (sistem)
-  pay: { oleh: ["merchant", "system"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
+  // F10: lunas sekaligus diterima, agar pesanan lunas tidak pernah kedaluwarsa. F26: hanya notifikasi Midtrans (sistem), QRIS manual dihapus
+  pay: { oleh: ["system"], dari: ["holding"], ke: "confirmed", kolom: "confirmed_at", stok: () => "terjual" },
   cook: { oleh: ["merchant"], dari: ["confirmed"], ke: "cooking", kolom: "cooking_at" },
   ready: { oleh: ["merchant"], dari: ["cooking"], ke: "ready", kolom: "ready_at" },
   complete: { oleh: ["merchant", "customer"], dari: ["ready"], ke: "completed", kolom: "completed_at" },
@@ -59,10 +59,9 @@ export async function transisi(
   // D2: holding lewat waktu hanya bisa di-expire (job F08)
   if (dari === "holding" && Boolean(o.lewat) !== (aksi === "expire")) throw konflik(aksi === "expire" ? undefined : "Batas waktu pesanan sudah habis.");
   if (aksi === "confirm" && o.payment_method !== "cod" && o.payment_status !== "paid") throw konflik("Pesanan belum dibayar.");
-  // QRIS dilunasi penjual; VA (F10) dan Snap meja (F21) dilunasi notifikasi Midtrans
-  const metodeLunas = aktor.jenis === "system" ? ["va", "online"] : ["qris"];
-  if (aksi === "pay" && (!metodeLunas.includes(o.payment_method) || o.payment_status === "paid")) throw konflik("Pesanan ini tidak menunggu pembayaran QRIS.");
-  // shortcut: tolak pesanan QRIS lunas tidak mengubah payment_status (dana dikembalikan manual); upgrade saat gateway dipasang
+  // VA (F10) dan Snap (meja F21, pre-order F26) dilunasi notifikasi Midtrans
+  if (aksi === "pay" && (!["va", "online"].includes(o.payment_method) || o.payment_status === "paid")) throw konflik("Pesanan ini tidak menunggu pembayaran online.");
+  // tolak pesanan yang sudah lunas tidak mengubah payment_status: dana Midtrans dikembalikan admin lewat daftar refund (F26)
 
   const batal = a.ke === "cancelled" || a.ke === "expired";
   const alasan = aksi === "expire" ? "Tidak dikonfirmasi tepat waktu." : reason?.trim() || null;
@@ -72,11 +71,7 @@ export async function transisi(
       aksi === "pay" ? ", payment_status = 'paid'" : ""} WHERE id = ?`,
     [a.ke, ...(batal ? [aktor.jenis, alasan] : []), o.id],
   );
-  // VA: baris payments sudah ada sejak VA dibuat, ditandai lunas oleh penerima notifikasi
-  if (aksi === "pay" && aktor.jenis === "merchant") {
-    await conn.query("INSERT INTO payments (order_id, method, provider, amount, status, paid_at) VALUES (?, 'qris', 'manual', ?, 'paid', UTC_TIMESTAMP())",
-      [o.id, o.total]);
-  }
+  // pay: baris payments sudah ada sejak VA/halaman Snap dibuat, ditandai lunas oleh penerima notifikasi
   // F12: kuota promo kembali saat batal/kedaluwarsa; sebelum lepasStok (urutan kunci promos → menus, sama dengan checkout)
   if (batal && o.promo_id) {
     await conn.query("UPDATE promos SET used_count = used_count - 1 WHERE id = ? AND used_count > 0", [o.promo_id]);

@@ -53,7 +53,8 @@ export async function ambilPesananToko(userId: number, code: string) {
   return petaPesananToko(o, (await muatItem([o.id])).get(o.id) ?? []);
 }
 
-export const AKSI_TOKO = ["confirm", "pay", "cook", "ready", "complete", "reject"] as const;
+// F26: "pay" (verifikasi QRIS manual) dihapus; pembayaran non-tunai dilunasi notifikasi Midtrans
+export const AKSI_TOKO = ["confirm", "cook", "ready", "complete", "reject"] as const;
 export type AksiToko = (typeof AKSI_TOKO)[number];
 
 // M-04, M-08 (D1, D8): transisi dengan aktor penjual lalu bentuk terkini; tolak wajib beralasan

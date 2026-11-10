@@ -48,7 +48,7 @@ test("GET /merchant/profile: bentuk D3 milik penjual sendiri", async () => {
   const r = await get("/profile", tA).expect(200);
   expect(Object.keys(r.body.data).sort()).toEqual([
     "address", "business_name", "close_time", "daily_revenue_target", "description", "dine_in_enabled", "hold_minutes", "is_open", "logo_url",
-    "merchant_type", "open_time", "pickup_point_ids", "qris_image_url", "service_mode", "wa_number", "wa_template",
+    "merchant_type", "open_time", "pickup_point_ids", "service_mode", "wa_number", "wa_template",
   ]);
   expect(r.body.data).toMatchObject({
     business_name: "Dapur Siti", open_time: "07:00", close_time: "16:00", hold_minutes: 5, is_open: true,

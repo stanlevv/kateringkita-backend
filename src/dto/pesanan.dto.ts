@@ -32,10 +32,13 @@ export const quoteSchema = z.object({
   pickup_at: z.iso.datetime({ offset: true, error: WAKTU }).nullish().transform((s) => s ?? null),
 }, { error: "Data pesanan tidak valid." });
 
-// F10: tunai, QRIS toko (diverifikasi manual penjual), atau VA Midtrans (bank dipilih di POST /orders/:code/va)
-const BAYAR = "Pilih bayar tunai, QRIS, atau Virtual Account.";
-export const pesananSchema = quoteSchema.extend({ payment_method: z.enum(["cod", "qris", "va"], { error: BAYAR }) });
+// F10/F26: tunai, VA Midtrans (bank dipilih di POST /orders/:code/va), atau bayar online lewat halaman Snap Midtrans
+// (QRIS, e-wallet, VA; POST /orders/:code/online). QRIS statis toko dengan verifikasi manual dihapus di F26.
+const BAYAR = "Pilih bayar tunai, Virtual Account, atau bayar online.";
+export const pesananSchema = quoteSchema.extend({ payment_method: z.enum(["cod", "va", "online"], { error: BAYAR }) });
 export const vaSchema = z.object({ bank: z.enum(BANK_VA, { error: "Pilih bank BCA, BNI, atau BRI." }) }, { error: "Pilih bank BCA, BNI, atau BRI." });
+// body boleh kosong (aplikasi mobile); `kembali` = halaman web setelah bayar, dicek asalnya di service
+export const bayarOnlineSchema = z.object({ kembali: z.url({ error: "Alamat kembali tidak valid." }).optional() });
 
 // D6: Idempotency-Key UUID, huruf kecil
 export const kunciSchema = z.uuid({ error: "Muat ulang aplikasi lalu coba lagi." }).transform((s) => s.toLowerCase());

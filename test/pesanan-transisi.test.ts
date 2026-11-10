@@ -102,12 +102,12 @@ describe("aktor & kepemilikan", () => {
 
 describe("pembayaran (D1, D3)", () => {
   test("cancel dari confirmed non-tunai → 409", async () => {
-    const code = await siap("confirmed", { payment_method: "qris" });
+    const code = await siap("confirmed", { payment_method: "online" });
     await expect(jalan(code, "cancel", pembeli)).rejects.toMatchObject({ status: 409, message: BERUBAH });
   });
 
-  test("confirm qris belum lunas → 409 belum dibayar; lunas → sukses", async () => {
-    const code = await siap("holding", { payment_method: "qris" });
+  test("confirm online belum lunas → 409 belum dibayar; lunas → sukses", async () => {
+    const code = await siap("holding", { payment_method: "online" });
     await expect(jalan(code, "confirm", penjual)).rejects.toMatchObject({ status: 409, message: "Pesanan belum dibayar." });
     await db.query("UPDATE orders SET payment_status = 'paid' WHERE code = ?", [code]);
     await expect(jalan(code, "confirm", penjual)).resolves.toMatchObject({ ke: "confirmed" });

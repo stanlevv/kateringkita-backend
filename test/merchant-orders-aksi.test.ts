@@ -113,7 +113,7 @@ describe("balapan (D5, D6)", () => {
   // secara berurutan. Online lunas membuat kedua urutan saling meniadakan → tepat satu 200.
   test.each([1, 2, 3])("putaran %i: konfirmasi penjual vs batal pembeli → tepat satu 200", async () => {
     const code = await pesanDulu(s.tCust, s.menu, 2);
-    await db.query("UPDATE orders SET payment_method = 'qris', payment_status = 'paid' WHERE code = ?", [code]);
+    await db.query("UPDATE orders SET payment_method = 'online', payment_status = 'paid' WHERE code = ?", [code]);
     const [c, b] = await Promise.all([aksi(code, "confirm"), batal(code)]);
     expect([c.status, b.status].sort()).toEqual([200, 409]);
     expect(await stok()).toEqual(c.status === 200 ? { held: 0, sold: 2 } : { held: 0, sold: 0 });

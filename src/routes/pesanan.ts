@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { quoteSchema, ulasanSchema, vaSchema } from "../dto/pesanan.dto";
 import {
-  bacaPesananHandler, batalkanHandler, buatPesananHandler, buatVaHandler, daftarPesananSayaHandler, kirimUlasanHandler, notifikasiMidtransHandler,
+  bacaPesananHandler, batalkanHandler, bayarOnlineHandler, buatPesananHandler, buatVaHandler, daftarPesananSayaHandler, kirimUlasanHandler, notifikasiMidtransHandler,
   pesanLagiHandler, quoteHandler, selesaikanHandler, waPesananHandler,
 } from "../handlers/pesanan.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -36,4 +36,6 @@ pesanan.post("/orders/:code/reorder", ...pembeli, pesanLagiHandler);
 
 // F10: VA Midtrans untuk pesanan VA (bank dipilih pembeli); notifikasi Midtrans tanpa token, diverifikasi signature
 pesanan.post("/orders/:code/va", ...pembeli, validate(vaSchema), buatVaHandler);
+// F26: halaman bayar online Snap (QRIS, e-wallet, VA) untuk pesanan payment_method "online"
+pesanan.post("/orders/:code/online", ...pembeli, bayarOnlineHandler);
 pesanan.post("/payments/midtrans", notifikasiMidtransHandler);

@@ -10,6 +10,10 @@ import {
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { buatAiHandler, daftarAiHandler, hapusAiHandler, pemakaianAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
 import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
+import { pencairanSchema, refundSchema } from "../dto/pencairan.dto";
+import {
+  catatPencairanHandler, daftarRefundHandler, daftarSaldoHandler, riwayatPencairanHandler, tandaiRefundHandler,
+} from "../handlers/pencairan.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
@@ -66,6 +70,13 @@ admin.get("/summary", ringkasanHandler);
 
 // F20 rekap keuangan per toko
 admin.get("/finance", rekapKeuanganHandler);
+
+// F26 pencairan dana Midtrans ke penjual & pengembalian dana pesanan batal yang sudah lunas
+admin.get("/payouts/balances", daftarSaldoHandler);
+admin.get("/payouts", riwayatPencairanHandler);
+admin.post("/payouts", validate(pencairanSchema), catatPencairanHandler);
+admin.get("/refunds", daftarRefundHandler);
+admin.post("/refunds/:code", validate(refundSchema), tandaiRefundHandler);
 
 // F19 moderasi ulasan & menu (suspend toko: /merchants/:id/suspend)
 admin.get("/reviews", daftarUlasanAdminHandler);

@@ -42,7 +42,7 @@ export async function muatKeranjang(conn: Q, data: QuoteInput, o: { segarkan: bo
     // ⑥ tanpa kunci: toko + pemilik + titik temu yang diminta + biaya layanan dalam satu kueri
     const [rows] = await conn.query<RowDataPacket[]>(
       `SELECT m.id, m.business_name, m.verification_status, u.is_active AS pemilik_aktif, m.is_open, m.open_time, m.close_time,
-         m.hold_minutes, m.qris_image_url, p.id AS p_id,
+         m.hold_minutes, p.id AS p_id,
          (SELECT setting_value FROM app_settings WHERE setting_key = 'service_fee') AS service_fee
        FROM merchants m JOIN users u ON u.id = m.user_id
        LEFT JOIN merchant_pickup_points mp ON mp.merchant_id = m.id AND mp.pickup_point_id = ?
