@@ -185,6 +185,7 @@ Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kos
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Cadangan terakhir AI gateway (penyedia utama diatur admin di dashboard); model bawaan `gemini-2.5-flash`. Tanpa penyedia sama sekali: asisten menjawab `503`. Mengganti `JWT_SECRET` membuat API key AI tersimpan harus diisi ulang |
 | `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA dan bayar online Snap (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA/online menjawab `409`, hanya tunai yang jalan |
+| `MIDTRANS_SIGNATURE_KEY` | tidak | Signature Secret Key Midtrans (Settings → Access Keys → General Credentials) untuk memverifikasi notifikasi pembayaran. Sejak 28 Okt 2026 notifikasi ditandatangani kunci ini, bukan Server Key; tanpa ini notifikasi ditolak `403` dan pesanan tidak pernah lunas bila Server Key sudah dibuat ulang. Kosong: pakai `MIDTRANS_SERVER_KEY` |
 | `MIDTRANS_IS_PRODUCTION` | tidak | `true` untuk transaksi sungguhan. Bawaan `false` (sandbox), jadi key production yang salah pasang hanya gagal, tidak menarik uang |
 | `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |
 
@@ -258,7 +259,7 @@ npm run dev
 
   Bila sebagian `R2_*` kosong, log release menulis `R2 terisi sebagian (...)` dan unggah menjawab `503`. Mengubah Config Vars
   me-restart app, tidak perlu push.
-- **Midtrans:** isi `MIDTRANS_SERVER_KEY` di Heroku, lalu di dashboard Midtrans (Settings → Payment → Notification URL) isi `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/payments/midtrans`.
+- **Midtrans:** isi `MIDTRANS_SERVER_KEY` dan `MIDTRANS_SIGNATURE_KEY` di Heroku, lalu di dashboard Midtrans (Settings → Payment → Notification URL) isi `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/payments/midtrans`.
 
 ---
 

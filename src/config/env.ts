@@ -36,6 +36,8 @@ const schema = z
     GEMINI_MODEL: z.preprocess((v) => (v === "" ? undefined : v), z.string().default("gemini-2.5-flash")),
     // F10: VA lewat Midtrans Core API; kosong = VA dimatikan (checkout VA → 409)
     MIDTRANS_SERVER_KEY: opsional(z.string()),
+    // Sejak 28 Okt 2026 notifikasi Midtrans ditandatangani Signature Secret Key, bukan Server Key; kosong = pakai Server Key (akun lama)
+    MIDTRANS_SIGNATURE_KEY: opsional(z.string()),
     // "true" = transaksi sungguhan (api.midtrans.com); bawaan sandbox agar key production yang salah pasang tidak menarik uang
     MIDTRANS_IS_PRODUCTION: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["true", "false"]).default("false")),
     CORS_ORIGIN: z

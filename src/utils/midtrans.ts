@@ -59,9 +59,11 @@ export async function buatSnap(code: string, amount: number, menit: number, kemb
   return { redirect_url: String(r.redirect_url) };
 }
 
-// Notifikasi sah bila signature_key = SHA512(order_id + status_code + gross_amount + server key)
+// Notifikasi sah bila signature_key = SHA512(order_id + status_code + gross_amount + Signature Secret Key).
+// Sejak 28 Okt 2026 Midtrans memisahkan Signature Secret Key dari Server Key; begitu Server Key baru dibuat
+// atau Signature Secret Key diregenerasi, keduanya berbeda. Tanpa MIDTRANS_SIGNATURE_KEY: Server Key (akun lama, nilainya masih sama).
 export function notifikasiSah(n: Record<string, unknown>): boolean {
-  const key = env.MIDTRANS_SERVER_KEY;
+  const key = env.MIDTRANS_SIGNATURE_KEY ?? env.MIDTRANS_SERVER_KEY;
   if (!key || typeof n.signature_key !== "string") return false;
   const harap = Buffer.from(createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${key}`).digest("hex"));
   const kirim = Buffer.from(n.signature_key);
