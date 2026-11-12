@@ -2,7 +2,9 @@ import { Request, RequestHandler } from "express";
 import { halamanSchema, katalogQuerySchema } from "../dto/katalog.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { daftarFavorit, hapusFavorit, simpanFavorit } from "../services/katalog-favorit.service";
+import {
+  daftarFavorit, daftarFavoritToko, hapusFavorit, hapusFavoritToko, simpanFavorit, simpanFavoritToko,
+} from "../services/katalog-favorit.service";
 import { daftarKatalog, detailMenu, profilToko, ulasanMenu } from "../services/katalog.service";
 import { rekomendasi } from "../services/rekomendasi.service";
 
@@ -25,9 +27,9 @@ export const ulasanMenuHandler: RequestHandler = async (req, res) => {
   res.json(await ulasanMenu(req.params.id, parse(halamanSchema, req.query)));
 };
 
-// Tipe params sama dengan yang diturunkan Express dari path "/merchants/:slug"
+// Tipe params sama dengan yang diturunkan Express dari path "/merchants/:slug"; is_favorite hanya sesi pembeli (D14)
 export const profilTokoHandler: RequestHandler<{ slug: string }> = async (req, res) => {
-  res.json({ data: await profilToko(req.params.slug) });
+  res.json({ data: await profilToko(req.params.slug, pembeli(req)) });
 };
 
 export const daftarFavoritHandler: RequestHandler = async (req, res) => {
@@ -41,6 +43,21 @@ export const simpanFavoritHandler: RequestHandler = async (req, res) => {
 
 export const hapusFavoritHandler: RequestHandler = async (req, res) => {
   await hapusFavorit(uid(req), req.params.menuId);
+  res.status(204).end();
+};
+
+// F05 favorit toko ("Dapur Favorit")
+export const daftarFavoritTokoHandler: RequestHandler = async (req, res) => {
+  res.json(await daftarFavoritToko(uid(req), parse(halamanSchema, req.query)));
+};
+
+export const simpanFavoritTokoHandler: RequestHandler = async (req, res) => {
+  await simpanFavoritToko(uid(req), req.params.merchantId);
+  res.status(204).end();
+};
+
+export const hapusFavoritTokoHandler: RequestHandler = async (req, res) => {
+  await hapusFavoritToko(uid(req), req.params.merchantId);
   res.status(204).end();
 };
 

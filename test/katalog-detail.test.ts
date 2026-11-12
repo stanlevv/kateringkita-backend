@@ -13,8 +13,8 @@ const KUNCI = [
 ];
 const KUNCI_TOKO = ["business_name", "close_time", "id", "is_open", "logo_url", "open_time", "pickup_points", "slug"];
 const KUNCI_PROFIL = [
-  "business_name", "close_time", "description", "id", "is_open", "logo_url", "merchant_type", "open_time", "pickup_points", "rating_avg",
-  "rating_count", "slug",
+  "business_name", "close_time", "description", "id", "is_favorite", "is_open", "logo_url", "merchant_type", "open_time", "pickup_points",
+  "rating_avg", "rating_count", "slug",
 ];
 const slug = async (id: number) => ((await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [id]))[0] as any[])[0].slug as string;
 const tolak = async (u: string, pesan = "Menu tidak ditemukan.") => {
@@ -115,7 +115,7 @@ test("D12: profil toko publik tanpa alamat/WA/status verifikasi", async () => {
   expect(r.body.data).toEqual({
     id: idA, slug: slugA, business_name: "Dapur Siti", description: "Masakan rumah", logo_url: null,
     merchant_type: { id: 1, name: "Katering Nasi Box & Harian" }, is_open: true, open_time: "07:00", close_time: "16:00",
-    rating_avg: 4.25, rating_count: 8, pickup_points: [{ id: 1, name: "Gedung Vokasi UB (Lt. 2)", description: "Lobi" }],
+    rating_avg: 4.25, rating_count: 8, pickup_points: [{ id: 1, name: "Gedung Vokasi UB (Lt. 2)", description: "Lobi" }], is_favorite: false,
   });
   const s = JSON.stringify(r.body);
   for (const k of [...BOCOR, '"verification_status"', '"user_id"']) expect(s).not.toContain(k);

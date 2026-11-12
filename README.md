@@ -140,6 +140,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Profil | `GET /me`, `PATCH /me`, `PUT /me/password`, `POST /me/avatar` | masuk |
 | Katalog | `GET /menus`, `/menus/:id`, `/menus/:id/reviews`, `/merchants/:slug` | publik |
 | Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
+| Toko favorit | `GET /me/favorite-merchants`, `PUT` dan `DELETE /me/favorite-merchants/:merchantId` (kartu = profil `GET /merchants/:slug`) | pembeli |
 | Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder` | pembeli |
 | Pembayaran Midtrans | `POST /orders/:code/va`, `POST /orders/:code/online` (kontrak: [`docs/pembayaran.md`](docs/pembayaran.md)) | pembeli |
 | Meja (penjual) | `GET` dan `POST /merchant/tables`, `PATCH /merchant/tables/:id` | penjual |

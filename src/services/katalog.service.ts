@@ -107,14 +107,22 @@ export async function daftarKatalog(q: KatalogQuery, userId: number | null) {
 
 const hhmm = (t: unknown) => String(t).slice(0, 5);
 
-export async function titikTemu(merchantId: number): Promise<{ id: number; name: string; description: string | null }[]> {
+export type TitikTemu = { id: number; name: string; description: string | null };
+
+// Titik temu aktif beberapa toko dalam 1 kueri (tanpa N+1 di daftar favorit toko); toko tanpa titik temu → []
+export async function titikTemuToko(ids: number[]): Promise<Map<number, TitikTemu[]>> {
+  const peta = new Map<number, TitikTemu[]>(ids.map((id) => [id, []]));
+  if (!ids.length) return peta;
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT p.id, p.name, p.description FROM merchant_pickup_points mp JOIN pickup_points p ON p.id = mp.pickup_point_id
-     WHERE mp.merchant_id = ? AND p.is_active ORDER BY p.name`,
-    [merchantId],
+    `SELECT mp.merchant_id, p.id, p.name, p.description FROM merchant_pickup_points mp JOIN pickup_points p ON p.id = mp.pickup_point_id
+     WHERE mp.merchant_id IN (?) AND p.is_active ORDER BY p.name`,
+    [ids],
   );
-  return rows.map((p) => ({ id: p.id, name: p.name, description: p.description }));
+  for (const p of rows) peta.get(p.merchant_id)?.push({ id: p.id, name: p.name, description: p.description });
+  return peta;
 }
+
+export const titikTemu = async (merchantId: number): Promise<TitikTemu[]> => (await titikTemuToko([merchantId])).get(merchantId) ?? [];
 
 // D7: TAMPIL tanpa BUKA (toko tutup tetap 200, D3); 3 kueri: menu, opsi aktif, titik temu
 export async function detailMenu(idRaw: unknown, userId: number | null) {
@@ -161,21 +169,40 @@ export async function ulasanMenu(idRaw: unknown, h: Halaman) {
   };
 }
 
-// D12: tanpa alamat, WA, user_id, status verifikasi; 2 kueri
-export async function profilToko(slug: string) {
-  const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT m.id, m.slug, m.business_name, m.description, m.logo_url, m.is_open, m.open_time, m.close_time, m.rating_avg, m.rating_count,
-       t.id AS t_id, t.name AS t_name
-     FROM merchants m JOIN users u ON u.id = m.user_id JOIN merchant_types t ON t.id = m.merchant_type_id
-     WHERE m.slug = ? AND ${TOKO_TAMPIL}`,
-    [slug],
-  );
-  const m = rows[0];
-  if (!m) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
+export const tokoTidakAda = () => new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
+
+// id path toko bukan bilangan bulat positif diperlakukan sama dengan toko yang tidak ada (seperti menuId, BE-01)
+export const tokoId = (idRaw: unknown): number => {
+  const s = String(idRaw);
+  if (!/^[1-9]\d{0,9}$/.test(s)) throw tokoTidakAda();
+  return Number(s);
+};
+
+export const DARI_TOKO = "merchants m JOIN users u ON u.id = m.user_id JOIN merchant_types t ON t.id = m.merchant_type_id";
+
+// Kolom profil toko + is_favorite; parameter: userId (LEFT JOIN merchant_favorites; null = tidak pernah cocok, D14)
+export const KOLOM_TOKO = `m.id, m.slug, m.business_name, m.description, m.logo_url, m.is_open, m.open_time, m.close_time, m.rating_avg,
+  m.rating_count, t.id AS t_id, t.name AS t_name, mf.user_id IS NOT NULL AS fav`;
+export const JOIN_FAVORIT_TOKO = "LEFT JOIN merchant_favorites mf ON mf.merchant_id = m.id AND mf.user_id = ?";
+
+// Mapper publik D12 (tanpa alamat, WA, user_id, status verifikasi): daftar kunci eksplisit (R-11).
+// Satu bentuk untuk GET /merchants/:slug dan kartu favorit toko.
+export function profilPublik(m: RowDataPacket, ms: number, pickup_points: TitikTemu[]) {
   return {
     id: m.id, slug: m.slug, business_name: m.business_name, description: m.description, logo_url: m.logo_url,
-    merchant_type: { id: m.t_id, name: m.t_name }, is_open: tokoBuka(m, jam.sekarang()),
+    merchant_type: { id: m.t_id, name: m.t_name }, is_open: tokoBuka(m, ms),
     open_time: hhmm(m.open_time), close_time: hhmm(m.close_time), rating_avg: Number(m.rating_avg), rating_count: m.rating_count,
-    pickup_points: await titikTemu(m.id),
+    pickup_points, is_favorite: Boolean(m.fav),
   };
+}
+
+// D12; 2 kueri
+export async function profilToko(slug: string, userId: number | null) {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${KOLOM_TOKO} FROM ${DARI_TOKO} ${JOIN_FAVORIT_TOKO} WHERE m.slug = ? AND ${TOKO_TAMPIL}`,
+    [userId, slug],
+  );
+  const m = rows[0];
+  if (!m) throw tokoTidakAda();
+  return profilPublik(m, jam.sekarang(), await titikTemu(m.id));
 }
