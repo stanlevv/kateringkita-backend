@@ -146,7 +146,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Meja (penjual) | `GET` dan `POST /merchant/tables`, `PATCH /merchant/tables/:id` | penjual |
 | Pesan dari meja | `GET /tables/:token`, `POST /tables/:token/orders`, `GET /guest/orders/:code`, `POST /guest/orders/:code/pay` (header `X-Guest-Token`) | publik |
 | Notifikasi Midtrans | `POST /payments/midtrans` (diverifikasi signature) | publik |
-| Notifikasi | `GET /me/notifications`, `POST /me/notifications/read` | masuk |
+| Notifikasi | `GET /me/notifications?unread=true&type=order_status\|promo\|info&page=&limit=`, `POST /me/notifications/read` | masuk |
 | Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
 | Menu | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota` | penjual |
 | Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}` | penjual |

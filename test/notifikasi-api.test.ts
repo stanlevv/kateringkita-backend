@@ -25,10 +25,10 @@ const tandai = (body?: unknown, token: string | null = s.tCust) => {
   const t = token ? r.set("Authorization", `Bearer ${token}`) : r;
   return body === undefined ? t : t.send(body as object);
 };
-const sisip = async (userId: number, title: string, created: string, readAt: Date | null = null) => {
+const sisip = async (userId: number, title: string, created: string, readAt: Date | null = null, type = "order_status") => {
   const [r] = await db.query<any>(
-    "INSERT INTO notifications (user_id, type, title, body, data, read_at, created_at) VALUES (?, 'order_status', ?, 'isi', ?, ?, ?)",
-    [userId, title, JSON.stringify({ order_code: "KK-X", status: "confirmed" }), readAt, created],
+    "INSERT INTO notifications (user_id, type, title, body, data, read_at, created_at) VALUES (?, ?, ?, 'isi', ?, ?, ?)",
+    [userId, type, title, JSON.stringify({ order_code: "KK-X", status: "confirmed" }), readAt, created],
   );
   return r.insertId as number;
 };
@@ -87,9 +87,46 @@ describe("GET /me/notifications (D13)", () => {
     expect(r.body.meta).toEqual({ page: 2, limit: 1, total: 3, unread_count: 2 });
   });
 
+  test("filter type (tab Pesanan/Promo/Info), bisa digabung unread; total ikut filter, unread_count tetap semua (D13)", async () => {
+    const promo = await sisip(budi, "Promo", "2026-01-01 05:00:00", null, "promo");
+    await sisip(budi, "Promo lama", "2026-01-01 00:30:00", DIBACA, "promo");
+    await sisip(budi, "Info", "2026-01-01 06:00:00", null, "info");
+    await sisip(ani, "Promo Ani", "2026-01-01 07:00:00", null, "promo");
+    const judul = (r: request.Response) => r.body.data.map((x: any) => x.title);
+    // belum dibaca Budi: Satu, Tiga, Promo, Info
+    let r = await get("?type=promo").expect(200);
+    expect(judul(r)).toEqual(["Promo", "Promo lama"]);
+    expect(r.body.data[0]).toMatchObject({ id: promo, type: "promo", read_at: null });
+    expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 2, unread_count: 4 });
+    r = await get("?type=promo&unread=true").expect(200);
+    expect(judul(r)).toEqual(["Promo"]);
+    expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 1, unread_count: 4 });
+    r = await get("?type=order_status").expect(200);
+    expect(judul(r)).toEqual(["Tiga", "Dua", "Satu"]);
+    expect(r.body.meta.total).toBe(3);
+    r = await get("?unread=true&type=order_status&page=2&limit=1").expect(200);
+    expect(judul(r)).toEqual(["Satu"]);
+    expect(r.body.meta).toEqual({ page: 2, limit: 1, total: 2, unread_count: 4 });
+    r = await get("?type=info&unread=false").expect(200);
+    expect(judul(r)).toEqual(["Info"]);
+    expect(r.body.meta).toMatchObject({ total: 1, unread_count: 4 });
+    // tanpa type: semua tipe
+    r = await get().expect(200);
+    expect(judul(r)).toEqual(["Info", "Promo", "Tiga", "Dua", "Satu", "Promo lama"]);
+    expect(r.body.meta).toMatchObject({ total: 6, unread_count: 4 });
+    // milik orang lain tidak ikut; penjual tanpa notifikasi → kosong
+    expect(judul(await get("?type=promo", tAni).expect(200))).toEqual(["Promo Ani"]);
+    expect((await get("?type=promo", s.tA).expect(200)).body).toEqual({ data: [], meta: { page: 1, limit: 20, total: 0, unread_count: 0 } });
+  });
+
   test("galat validasi", async () => {
     let r = await get("?unread=ya").expect(400);
     expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid.", fields: { unread: ["Filter tidak valid."] } });
+    // hanya tipe yang benar-benar ditulis ke notifications; huruf besar, kosong, dan ganda ditolak
+    for (const q of ["?type=system", "?type=PROMO", "?type=", "?type=promo&type=info"]) {
+      r = await get(q).expect(400);
+      expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: { type: ["Tipe notifikasi tidak dikenal."] } });
+    }
     r = await get("?limit=0").expect(400);
     expect(r.body.error.fields.limit).toEqual(["Halaman tidak valid."]);
     r = await get("?page=x").expect(400);

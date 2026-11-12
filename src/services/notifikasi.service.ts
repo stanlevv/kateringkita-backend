@@ -32,15 +32,24 @@ export async function buatNotifikasiPesanan(
 const belum = async (userId: number) =>
   Number(((await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL", [userId]))[0][0]).n);
 
-// D13: unread_count selalu seluruh yang belum dibaca, tidak terpengaruh filter/halaman
+// D13: total mengikuti filter (unread, type); unread_count selalu seluruh yang belum dibaca, tidak terpengaruh filter/halaman
 // shortcut: notifikasi tidak pernah dihapus; tambah hapus yang sudah dibaca > 90 hari ke job harian bila tabel > 1 juta baris
+// shortcut: filter type tanpa indeks sendiri (cukup user_id dari idx_notif_user); tambah indeks (user_id, type, created_at)
+// bila notifikasi per pengguna > 10.000
 export async function daftarNotifikasi(userId: number, f: DaftarNotif) {
-  const where = `user_id = ?${f.unread === "true" ? " AND read_at IS NULL" : ""}`;
+  const where = ["user_id = ?"];
+  const args: unknown[] = [userId];
+  if (f.unread === "true") where.push("read_at IS NULL");
+  if (f.type) {
+    where.push("type = ?");
+    args.push(f.type);
+  }
+  const syarat = where.join(" AND ");
   const [data] = await db.query<RowDataPacket[]>(
-    `SELECT id, type, title, body, data, read_at, created_at FROM notifications WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
-    [userId, f.limit, (f.page - 1) * f.limit],
+    `SELECT id, type, title, body, data, read_at, created_at FROM notifications WHERE ${syarat} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+    [...args, f.limit, (f.page - 1) * f.limit],
   );
-  const [[t]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM notifications WHERE ${where}`, [userId]);
+  const [[t]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM notifications WHERE ${syarat}`, args);
   return { data, meta: { page: f.page, limit: f.limit, total: Number(t.n), unread_count: await belum(userId) } };
 }
 
