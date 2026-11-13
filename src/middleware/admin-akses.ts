@@ -10,7 +10,9 @@ const KHUSUS_SUPER = /^\/(admins|ai-|finance|payouts|refunds|server-)/;
 const TIKET = /^\/tickets(\/|$)/;
 
 // super = semua; ops = semua kecuali KHUSUS_SUPER; support = hanya GET di luar KHUSUS_SUPER, plus POST /tickets….
-export const bolehAkses = (level: string | null, method: string, path: string) => {
+// Rute Express tidak peka huruf besar/kecil (/Admins = /admins), jadi path dicek dalam huruf kecil.
+export const bolehAkses = (level: string | null, method: string, rawPath: string) => {
+  const path = rawPath.toLowerCase();
   const superSaja = KHUSUS_SUPER.test(path) || (method !== "GET" && path.startsWith("/settings"));
   if (level === "super") return true;
   if (superSaja) return false;

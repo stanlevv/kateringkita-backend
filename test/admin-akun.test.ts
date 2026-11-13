@@ -38,6 +38,16 @@ describe("bolehAkses (tingkat admin)", () => {
     ["ops", "POST", "/tickets/TK-20261113-7QPX/close", true],
     [null, "GET", "/merchants", false],
     [null, "POST", "/tickets/TK-20261113-7QPX/messages", false],
+    // Express mencocokkan rute tanpa peduli huruf besar/kecil; penjagaan tingkat harus sama
+    ["support", "GET", "/Admins", false],
+    ["ops", "GET", "/ADMINS", false],
+    ["ops", "GET", "/Payouts/balances", false],
+    ["ops", "GET", "/Finance", false],
+    ["ops", "POST", "/Refunds/KK-1", false],
+    ["ops", "GET", "/AI-usage", false],
+    ["ops", "PUT", "/Settings/service-fee", false],
+    ["support", "POST", "/Broadcasts", false],
+    ["support", "POST", "/Tickets/TK-20261113-7QPX/messages", true],
   ] as const)("%s %s %s → %s", (level, method, path, ok) => {
     expect(bolehAkses(level, method, path)).toBe(ok);
   });
@@ -92,6 +102,9 @@ describe("kelola admin (Fase 1)", () => {
       .send({ current_password: r.body.data.temp_password, new_password: "support123" }).expect(204);
     await request(app).get("/api/v1/admin/merchants").set(as(t1)).expect(200);
     await request(app).post("/api/v1/admin/broadcasts").set(as(t1)).send({ audience: "all", title: "x", body: "y" }).expect(403);
+    // huruf besar di path tetap kena penjagaan tingkat (rute Express tidak peka huruf)
+    await request(app).get("/api/v1/admin/Admins").set(as(t1)).expect(403);
+    await request(app).get("/api/v1/admin/Payouts/balances").set(as(t1)).expect(403);
   });
 
   test("tidak bisa mengubah akun sendiri; super terakhir tidak bisa diturunkan", async () => {
