@@ -14,6 +14,7 @@ import { pencairanSchema, refundSchema } from "../dto/pencairan.dto";
 import {
   catatPencairanHandler, daftarRefundHandler, daftarSaldoHandler, riwayatPencairanHandler, tandaiRefundHandler,
 } from "../handlers/pencairan.handler";
+import { balasTiketAdminHandler, daftarTiketAdminHandler, detailTiketAdminHandler, tutupTiketAdminHandler } from "../handlers/tiket.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
@@ -98,6 +99,12 @@ admin.get("/ai-usage", pemakaianAiHandler);
 // F23 dashboard server: status, error 5xx & request lambat
 admin.get("/server-status", statusServerHandler);
 admin.get("/server-logs", daftarLogServerHandler);
+
+// Tiket bantuan (CS) dari pembeli; semua tingkat admin boleh baca, balas, tutup (lihat middleware/admin-akses.ts)
+admin.get("/tickets", daftarTiketAdminHandler);
+admin.get("/tickets/:code", detailTiketAdminHandler);
+admin.post("/tickets/:code/messages", balasTiketAdminHandler);
+admin.post("/tickets/:code/close", tutupTiketAdminHandler);
 
 // path admin tak dikenal berhenti di sini (404), tidak jatuh ke router v1
 admin.use(() => {

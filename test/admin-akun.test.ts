@@ -28,7 +28,16 @@ describe("bolehAkses (tingkat admin)", () => {
     ["support", "GET", "/merchants", true],
     ["support", "POST", "/reviews/1/hide", false],
     ["support", "GET", "/ai-usage", false],
+    // tiket bantuan: semua tingkat boleh GET & POST /tickets…
+    ["support", "GET", "/tickets", true],
+    ["support", "POST", "/tickets/TK-20261113-7QPX/messages", true],
+    ["support", "POST", "/tickets/TK-20261113-7QPX/close", true],
+    ["support", "PATCH", "/tickets/TK-20261113-7QPX", false],
+    ["support", "POST", "/tickets-arsip", false],
+    ["support", "POST", "/broadcasts", false],
+    ["ops", "POST", "/tickets/TK-20261113-7QPX/close", true],
     [null, "GET", "/merchants", false],
+    [null, "POST", "/tickets/TK-20261113-7QPX/messages", false],
   ] as const)("%s %s %s → %s", (level, method, path, ok) => {
     expect(bolehAkses(level, method, path)).toBe(ok);
   });

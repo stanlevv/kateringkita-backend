@@ -6,11 +6,15 @@ import { AppError } from "../utils/errors";
 // Penulisan /settings juga khusus super.
 const KHUSUS_SUPER = /^\/(admins|ai-|finance|payouts|refunds|server-)/;
 
-// super = semua; ops = semua kecuali KHUSUS_SUPER; support = hanya GET di luar KHUSUS_SUPER.
+// Tiket bantuan (CS) = pekerjaan admin support: semua tingkat boleh GET dan POST (balas, tutup).
+const TIKET = /^\/tickets(\/|$)/;
+
+// super = semua; ops = semua kecuali KHUSUS_SUPER; support = hanya GET di luar KHUSUS_SUPER, plus POST /tickets….
 export const bolehAkses = (level: string | null, method: string, path: string) => {
   const superSaja = KHUSUS_SUPER.test(path) || (method !== "GET" && path.startsWith("/settings"));
   if (level === "super") return true;
   if (superSaja) return false;
+  if (level === "support" && method === "POST" && TIKET.test(path)) return true;
   return level === "ops" || (level === "support" && method === "GET");
 };
 
