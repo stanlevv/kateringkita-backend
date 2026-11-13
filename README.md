@@ -62,6 +62,7 @@
 | F25 | Pemakaian AI: token, panggilan, gagal, latensi per penyedia/fitur/hari (simpan 90 hari) | Selesai |
 | F26 | Semua non-tunai lewat Midtrans (VA + bayar online Snap untuk pre-order), rekening & pencairan dana toko, daftar refund admin | Selesai |
 | — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
+| — | Tiket bantuan (CS) dua arah pembeli ↔ tim admin, notifikasi balasan | Selesai |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
 
@@ -95,11 +96,11 @@ src/
 ├── utils/             errors.ts (AppError), r2.ts (URL Cloudflare R2), mail.ts (SMTP), gemini.ts (Gemini REST)
 └── scripts/           migrate.ts, seed-demo.ts, create-admin.ts (dijalankan lewat npm run)
 database/
-└── migrations/        001_init.sql … 010_pencairan.sql (berurutan, satu kali jalan per database)
+└── migrations/        001_init.sql … 012_tiket_bantuan.sql (berurutan, satu kali jalan per database)
 test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
 ```
 
-Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai: `auth`, `admin`, `merchant`, `katalog`, `pesanan`, `notifikasi`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `pesanan-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
+Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai: `auth`, `admin`, `merchant`, `katalog`, `pesanan`, `notifikasi`, `tiket`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `pesanan-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
 
 ---
 
@@ -124,6 +125,7 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **Ulasan (F13).** Satu ulasan per menu per pesanan selesai. Rating menu dan toko dihitung ulang setiap ulasan masuk atau dimoderasi.
 - **Moderasi (F19).** Ulasan yang disembunyikan admin tidak tampil dan tidak dihitung. Menu yang diturunkan admin nonaktif dan tidak bisa diaktifkan penjual sampai dipulihkan.
 - **Lupa sandi (F11).** OTP 6 digit lewat email, berlaku 10 menit, maksimal 5 percobaan, sekali pakai. Jawaban permintaan kode selalu sama agar keberadaan email tidak bocor.
+- **Tiket bantuan (CS).** Pembeli membuat tiket (kategori, judul, pesan, pesanan opsional miliknya) berkode `TK-YYYYMMDD-XXXX`; maksimal 3 tiket belum ditutup dan 10 tiket baru per jam. Status `open` (menunggu admin) → `answered` (admin membalas) → `closed`; balasan pembeli mengembalikan ke `open`. Semua tingkat admin boleh membaca, membalas, dan menutup; balasan dan penutupan admin dicatat di audit dan dikirim sebagai notifikasi `info` berisi `data.ticket_code`. Pembeli melihat balasan atas nama "Tim KateringKita". Urusan pesanan tetap langsung ke penjual lewat WhatsApp.
 
 ---
 
@@ -147,6 +149,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Pesan dari meja | `GET /tables/:token`, `POST /tables/:token/orders`, `GET /guest/orders/:code`, `POST /guest/orders/:code/pay` (header `X-Guest-Token`) | publik |
 | Notifikasi Midtrans | `POST /payments/midtrans` (diverifikasi signature) | publik |
 | Notifikasi | `GET /me/notifications?unread=true&type=order_status\|promo\|info&page=&limit=`, `POST /me/notifications/read` | masuk |
+| Tiket bantuan | `GET` dan `POST /me/tickets`, `GET /me/tickets/:code` (sekaligus tandai dibaca), `POST /me/tickets/:code/messages`, `/close` | pembeli |
 | Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
 | Menu | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota` | penjual |
 | Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}` | penjual |
@@ -161,6 +164,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Server | `GET /admin/server-status`, `GET /admin/server-logs?level=&q=&page=&limit=` | admin |
 | Pencairan & refund | `GET /admin/payouts/balances`, `GET` dan `POST /admin/payouts`, `GET /admin/refunds`, `POST /admin/refunds/:code` | admin super |
 | Admin (lanjutan) | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact` | admin |
+| Tiket bantuan (admin) | `GET /admin/tickets?status=open\|answered\|closed&q=&page=&limit=`, `GET /admin/tickets/:code`, `POST /admin/tickets/:code/{messages,close}` | admin (semua tingkat) |
 
 Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `docs/API.md` pada monorepo tim.
 
