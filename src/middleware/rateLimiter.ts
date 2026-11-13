@@ -153,3 +153,23 @@ export const mejaLimiter: RequestHandler & { reset: () => void } = Object.assign
   }) as RequestHandler,
   { reset: () => perMeja.hits.clear() },
 );
+
+// Tiket bantuan: 10 tiket baru per pembeli per jam. Hanya tiket yang jadi (201) dihitung; pola jatah sama dengan loginLimiter.
+const perTiket = newBucket(10, 60 * 60_000);
+
+export const tiketLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, res, next) => {
+    const now = Date.now();
+    const key = String((req as AuthedRequest).auth.userId);
+    if (full(perTiket, key, now)) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak tiket baru. Coba lagi dalam satu jam."));
+    }
+    // jatah diambil sinkron agar permintaan paralel tidak lolos; dikembalikan bila tiket tidak jadi (400, 409)
+    hit(perTiket, key, now);
+    res.on("finish", () => {
+      if (res.statusCode !== 201) unhit(perTiket, key);
+    });
+    next();
+  }) as RequestHandler,
+  { reset: () => perTiket.hits.clear() },
+);

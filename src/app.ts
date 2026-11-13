@@ -10,6 +10,7 @@ import { katalog } from './routes/katalog';
 import { meja } from './routes/meja';
 import { pesanan } from './routes/pesanan';
 import { notifikasi } from './routes/notifikasi';
+import { tiket } from './routes/tiket';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { catatLogServer, requestId, requestLogger } from './middleware/requestLogger';
 import { healthHandler } from './handlers/health.handler';
@@ -41,6 +42,7 @@ app.use('/api/v1', meja);
 app.use('/api/v1', katalog);
 app.use('/api/v1', pesanan);
 app.use('/api/v1', notifikasi);
+app.use('/api/v1', tiket);
 app.use('/api/v1', v1);
 app.use('/api/v1', meta);
 
