@@ -17,7 +17,7 @@ describe("migrasi", () => {
     firstRun = await migrate(url);
   });
 
-  test("DB kosong → semua migrasi diterapkan berurutan, 28 tabel + schema_migrations", async () => {
+  test("DB kosong → semua migrasi diterapkan berurutan, 30 tabel + schema_migrations", async () => {
     expect(firstRun).toEqual(SEMUA);
     expect(firstRun.slice(0, 4)).toEqual(["001_init.sql", "002_admin.sql", "003_checkout.sql", "004_moderasi.sql"]);
     const conn = await mysql.createConnection(url);
@@ -25,8 +25,9 @@ describe("migrasi", () => {
       "SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()",
     );
     await conn.end();
-    // 001–003: 22 tabel; 005 meja, 006 ai_providers, 007 server_logs, 008 ai_usage, 010 payouts, 011 merchant_favorites
-    expect(rows[0].n).toBe(29);
+    // 001–003: 22 tabel; 005 meja, 006 ai_providers, 007 server_logs, 008 ai_usage, 010 payouts, 011 merchant_favorites,
+    // 012 support_tickets + support_ticket_messages
+    expect(rows[0].n).toBe(31);
   });
 
   test("seed master terisi", async () => {
