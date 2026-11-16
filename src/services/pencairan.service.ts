@@ -6,11 +6,11 @@ import { BANK_PENCAIRAN, namaBank, PencairanInput, RefundInput, RekeningInput } 
 import { catat, dalamTransaksi } from "./admin-audit.service";
 
 // F26 pencairan dana. Pembayaran non-tunai (VA, online) masuk akun Midtrans platform. Bagian penjual per pesanan selesai
-// = subtotal − diskon promo toko, sama dengan merchant_net rekap F20: biaya layanan dan promo platform milik platform,
-// biaya Midtrans ditanggung platform. Pesanan tunai dibayar langsung ke penjual, jadi tidak ikut.
+// = subtotal − potongan voucher toko (merchant_discount, migrasi 014), sama dengan merchant_net rekap F20: biaya layanan dan
+// voucher platform milik platform, biaya Midtrans ditanggung platform. Pesanan tunai dibayar langsung ke penjual, jadi tidak ikut.
 const LAYAK = "o.status = 'completed' AND o.payment_method IN ('va', 'online') AND o.payment_status = 'paid' AND o.payout_id IS NULL";
-const BAGIAN = "o.subtotal - CASE WHEN pr.merchant_id IS NOT NULL THEN o.discount ELSE 0 END";
-const DARI = "orders o LEFT JOIN promos pr ON pr.id = o.promo_id";
+const BAGIAN = "o.subtotal - o.merchant_discount";
+const DARI = "orders o";
 const LIMIT = 20;
 
 const konflik = (pesan: string) => new AppError(409, "CONFLICT", pesan);

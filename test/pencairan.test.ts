@@ -24,12 +24,14 @@ const promo = async (merchantId: number | null, code: string) => ((await db.quer
 ))[0]).insertId as number;
 
 // Pesanan Budi lewat checkout tunai, lalu dibentuk lewat SQL. Waktu selesai relatif ke jam DB, sama dengan as_of.
-async function pesananLunas(qty: number, o: { method: string; status?: string; promo?: number; discount?: number; menit?: number }) {
+// Voucher (migrasi 014): potongan dicatat per slot — toko: [promo_id, potongan], platform: [promo_id, potongan]
+async function pesananLunas(qty: number, o: { method: string; status?: string; toko?: [number, number]; platform?: [number, number]; menit?: number }) {
   const code = await pesanDulu(s.tCust, s.menu, qty);
   await db.query(
-    `UPDATE orders SET payment_method = ?, status = ?, payment_status = 'paid', promo_id = ?, discount = ?,
-       completed_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE) WHERE code = ?`,
-    [o.method, o.status ?? "completed", o.promo ?? null, o.discount ?? 0, o.menit ?? -60, code],
+    `UPDATE orders SET payment_method = ?, status = ?, payment_status = 'paid', merchant_promo_id = ?, merchant_discount = ?,
+       platform_promo_id = ?, platform_discount = ?, discount = ?, completed_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE) WHERE code = ?`,
+    [o.method, o.status ?? "completed", o.toko?.[0] ?? null, o.toko?.[1] ?? 0, o.platform?.[0] ?? null, o.platform?.[1] ?? 0,
+      (o.toko?.[1] ?? 0) + (o.platform?.[1] ?? 0), o.menit ?? -60, code],
   );
   await db.query("UPDATE menus SET held_today = 0");
   return code;
@@ -80,8 +82,9 @@ test("saldo: hanya VA/online lunas & selesai; bagian penjual = subtotal − prom
   const toko = await promo(s.idA, "TOKO2RB");
   const platform = await promo(null, "HEMAT3RB");
   await pesananLunas(1, { method: "online" }); // 15.000
-  await pesananLunas(2, { method: "va", promo: toko, discount: 2000 }); // 30.000 − 2.000 ditanggung toko
-  await pesananLunas(1, { method: "online", promo: platform, discount: 3000 }); // 15.000: diskon ditanggung platform
+  // 30.000 − 2.000 voucher toko; voucher platform 3.000 di pesanan yang sama ditanggung platform (bagian penjual tetap 28.000)
+  await pesananLunas(2, { method: "va", toko: [toko, 2000], platform: [platform, 3000] });
+  await pesananLunas(1, { method: "online", platform: [platform, 3000] }); // 15.000: diskon ditanggung platform
   await pesananLunas(1, { method: "cod" }); // tunai sudah diterima penjual langsung
   await pesananLunas(1, { method: "online", status: "cooking" }); // belum selesai
   const r = await get("/admin/payouts/balances", tAdmin).expect(200);

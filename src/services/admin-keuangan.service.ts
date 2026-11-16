@@ -4,7 +4,7 @@ import { Rentang } from "../dto/merchant-laporan.dto";
 import { rentangUtc } from "./merchant-laporan.service";
 
 // F20 rekap keuangan platform: pesanan completed per toko (per completed_at, tanggal WIB).
-// Diskon dipisah menurut pemilik promo: promo toko ditanggung toko, promo platform ditanggung platform.
+// Diskon dipisah per slot voucher (migrasi 014): voucher toko ditanggung toko, voucher platform ditanggung platform.
 const ANGKA = ["orders", "subtotal", "discount_merchant", "discount_platform", "service_fee", "total"] as const;
 
 const bersih = (r: Record<string, unknown>) => {
@@ -15,10 +15,9 @@ const bersih = (r: Record<string, unknown>) => {
 export async function rekapKeuangan(r: Rentang) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT m.id AS merchant_id, m.business_name, COUNT(*) AS orders, SUM(o.subtotal) AS subtotal,
-       SUM(CASE WHEN p.merchant_id IS NOT NULL THEN o.discount ELSE 0 END) AS discount_merchant,
-       SUM(CASE WHEN p.id IS NOT NULL AND p.merchant_id IS NULL THEN o.discount ELSE 0 END) AS discount_platform,
+       SUM(o.merchant_discount) AS discount_merchant, SUM(o.platform_discount) AS discount_platform,
        SUM(o.service_fee) AS service_fee, SUM(o.total) AS total
-     FROM orders o JOIN merchants m ON m.id = o.merchant_id LEFT JOIN promos p ON p.id = o.promo_id
+     FROM orders o JOIN merchants m ON m.id = o.merchant_id
      WHERE o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?
      GROUP BY m.id, m.business_name ORDER BY total DESC, m.id`,
     rentangUtc(r),

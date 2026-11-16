@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
+import { env } from "../src/config/env";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { createAdmin } from "../src/scripts/create-admin";
 import { login, pesanDulu, siapCheckout } from "./helpers/toko";
@@ -15,8 +16,13 @@ const hariIni = hariIniWib();
 const selesai = async (code: string) => {
   for (const a of ["confirm", "cook", "ready", "complete"]) await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set(H(s.tA)).expect(200);
 };
-const pesanPromo = async (promo_code: string) => (await request(app).post("/api/v1/orders").set(H(s.tCust)).set("Idempotency-Key", randomUUID())
-  .send({ items: [{ menu_id: s.menu, qty: 1 }], pickup_point_id: 1, payment_method: "cod", promo_code }).expect(201)).body.data.code;
+// voucher platform hanya untuk non-tunai (C1): pesanan VA ditandai lunas lewat SQL sebelum diproses penjual
+const pesanPromo = async (promo_code: string, payment_method = "cod") => {
+  const code = (await request(app).post("/api/v1/orders").set(H(s.tCust)).set("Idempotency-Key", randomUUID())
+    .send({ items: [{ menu_id: s.menu, qty: 1 }], pickup_point_id: 1, payment_method, promo_code }).expect(201)).body.data.code;
+  if (payment_method !== "cod") await db.query("UPDATE orders SET payment_status = 'paid' WHERE code = ?", [code]);
+  return code;
+};
 
 beforeAll(async () => {
   s = await siapCheckout();
@@ -29,7 +35,9 @@ beforeAll(async () => {
   await db.query(`INSERT INTO promos (merchant_id, code, type, value, min_subtotal, per_user_limit, starts_at, ends_at)
     VALUES (NULL, 'GRATIS', 'free_service_fee', 0, 0, 1, '2020-01-01', '2099-01-01')`);
   await selesai(await pesanPromo("TOKO2K"));
-  await selesai(await pesanPromo("GRATIS"));
+  env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
+  await selesai(await pesanPromo("GRATIS", "va"));
+  env.MIDTRANS_SERVER_KEY = undefined;
   await pesanDulu(s.tCust, s.menu); // holding: tidak dihitung
 });
 afterAll(() => {
