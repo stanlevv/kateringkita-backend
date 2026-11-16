@@ -48,7 +48,8 @@ export async function transisi(
     await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [p.customer_id]);
   }
   const [[o]] = await conn.query<RowDataPacket[]>(
-    `SELECT id, customer_id, merchant_id, status, payment_method, payment_status, total, promo_id, hold_until <= UTC_TIMESTAMP() AS lewat FROM orders WHERE code = ?${
+    `SELECT id, customer_id, merchant_id, status, payment_method, payment_status, total, promo_id, merchant_promo_id, platform_promo_id,
+       hold_until <= UTC_TIMESTAMP() AS lewat FROM orders WHERE code = ?${
       aktor.jenis === "customer" ? " AND customer_id = ?" : aktor.jenis === "merchant" ? " AND merchant_id = ?" : ""} FOR UPDATE`,
     [code, ...(aktor.jenis === "customer" ? [aktor.userId] : aktor.jenis === "merchant" ? [aktor.merchantId] : [])],
   );
@@ -73,8 +74,10 @@ export async function transisi(
   );
   // pay: baris payments sudah ada sejak VA/halaman Snap dibuat, ditandai lunas oleh penerima notifikasi
   // F12: kuota promo kembali saat batal/kedaluwarsa; sebelum lepasStok (urutan kunci promos → menus, sama dengan checkout)
-  if (batal && o.promo_id) {
-    await conn.query("UPDATE promos SET used_count = used_count - 1 WHERE id = ? AND used_count > 0", [o.promo_id]);
+  // voucher toko + platform (pesanan baru) atau promo_id tunggal (pesanan sebelum migrasi 014); id naik = urutan kunci checkout
+  const promoIds = [...new Set([o.promo_id, o.merchant_promo_id, o.platform_promo_id].filter((x): x is number => x !== null))].sort((a, b) => a - b);
+  if (batal && promoIds.length) {
+    for (const id of promoIds) await conn.query("UPDATE promos SET used_count = used_count - 1 WHERE id = ? AND used_count > 0", [id]);
     await conn.query("DELETE FROM promo_redemptions WHERE order_id = ?", [o.id]);
   }
   const jadi = a.stok?.(dari);

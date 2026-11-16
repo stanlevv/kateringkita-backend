@@ -129,7 +129,7 @@ export async function pesanMeja(token: string, data: PesananMejaInput) {
     if (Number(n.n) >= MAKS_TERTAHAN) throw konflik("Masih ada pesanan meja ini yang menunggu pembayaran. Selesaikan dulu.");
     const ms = jam.sekarang();
     const hari = hariIniWib(new Date(ms));
-    const q = { ...data, pickup_point_id: 0, promo_code: null, pickup_at: null };
+    const q = { ...data, pickup_point_id: 0, promo_code: null, promo_codes: [], pickup_at: null };
     const h = periksa(await muatKeranjang(conn, q, { segarkan: true, hari, ms }), q, ms, { tanpaTitikTemu: true });
     if (h.merchant.id !== t.merchant_id) throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { items: ["Menu bukan dari toko ini."] });
     if (h.kurang.length) throw habis(h.kurang);

@@ -32,6 +32,13 @@ describe("migrasi 014 voucher", () => {
     const [[u]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
     await db.query("INSERT INTO promo_claims (promo_id, user_id) VALUES (?, ?)", [id, u.id]);
     await expect(db.query("INSERT INTO promo_claims (promo_id, user_id) VALUES (?, ?)", [id, u.id])).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+    // dua voucher per pesanan → dua baris redemption; promo yang sama dua kali di pesanan yang sama tetap ditolak
+    const id2 = await promo(null, "BARU2");
+    const [[o]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [code]);
+    const tebus = (p: number) => db.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, 1)", [p, o.id, u.id]);
+    await tebus(id);
+    await tebus(id2);
+    await expect(tebus(id)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
   });
 
   test("backfill: promo_id lama → slot toko atau platform sesuai pemilik promo", async () => {

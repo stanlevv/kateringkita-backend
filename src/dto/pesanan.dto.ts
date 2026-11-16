@@ -8,6 +8,7 @@ const OPSI = "Pilihan tidak valid.";
 const NAMA = "Nama 1–150 karakter.";
 const HP = "Nomor HP harus diawali 08 dan berisi 10–13 angka.";
 const WAKTU = "Waktu ambil tidak valid.";
+const KODE = "Kode voucher 1–30 karakter.";
 const id = (pesan: string) => z.number({ error: pesan }).int(pesan).min(1, pesan);
 // teks opsional: trim, kosong → null
 const teks = (pesan: string, maks: number) =>
@@ -26,6 +27,9 @@ export const quoteSchema = z.object({
   pickup_point_id: id("Pilih titik temu."),
   note: teks("Catatan maksimal 255 karakter.", 255),
   promo_code: teks("Kode promo maksimal 30 karakter.", 30),
+  // voucher: maks 1 toko + 1 platform (aturan slot dicek di terapkanVoucher); promo_code lama digabung oleh kodeVoucher
+  promo_codes: z.array(z.string({ error: KODE }).trim().min(1, KODE).max(30, KODE), { error: KODE })
+    .max(2, "Maksimal 2 voucher per pesanan.").default([]),
   // kosong/spasi = null → nama & nomor akun (API.md)
   customer_name: teks(NAMA, 150),
   customer_phone: z.string({ error: HP }).trim().regex(/^(08\d{8,11})?$/, HP).nullish().transform((s) => s || null),

@@ -16,7 +16,8 @@ export type Baris = {
 };
 export type Kurang = { index: number; menu_id: number; available: number; unit_label: string; menu_name: string };
 export type Hasil = {
-  merchant: RowDataPacket; baris: Baris[]; subtotal: number; discount: number; service_fee: number; total: number; kurang: Kurang[];
+  merchant: RowDataPacket; baris: Baris[]; subtotal: number; discount: number; merchant_discount: number; platform_discount: number;
+  service_fee: number; total: number; kurang: Kurang[];
 };
 
 // Baca tanpa kunci; `segarkan` (pesanan) = reset kuota harian dulu (D4). Stok yang dibaca hanya untuk pesan galat:
@@ -129,26 +130,71 @@ export function periksa(k: Keranjang, data: QuoteInput, ms: number, o: { tanpaTi
   const service_fee = /^\d+$/.test(String(t.service_fee ?? "")) ? Number(t.service_fee) : 0;
   // kolom uang INT; total ≥ setiap line_total & subtotal, jadi satu cek cukup
   if (subtotal + service_fee > 2_147_483_647) salah({ items: ["Total pesanan terlalu besar. Kurangi jumlah pesanan."] });
-  return { merchant: t, baris, subtotal, discount: 0, service_fee, total: subtotal + service_fee, kurang };
+  return { merchant: t, baris, subtotal, discount: 0, merchant_discount: 0, platform_discount: 0, service_fee, total: subtotal + service_fee, kurang };
 }
 
-export const tolakPromo = (pesan: string) => new AppError(422, "PROMO_INVALID", pesan, { promo_code: [pesan] });
+// galat dikirim di promo_codes (klien baru) dan promo_code (klien lama dengan satu isian kode)
+export const tolakPromo = (pesan: string) => new AppError(422, "PROMO_INVALID", pesan, { promo_codes: [pesan], promo_code: [pesan] });
 
-// F12 (D10): promo platform (merchant_id NULL) atau promo toko ini; posisi setelah stok (D3). Mengisi discount & total di `h`.
+/** Kode voucher dari body: promo_codes[] + promo_code lama → huruf besar, unik. */
+export const kodeVoucher = (d: { promo_code?: string | null; promo_codes?: string[] }) =>
+  [...new Set([...(d.promo_codes ?? []), ...(d.promo_code ? [d.promo_code] : [])].map((c) => c.trim().toUpperCase()).filter(Boolean))];
+
+// Syarat satu promo (D10): aktif, periode, kuota, minimal belanja (dibanding subtotal sebelum diskon), batas per pembeli.
 // Tanpa kunci: kuota diklaim atomik oleh buatPesanan; batas per pembeli aman karena baris users pembeli sudah dikunci.
-export async function terapkanPromo(conn: Q, h: Hasil, code: string | null, userId: number, ms: number) {
-  if (!code) return null;
-  const [[p]] = await conn.query<RowDataPacket[]>(
-    "SELECT * FROM promos WHERE code = ? AND (merchant_id IS NULL OR merchant_id = ?)", [code.toUpperCase(), h.merchant.id],
-  );
-  if (!p || !p.is_active) throw tolakPromo("Kode promo tidak ditemukan.");
+async function cekPromo(conn: Q, p: RowDataPacket, h: Hasil, userId: number, ms: number) {
+  if (!p.is_active) throw tolakPromo("Kode promo tidak ditemukan.");
   if (ms < new Date(p.starts_at).getTime() || ms >= new Date(p.ends_at).getTime()) throw tolakPromo("Promo sedang tidak berlaku.");
   if (p.quota !== null && p.used_count >= p.quota) throw tolakPromo("Kuota promo sudah habis.");
   if (h.subtotal < p.min_subtotal) throw tolakPromo(`Minimal belanja Rp ${Number(p.min_subtotal).toLocaleString("id-ID")} untuk promo ini.`);
   const [[n]] = await conn.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM promo_redemptions WHERE promo_id = ? AND user_id = ?", [p.id, userId]);
   if (Number(n.n) >= p.per_user_limit) throw tolakPromo("Promo ini sudah mencapai batas pemakaianmu.");
-  h.discount = p.type === "percent" ? Math.min(Math.floor((h.subtotal * p.value) / 100), p.max_discount ?? Infinity)
-    : p.type === "fixed" ? Math.min(p.value, h.subtotal) : h.service_fee;
-  h.total = h.subtotal + h.service_fee - h.discount;
-  return p.id as number;
 }
+
+// percent/fixed dari `dasar` (barang setelah potongan sebelumnya), free_service_fee = biaya layanan
+const potongan = (p: RowDataPacket, dasar: number, fee: number) =>
+  p.type === "percent" ? Math.min(Math.floor((dasar * p.value) / 100), p.max_discount ?? Infinity)
+    : p.type === "fixed" ? Math.min(p.value, dasar) : fee;
+
+/**
+ * Voucher (rancangan 2026-11-16): maks satu voucher toko (promo toko pesanan ini) + satu voucher platform (merchant_id NULL).
+ * Toko dihitung dulu dari subtotal, platform dari sisa barang. Mengisi merchant_discount, platform_discount, discount, total.
+ * `bayar` (pesanan): voucher platform hanya untuk non-tunai (C1); quote tanpa metode bayar tidak dicek.
+ */
+export async function terapkanVoucher(conn: Q, h: Hasil, codes: string[], userId: number, ms: number, bayar?: "cod" | "va" | "online") {
+  let toko: RowDataPacket | null = null;
+  let platform: RowDataPacket | null = null;
+  if (codes.length > 2) throw tolakPromo("Maksimal 2 voucher per pesanan.");
+  if (codes.length) {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      "SELECT * FROM promos WHERE code IN (?) AND (merchant_id IS NULL OR merchant_id = ?)", [codes, h.merchant.id],
+    );
+    const peta = new Map(rows.map((p) => [String(p.code), p]));
+    for (const c of codes) {
+      const p = peta.get(c);
+      if (!p) throw tolakPromo("Kode promo tidak ditemukan.");
+      if (p.merchant_id === null) {
+        if (platform) throw tolakPromo("Hanya satu voucher platform per pesanan.");
+        platform = p;
+      } else {
+        if (toko) throw tolakPromo("Hanya satu voucher toko per pesanan.");
+        toko = p;
+      }
+    }
+    for (const p of [toko, platform]) if (p) await cekPromo(conn, p, h, userId, ms);
+    if (platform && bayar === "cod") throw tolakPromo("Voucher platform hanya untuk bayar non-tunai.");
+    if (toko?.type === "free_service_fee" && platform?.type === "free_service_fee") throw tolakPromo("Biaya layanan sudah digratiskan voucher lain.");
+  }
+  h.merchant_discount = toko ? potongan(toko, h.subtotal, h.service_fee) : 0;
+  const sisaBarang = h.subtotal - (toko?.type === "free_service_fee" ? 0 : h.merchant_discount);
+  h.platform_discount = platform ? potongan(platform, sisaBarang, h.service_fee) : 0;
+  h.discount = h.merchant_discount + h.platform_discount;
+  h.total = Math.max(0, h.subtotal + h.service_fee - h.discount);
+  return { toko, platform };
+}
+
+/** Untuk respons quote: voucher yang terpakai per slot. */
+export const voucherTerpakai = (h: Hasil, v: { toko: RowDataPacket | null; platform: RowDataPacket | null }) => [
+  ...(v.toko ? [{ id: v.toko.id as number, code: String(v.toko.code), slot: "toko" as const, amount: h.merchant_discount }] : []),
+  ...(v.platform ? [{ id: v.platform.id as number, code: String(v.platform.code), slot: "platform" as const, amount: h.platform_discount }] : []),
+];

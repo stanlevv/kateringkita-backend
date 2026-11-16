@@ -69,8 +69,8 @@ describe("kode promo di checkout", () => {
     expect(r.body.data).toMatchObject({ discount: 2000, total: 28000 });
     const p = await promoRow("HEMAT10");
     expect(p.used_count).toBe(1);
-    const [[o]] = await db.query<any[]>("SELECT id, promo_id FROM orders WHERE code = ?", [r.body.data.code]);
-    expect(o.promo_id).toBe(p.id);
+    const [[o]] = await db.query<any[]>("SELECT id, promo_id, merchant_promo_id, merchant_discount FROM orders WHERE code = ?", [r.body.data.code]);
+    expect(o).toMatchObject({ promo_id: null, merchant_promo_id: p.id, merchant_discount: r.body.data.discount }); // voucher toko (migrasi 014)
     expect((await pesan("HEMAT10").expect(422)).body.error.message).toBe("Promo ini sudah mencapai batas pemakaianmu.");
 
     await request(app).post(`/api/v1/orders/${r.body.data.code}/cancel`).set(H(s.tCust)).expect(200);

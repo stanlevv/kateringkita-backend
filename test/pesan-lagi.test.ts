@@ -29,7 +29,7 @@ describe("pesan lagi", () => {
     const r = await lagi().expect(200);
     expect(r.body.data.request).toEqual({
       items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju] }, { menu_id: s.menu2, qty: 1, option_ids: [] }],
-      pickup_point_id: 1, note: "Pedas", promo_code: null, customer_name: null, customer_phone: null, pickup_at: null,
+      pickup_point_id: 1, note: "Pedas", promo_code: null, promo_codes: [], customer_name: null, customer_phone: null, pickup_at: null,
     });
     // (16000 + 3000) × 2 + 5000
     expect(r.body.data.quote).toMatchObject({ subtotal: 43000, total: 43000, warnings: [] });

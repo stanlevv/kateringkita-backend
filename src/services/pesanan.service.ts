@@ -7,7 +7,7 @@ import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { jam, jamWib, SISA } from "./katalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
-import { Hasil, Kurang, muatKeranjang, periksa, terapkanPromo, tolakPromo } from "./pesanan-keranjang.service";
+import { Hasil, Kurang, kodeVoucher, muatKeranjang, periksa, terapkanVoucher, tolakPromo, voucherTerpakai } from "./pesanan-keranjang.service";
 import { DaftarSaya, PesananInput, QuoteInput, quoteSchema } from "../dto/pesanan.dto";
 import { Status, transisi } from "./pesanan-status.service";
 
@@ -17,14 +17,15 @@ import { Status, transisi } from "./pesanan-status.service";
 export async function quote(userId: number, data: QuoteInput) {
   const ms = jam.sekarang();
   const h = periksa(await muatKeranjang(db, data, { segarkan: false, hari: hariIniWib(new Date(ms)), ms }), data, ms);
-  await terapkanPromo(db, h, data.promo_code, userId, ms);
+  const v = await terapkanVoucher(db, h, kodeVoucher(data), userId, ms);
   return {
     // mapper eksplisit (R-11): hpp tidak keluar
     items: h.baris.map((b) => ({
       menu_id: b.menu_id, menu_name: b.menu_name, qty: b.qty, unit_price: b.unit_price, options: b.options, line_total: b.line_total,
       available: b.available,
     })),
-    subtotal: h.subtotal, discount: h.discount, service_fee: h.service_fee, total: h.total,
+    subtotal: h.subtotal, discount: h.discount, merchant_discount: h.merchant_discount, platform_discount: h.platform_discount,
+    service_fee: h.service_fee, total: h.total, vouchers_applied: voucherTerpakai(h, v),
     warnings: h.kurang.map((k) => ({
       code: "OUT_OF_STOCK", menu_id: k.menu_id, available: k.available,
       message: `Sisa ${k.menu_name} tinggal ${k.available} ${k.unit_label}.`,
@@ -118,14 +119,15 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
       const hari = hariIniWib(new Date(ms));
       const h = periksa(await muatKeranjang(conn, data, { segarkan: true, hari, ms }), data, ms);
       if (h.kurang.length) throw habis(h.kurang);
-      const promoId = await terapkanPromo(conn, h, data.promo_code, userId, ms);
-      if (promoId) {
+      const v = await terapkanVoucher(conn, h, kodeVoucher(data), userId, ms, data.payment_method);
+      const dipakai = [v.toko, v.platform].filter((p): p is RowDataPacket => p !== null).sort((a, b) => a.id - b.id);
+      for (const p of dipakai) {
         // F12: klaim kuota atomik sebelum INSERT orders (FK orders → promos mengambil kunci bersama yang lalu minta dinaikkan → deadlock).
-        // Urutan kunci promos → menus, sama dengan transisi (lepasPromo sebelum lepasStok).
+        // Urutan kunci promos (id naik) → menus, sama dengan transisi (lepasPromo sebelum lepasStok). Satu gagal → transaksi batal semua.
         // shortcut: reset kuota harian (segarkanKuota, menus) berjalan sebelum ini pada checkout pertama hari itu; deadlock langka bila
         // bersamaan dengan batal berpromo di toko yang sama, coba ulang di klien cukup
         const [r] = await conn.query<ResultSetHeader>(
-          "UPDATE promos SET used_count = used_count + 1 WHERE id = ? AND (quota IS NULL OR used_count < quota)", [promoId],
+          "UPDATE promos SET used_count = used_count + 1 WHERE id = ? AND (quota IS NULL OR used_count < quota)", [p.id],
         );
         if (!r.affectedRows) throw tolakPromo("Kuota promo sudah habis.");
       }
@@ -136,16 +138,17 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
 
       const { orderId, code: c } = await sisipPesanan(conn, hari,
         `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, status, customer_name, customer_phone, note, subtotal,
-           discount, service_fee, total, promo_id, payment_method, payment_status, hold_until, stock_date, pickup_at)
-         VALUES (?, ?, ?, ?, 'holding', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?, ?)`,
+           discount, merchant_promo_id, merchant_discount, platform_promo_id, platform_discount, service_fee, total, promo_id, payment_method,
+           payment_status, hold_until, stock_date, pickup_at)
+         VALUES (?, ?, ?, ?, 'holding', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'unpaid', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?, ?)`,
         (kode) => [kode, userId, h.merchant.id, data.pickup_point_id, data.customer_name ?? u.full_name, data.customer_phone ?? u.phone,
-          data.note, h.subtotal, h.discount, h.service_fee, h.total, promoId, data.payment_method, h.merchant.hold_minutes, hari,
-          data.pickup_at ? new Date(data.pickup_at) : null],
+          data.note, h.subtotal, h.discount, v.toko?.id ?? null, h.merchant_discount, v.platform?.id ?? null, h.platform_discount,
+          h.service_fee, h.total, data.payment_method, h.merchant.hold_minutes, hari, data.pickup_at ? new Date(data.pickup_at) : null],
       );
       await tahanStokDanItem(conn, orderId, h, hari);
-      // F12: dikembalikan bila pesanan batal/kedaluwarsa (transisi)
-      if (promoId) {
-        await conn.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, ?)", [promoId, orderId, userId, h.discount]);
+      // F12: dikembalikan bila pesanan batal/kedaluwarsa (transisi); satu baris per voucher
+      for (const [p, amount] of [[v.toko, h.merchant_discount], [v.platform, h.platform_discount]] as const) {
+        if (p) await conn.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, ?)", [p.id, orderId, userId, amount]);
       }
       await conn.query("INSERT INTO order_status_logs (order_id, from_status, to_status, actor_user_id) VALUES (?, NULL, 'holding', ?)",
         [orderId, userId]);

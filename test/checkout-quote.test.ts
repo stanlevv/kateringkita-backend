@@ -39,7 +39,7 @@ test("harga dihitung server: opsi + biaya layanan, field harga client diabaikan,
       menu_id: s.menu, menu_name: "Nasi Ayam", qty: 2, unit_price: 18000,
       options: [{ id: s.keju, name: "Keju", extra_price: 3000 }], line_total: 36000, available: 20,
     }],
-    subtotal: 36000, discount: 0, service_fee: 2000, total: 38000, warnings: [],
+    subtotal: 36000, discount: 0, merchant_discount: 0, platform_discount: 0, service_fee: 2000, total: 38000, vouchers_applied: [], warnings: [],
   });
   const json = JSON.stringify(r.body);
   for (const k of ['"hpp"', '"sold_today"', '"held_today"', '"quota_today"']) expect(json).not.toContain(k);
