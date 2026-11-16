@@ -163,6 +163,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Unggah foto | `POST /merchant/uploads` | penjual |
 | Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
 | Voucher | `GET /vouchers/platform`, `POST /me/vouchers/:id/claim`, `GET /me/vouchers`, voucher toko di `GET /merchants/:slug`; checkout `promo_codes[]` (kontrak: [`docs/voucher.md`](docs/voucher.md)) | publik / pembeli |
+| Banner beranda | `GET /banners`, `/merchant/banners` (ajukan), `/admin/banners` (tinjau & banner platform), `POST /admin/uploads` (kontrak: [`docs/voucher.md`](docs/voucher.md)) | publik / penjual / admin |
 | Verifikasi hasil AI | `GET /admin/hasil-ai?status=&fitur=&page=&limit=`, `PATCH /admin/hasil-ai/:id` `{ status: disetujui|ditolak, catatan }` (super & ops; support hanya melihat) | admin |
 | AI gateway | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test`, `GET /admin/ai-usage?days=1..90` | admin |
 | Server | `GET /admin/server-status`, `GET /admin/server-logs?level=&q=&page=&limit=` | admin |

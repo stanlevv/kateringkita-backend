@@ -4,6 +4,7 @@ import {
   profilTokoHandler, simpanFavoritHandler, simpanFavoritTokoHandler, rekomendasiHandler, ulasanMenuHandler,
 } from "../handlers/katalog.handler";
 import { klaimVoucherHandler, voucherPlatformHandler, voucherSayaHandler } from "../handlers/voucher.handler";
+import { bannerPublikHandler } from "../handlers/banner.handler";
 import { rekomendasiSchema } from "../dto/rekomendasi.dto";
 import { authOpsional, requireAuth, requireRole } from "../middleware/auth";
 import { asistenLimiter } from "../middleware/rateLimiter";
@@ -22,6 +23,8 @@ katalog.get("/merchants/:slug", authOpsional, profilTokoHandler);
 
 // Voucher: daftar voucher platform publik, klaim ke Voucher Saya, Voucher Saya (+ penanda bisa dipakai untuk checkout)
 katalog.get("/vouchers/platform", authOpsional, voucherPlatformHandler);
+// Banner beranda yang tayang (maks 8); promo.claimed hanya untuk pembeli login
+katalog.get("/banners", authOpsional, bannerPublikHandler);
 katalog.post("/me/vouchers/:id/claim", requireAuth, requireRole("customer"), klaimVoucherHandler);
 katalog.get("/me/vouchers", requireAuth, requireRole("customer"), voucherSayaHandler);
 

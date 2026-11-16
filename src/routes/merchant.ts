@@ -2,6 +2,7 @@ import { Router } from "express";
 import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
 import { statusSchema, updateProfileSchema } from "../dto/merchant.dto";
 import { merchantUploadSchema } from "../dto/upload.dto";
+import { buatBannerTokoHandler, daftarBannerTokoHandler, hapusBannerTokoHandler, ubahBannerTokoHandler } from "../handlers/banner.handler";
 import { tanyaSchema } from "../dto/asisten.dto";
 import { mejaSchema, ubahMejaSchema } from "../dto/meja.dto";
 import { rekeningSchema } from "../dto/pencairan.dto";
@@ -38,6 +39,11 @@ merchant.delete("/menus/:id", hapusMenuHandler);
 merchant.patch("/menus/:id/quota", ubahKuotaHandler);
 
 merchant.post("/uploads", validate(merchantUploadSchema), uploadLimiter, uploadFotoHandler);
+// Banner beranda (rancangan voucher 2026-11-16 §5.4): 1 banner aktif per toko, tampil setelah disetujui admin
+merchant.get("/banners", daftarBannerTokoHandler);
+merchant.post("/banners", buatBannerTokoHandler);
+merchant.patch("/banners/:id", ubahBannerTokoHandler);
+merchant.delete("/banners/:id", hapusBannerTokoHandler);
 
 // F07 (M-04): daftar & detail pesanan toko
 merchant.get("/orders", daftarPesananTokoHandler);

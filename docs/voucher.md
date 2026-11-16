@@ -50,3 +50,12 @@ Respons quote menambah `merchant_discount`, `platform_discount`, dan
 
 Urutan hitung: voucher toko dari `subtotal`, voucher platform dari sisa barang (atau biaya layanan bila
 "gratis biaya layanan"). `total = subtotal + service_fee − merchant_discount − platform_discount` (tidak pernah minus).
+
+## Banner beranda
+
+| Endpoint | Siapa | Isi |
+|---|---|---|
+| `GET /banners` | publik | maks 8 banner tayang: `[{ id, title, image_url, target: "promo"\|"merchant"\|"none", promo: VoucherKartu\|null, merchant: { id, slug, business_name }\|null }]` — banner platform dulu (`sort_order`), lalu banner toko terbaru disetujui. Banner ke voucher yang tidak tersedia / toko tersembunyi tidak ikut |
+| `GET/POST /merchant/banners`, `PATCH/DELETE /merchant/banners/:id` | penjual | `{ title 3–80, image_url (unggah purpose "banner"), target: "merchant"\|"promo", promo_id (voucher tokonya), starts_at, ends_at }`; status awal `menunggu`, diubah → `menunggu` lagi; 1 banner aktif per toko (`409`) |
+| `GET /admin/banners?status=`, `POST /admin/banners`, `PATCH /admin/banners/:id` | admin (support hanya GET) | buat banner platform (`target: "promo"\|"none"`, `sort_order`, langsung `disetujui`); tinjau `{ status: "disetujui"\|"ditolak"\|"nonaktif", catatan (wajib bila ditolak), sort_order }`; diaudit `banner.*` |
+| `POST /admin/uploads` | admin | `{ purpose: "banner"\|"popup", content_type, size }` → URL unggah ke `platform/<purpose>/` |

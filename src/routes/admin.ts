@@ -9,6 +9,9 @@ import {
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { verifikasiAiSchema } from "../dto/hasil-ai.dto";
+import { adminUploadSchema } from "../dto/upload.dto";
+import { buatBannerAdminHandler, daftarBannerAdminHandler, tinjauBannerHandler, uploadAdminHandler } from "../handlers/banner.handler";
+import { uploadLimiter } from "../middleware/rateLimiter";
 import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/hasil-ai.handler";
 import { buatAiHandler, daftarAiHandler, hapusAiHandler, pemakaianAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
 import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
@@ -97,6 +100,11 @@ admin.delete("/ai-providers/:id", hapusAiHandler);
 admin.post("/ai-providers/:id/test", ujiAiHandler);
 // F25 pemakaian AI: token, panggilan, gagal, latensi
 admin.get("/ai-usage", pemakaianAiHandler);
+// Banner beranda (rancangan voucher 2026-11-16 §5.4): semua tingkat melihat, super & ops memutuskan; unggah gambar platform
+admin.get("/banners", daftarBannerAdminHandler);
+admin.post("/banners", buatBannerAdminHandler);
+admin.patch("/banners/:id", tinjauBannerHandler);
+admin.post("/uploads", validate(adminUploadSchema), uploadLimiter, uploadAdminHandler);
 // Rubrik AI: hasil AI tersimpan diverifikasi manual (ops & super; support hanya melihat — bukan path "ai-" khusus super)
 admin.get("/hasil-ai", daftarHasilAiHandler);
 admin.patch("/hasil-ai/:id", validate(verifikasiAiSchema), verifikasiHasilAiHandler);
