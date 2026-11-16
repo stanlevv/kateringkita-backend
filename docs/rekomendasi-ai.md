@@ -70,15 +70,18 @@ AI tidak "dilatih": setiap permintaan membaca menu dan stok terbaru, jadi peruba
   merchant, available, badge, rating_avg, rating_count, is_favorite), jadi komponen kartu bisa dipakai ulang.
 - `subtotal` = `menu.price × qty`, belum termasuk opsi menu, promo, dan biaya layanan.
   Harga final tetap dari `POST /orders/quote`.
+- `result_id`: id baris `ai_results` (keluaran AI tersimpan untuk verifikasi admin); `null` bila `source` = `"fallback"`.
 - Stok bisa berubah setelah rekomendasi; tombol "masukkan keranjang" tetap melewati alur checkout biasa.
 
 ## Galat
 
 | Status | Kode | Kapan |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | kolom tidak valid (`error.fields.<kolom>`) |
+| 400 | `VALIDATION_ERROR` | kolom tidak valid (`error.fields.<kolom>`), termasuk `question` yang berisi pola prompt injection: `"Permintaan berisi perintah yang tidak diizinkan."` |
 | 401 | `UNAUTHENTICATED` | tanpa token / sesi habis |
 | 403 | `FORBIDDEN` | bukan akun pembeli |
 | 429 | `RATE_LIMITED` | lebih dari 10 permintaan per 10 menit per pengguna (kuota bersama asisten AI) |
 
 AI yang tidak tersedia **tidak** menghasilkan galat; respons memakai `source: "fallback"`.
+
+Sebelum dikirim ke penyedia AI, nama pembeli, email, nomor HP, dan NIK di `question` diganti penanda (`[nama]`, `[email]`, `[nomor]`, `[nik]`).

@@ -8,6 +8,8 @@ import {
   ubahKontakCsHandler, daftarAdminHandler, buatAdminHandler, ubahLevelAdminHandler, setAktifAdminHandler, resetSandiAdminHandler,
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
+import { verifikasiAiSchema } from "../dto/hasil-ai.dto";
+import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/hasil-ai.handler";
 import { buatAiHandler, daftarAiHandler, hapusAiHandler, pemakaianAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
 import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
 import { pencairanSchema, refundSchema } from "../dto/pencairan.dto";
@@ -95,6 +97,9 @@ admin.delete("/ai-providers/:id", hapusAiHandler);
 admin.post("/ai-providers/:id/test", ujiAiHandler);
 // F25 pemakaian AI: token, panggilan, gagal, latensi
 admin.get("/ai-usage", pemakaianAiHandler);
+// Rubrik AI: hasil AI tersimpan diverifikasi manual (ops & super; support hanya melihat — bukan path "ai-" khusus super)
+admin.get("/hasil-ai", daftarHasilAiHandler);
+admin.patch("/hasil-ai/:id", validate(verifikasiAiSchema), verifikasiHasilAiHandler);
 
 // F23 dashboard server: status, error 5xx & request lambat
 admin.get("/server-status", statusServerHandler);

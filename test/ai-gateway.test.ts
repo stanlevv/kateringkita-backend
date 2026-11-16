@@ -91,8 +91,10 @@ describe("gateway & fallback", () => {
     fetch.mockClear();
     expect(await ai.tanya("s", "p", { fitur: "asisten" })).toBe("Halo dari OR");
     expect(fetch).toHaveBeenCalledTimes(1);
-    // asisten penjual memakai gateway yang sama
+    // asisten penjual memakai gateway yang sama (jawaban asisten wajib JSON sesuai Output Schema)
+    fetch.mockImplementation(async () => openai(JSON.stringify({ jawaban: "Halo dari OR", poin: [], asumsi: "" })));
     expect((await request(app).post("/api/v1/merchant/assistant").set("Authorization", `Bearer ${s.tA}`).send({ question: "halo" }).expect(200)).body.data.answer).toBe("Halo dari OR");
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(URL_OR); // Groq masih istirahat
   });
 
   test("tanpa penyedia → 503; nonaktif dilewati; GEMINI_API_KEY env cadangan terakhir; semua gagal → 502", async () => {

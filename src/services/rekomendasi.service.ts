@@ -5,6 +5,8 @@ import { RekomendasiInput } from "../dto/rekomendasi.dto";
 import { ai } from "./ai.service";
 import { BUKA, DARI, JOIN_FAVORIT, KOLOM_KARTU, MenuCard, SISA, TAMPIL, jam, jamWib, kartu } from "./katalog.service";
 import { AppError } from "../utils/errors";
+import { adaInjeksi, samarkan } from "../utils/prompt-aman";
+import { simpanHasil } from "./hasil-ai.service";
 import { hariIniWib } from "./merchant-kuota.service";
 
 // F24 rekomendasi pembeli (RAG): DB menyaring kandidat (toko buka, stok ada, anggaran, filter) dan mengurutkan
@@ -116,28 +118,53 @@ function susun(pilihan: Pilihan, kandidat: Kandidat[], budget?: number) {
   return { groups: [...grup.values()], total };
 }
 
+// Keluaran AI yang disimpan (rubrik): ringkasan + item yang LOLOS validasi & dijepit backend, bukan teks mentah AI
+const keluaran = (summary: string, h: { groups: Grup[]; total: number }) => ({
+  summary, total: h.total,
+  items: h.groups.flatMap((g) => g.items.map((i) => ({
+    menu_id: i.menu.id, menu: i.menu.name, toko: g.merchant.business_name, qty: i.qty, subtotal: i.subtotal, reason: i.reason,
+  }))),
+});
+
 export async function rekomendasi(userId: number, input: RekomendasiInput) {
+  if (adaInjeksi(input.question)) {
+    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { question: ["Permintaan berisi perintah yang tidak diizinkan."] });
+  }
+  // kata kunci pencarian memakai teks asli (hanya ke DB sendiri); yang dikirim ke penyedia AI hanya versi tersamarkan
   const kandidat = await cariKandidat(input, userId);
   if (!kandidat.length) {
-    return { source: "fallback" as const, summary: "Belum ada menu tersedia yang cocok. Coba ubah anggaran, kategori, atau titik temu.", groups: [], total: 0 };
+    return {
+      source: "fallback" as const, summary: "Belum ada menu tersedia yang cocok. Coba ubah anggaran, kategori, atau titik temu.",
+      groups: [], total: 0, result_id: null,
+    };
   }
+  const [[u]] = await db.query<RowDataPacket[]>("SELECT full_name FROM users WHERE id = ?", [userId]);
+  const permintaan = samarkan(input.question, { nama: u ? [u.full_name] : [] });
   const data = kandidat.map((k) => ({
     id: k.card.id, menu: k.card.name, toko: k.card.merchant.business_name, harga: k.card.price, satuan: k.card.unit_label,
     stok: k.card.available, min: k.min, kategori: k.card.category.name, rating: k.card.rating_avg, ket: k.deskripsi?.slice(0, 160) ?? null,
   }));
-  const pesan = `KANDIDAT:\n${JSON.stringify(data)}\n\nANGGARAN: ${input.budget ?? "tidak disebut"}\nPORSI: ${input.portions ?? "tidak disebut"}\n\nPERMINTAAN:\n${input.question}`;
+  const pesan = `KANDIDAT:\n${JSON.stringify(data)}\n\nANGGARAN: ${input.budget ?? "tidak disebut"}\nPORSI: ${input.portions ?? "tidak disebut"}\n\nPERMINTAAN:\n${permintaan}`;
+  const simpan = (summary: string, h: { groups: Grup[]; total: number }) =>
+    simpanHasil({ fitur: "rekomendasi", userId, input: permintaan, output: keluaran(summary, h) });
   let summary = "Asisten AI sedang tidak tersedia. Ini menu paling cocok yang masih tersedia.";
   try {
     const j = bacaJawaban(await ai.tanya(SISTEM, pesan, { fitur: "rekomendasi", userId }));
     // AI sengaja tidak memilih (mis. anggaran kurang, pantangan): hormati, jangan diganti cadangan
-    if (j && !j.items.length) return { source: "ai" as const, summary: j.summary, groups: [], total: 0 };
+    if (j && !j.items.length) {
+      const kosong = { groups: [], total: 0 };
+      return { source: "ai" as const, summary: j.summary, ...kosong, result_id: await simpan(j.summary, kosong) };
+    }
     const hasil = j ? susun(j.items, kandidat, input.budget) : null;
-    if (j && hasil?.groups.length) return { source: "ai" as const, summary: j.summary, ...hasil };
+    if (j && hasil?.groups.length) return { source: "ai" as const, summary: j.summary, ...hasil, result_id: await simpan(j.summary, hasil) };
     summary = "Ini menu paling cocok yang masih tersedia.";
   } catch (e) {
     // AI belum aktif (503) / semua penyedia gagal (502): pembeli tetap dapat saran tanpa AI
     if (!(e instanceof AppError)) console.error("[rekomendasi] galat AI tak terduga:", (e as Error)?.message ?? e);
   }
   // Cadangan: kandidat teratas (paling cocok kata kunci, lalu terlaris), qty = porsi diminta (dijepit min, stok, anggaran)
-  return { source: "fallback" as const, summary, ...susun([{ id: kandidat[0].card.id, qty: input.portions ?? 1 }], kandidat, input.budget) };
+  // bukan keluaran AI → tidak disimpan untuk verifikasi
+  return {
+    source: "fallback" as const, summary, ...susun([{ id: kandidat[0].card.id, qty: input.portions ?? 1 }], kandidat, input.budget), result_id: null,
+  };
 }
