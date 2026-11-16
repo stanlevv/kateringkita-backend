@@ -87,7 +87,11 @@ describe("kode promo di checkout", () => {
 
   test("free_service_fee & fixed; promo platform berlaku di semua toko", async () => {
     await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
-    await buat({ code: "GRATISLAYANAN", type: "free_service_fee", value: 0, quota: null }).expect(201);
+    // C2: penjual tidak bisa membuat jenis ini lagi; promo lama jenis ini tetap berlaku di checkout
+    expect((await buat({ code: "GRATISLAYANAN", type: "free_service_fee", value: 0, quota: null }).expect(400)).body.error.fields.type)
+      .toEqual(["Promo toko hanya potongan persen atau nominal."]);
+    await db.query(`INSERT INTO promos (merchant_id, code, type, value, min_subtotal, per_user_limit, starts_at, ends_at)
+       VALUES (?, 'GRATISLAYANAN', 'free_service_fee', 0, 0, 1, '2020-01-01', '2099-01-01')`, [s.idA]);
     expect((await quote("GRATISLAYANAN").expect(200)).body.data).toMatchObject({ service_fee: 2000, discount: 2000, total: 30000 });
     await db.query(
       `INSERT INTO promos (merchant_id, code, type, value, min_subtotal, per_user_limit, starts_at, ends_at)

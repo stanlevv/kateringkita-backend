@@ -2,7 +2,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { dalamTransaksi, kunci, withBool } from "./admin-audit.service";
-import { FIELD, kodeGanda, kodeSkema, nilai, rapikan } from "./admin-promo.service";
+import { FIELD, kodeGanda, kodeSkema, nilai, publikDari, rapikan } from "./admin-promo.service";
 import { idToko } from "./merchant-menu.service";
 import { kabariPromoToko } from "./admin-pengumuman.service";
 
@@ -27,17 +27,25 @@ export async function daftarPromoToko(userId: number) {
   return rows.map(withBool);
 }
 
+// C2: biaya layanan milik platform, jadi voucher toko hanya potongan persen / nominal (promo lama jenis itu tetap berlaku)
+const tanpaGratisLayanan = (type: unknown) => {
+  if (type === "free_service_fee") throw tidakValid("type", "Promo toko hanya potongan persen atau nominal.");
+};
+
 export async function buatPromoToko(userId: number, body: unknown) {
   const b = objek(body);
   const aktif = aktifDari(b) ?? true;
+  const publik = publikDari(b) ?? true;
   const { code, data } = rapikan(b, 0, true);
+  tanpaGratisLayanan(data.type);
   const merchantId = await idToko(userId);
   try {
     const [ins] = await db.query<ResultSetHeader>(
-      `INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at,
+         is_active, is_public)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [merchantId, code, data.description, data.type, data.value, data.max_discount, data.min_subtotal, data.quota, data.per_user_limit,
-        data.starts_at, data.ends_at, aktif],
+        data.starts_at, data.ends_at, aktif, publik],
     );
     const [[row]] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [ins.insertId]);
     await kabariPromoToko(row);
@@ -53,6 +61,8 @@ export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknow
   const merchantId = await idToko(userId);
   const b = objek(body);
   const aktif = aktifDari(b);
+  const publik = publikDari(b);
+  if ("type" in b) tanpaGratisLayanan(b.type);
   try {
     const { after, dinyalakan } = await dalamTransaksi(async (conn) => {
       const before = await kunciPromoToko(conn, merchantId, idRaw);
@@ -67,6 +77,7 @@ export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknow
         baru.code = c.data;
       }
       if (aktif !== undefined) baru.is_active = aktif;
+      if (publik !== undefined) baru.is_public = publik;
       const lama = withBool(before) as Record<string, unknown>;
       const cols = Object.keys(baru).filter((c) => nilai(baru[c]) !== nilai(lama[c]));
       if (cols.length) {

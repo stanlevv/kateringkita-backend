@@ -5,6 +5,7 @@ import { AppError } from "../utils/errors";
 import { hariIniWib } from "./merchant-kuota.service";
 import { menuId, menuTidakAda } from "./merchant-menu.service";
 import { Halaman, KatalogQuery } from "../dto/katalog.dto";
+import { voucherToko } from "./voucher.service";
 
 // Katalog publik (C-05, C-06). Hanya SELECT: tidak ada UPDATE/FOR UPDATE di modul ini (R-12).
 
@@ -204,5 +205,7 @@ export async function profilToko(slug: string, userId: number | null) {
   );
   const m = rows[0];
   if (!m) throw tokoTidakAda();
-  return profilPublik(m, jam.sekarang(), await titikTemu(m.id));
+  const ms = jam.sekarang();
+  // voucher toko publik (rancangan voucher 2026-11-16); claimed hanya untuk pembeli login
+  return { ...profilPublik(m, ms, await titikTemu(m.id)), vouchers: await voucherToko(m.id, userId, ms) };
 }

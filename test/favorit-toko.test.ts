@@ -49,7 +49,8 @@ test("PUT idempoten 204, GET kartu = profil GET /merchants/:slug, DELETE idempot
   for (const k of g.body.data) expect(Object.keys(k).sort()).toEqual(KUNCI);
   const profilA = (await api("get", `/merchants/${slugA}`, tCust).expect(200)).body.data;
   const profilB = (await api("get", `/merchants/${slugB}`, tCust).expect(200)).body.data;
-  expect(g.body.data).toEqual([profilB, profilA]);
+  const tanpaVoucher = ({ vouchers, ...p }: any) => (expect(vouchers).toEqual([]), p); // kartu favorit tanpa daftar voucher
+  expect(g.body.data).toEqual([tanpaVoucher(profilB), tanpaVoucher(profilA)]);
   expect(profilA).toMatchObject({ id: idA, is_favorite: true, pickup_points: [{ id: 1 }] });
   expect(profilB.pickup_points.map((p: any) => p.id).sort()).toEqual([1, 2]);
   const s = JSON.stringify(g.body);

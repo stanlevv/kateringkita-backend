@@ -42,7 +42,8 @@ export async function dalamTransaksi<T>(fn: (conn: PoolConnection) => Promise<T>
 
 export type Conn = PoolConnection;
 
-export const withBool = (r: RowDataPacket) => ({ ...r, is_active: Boolean(r.is_active) });
+// is_public hanya ada di baris promos (migrasi 014); baris lain tidak diberi kolom itu
+export const withBool = (r: RowDataPacket) => ({ ...r, is_active: Boolean(r.is_active), ...("is_public" in r ? { is_public: Boolean(r.is_public) } : {}) });
 
 // Kunci satu baris (FOR UPDATE) di dalam transaksi; id tak valid atau tak ada -> 404.
 export async function kunci(conn: Conn, table: string, idRaw: unknown, o: { where?: string; notFound?: string } = {}) {

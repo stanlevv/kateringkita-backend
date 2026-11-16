@@ -69,6 +69,16 @@ export function rapikan(input: unknown, terpakai: number, cekKode = false) {
 }
 
 export const nilai = (v: unknown) => (v instanceof Date ? v.getTime() : v ?? null);
+
+/** is_public (voucher tampil & bisa diklaim): undefined bila tidak dikirim; selain boolean → 400. */
+export function publikDari(body: unknown): boolean | undefined {
+  const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  if (!("is_public" in b)) return undefined;
+  if (typeof b.is_public !== "boolean") {
+    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { is_public: ["Pilihan tampil di halaman toko tidak valid."] });
+  }
+  return b.is_public;
+}
 export const kodeGanda = () => new AppError(409, "CONFLICT", "Kode sudah dipakai.", { code: ["Kode sudah dipakai."] });
 
 export async function daftarPromo() {
@@ -78,11 +88,12 @@ export async function daftarPromo() {
 
 export async function buatPromo(adminId: number, body: unknown) {
   const { code, data } = rapikan(body, 0, true);
+  const publik = publikDari(body) ?? true;
   try {
     return await dalamTransaksi(async (conn) => {
       const [ins] = await conn.query<any>(
-        "INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [code, data.description, data.type, data.value, data.max_discount, data.min_subtotal, data.quota, data.per_user_limit, data.starts_at, data.ends_at],
+        "INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at, is_public) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [code, data.description, data.type, data.value, data.max_discount, data.min_subtotal, data.quota, data.per_user_limit, data.starts_at, data.ends_at, publik],
       );
       const [row] = await conn.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [ins.insertId]);
       await catat(conn, { adminId, action: "promo.create", targetType: "promo", targetId: ins.insertId, after: withBool(row[0]) });
@@ -103,8 +114,9 @@ export async function ubahPromo(adminId: number, idRaw: unknown, body: unknown) 
     const before = await kunciPromo(conn, idRaw);
     const patch = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
     const merged = { ...Object.fromEntries(FIELD.map((k) => [k, before[k] instanceof Date ? (before[k] as Date).toISOString() : before[k]])), ...Object.fromEntries(FIELD.filter((k) => k in patch).map((k) => [k, patch[k]])) };
-    const { data } = rapikan(merged, before.used_count);
-    const cols = FIELD.filter((c) => nilai(data[c]) !== nilai(before[c]));
+    const publik = publikDari(patch);
+    const data: Record<string, unknown> = { ...rapikan(merged, before.used_count).data, ...(publik === undefined ? {} : { is_public: publik }) };
+    const cols = [...FIELD, "is_public" as const].filter((c) => c in data && nilai(data[c]) !== nilai(c === "is_public" ? Boolean(before[c]) : before[c]));
     if (!cols.length) return withBool(before); // tidak ada perubahan: tanpa log
     await conn.query(`UPDATE promos SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [...cols.map((c) => data[c]), before.id]);
     const [after] = await conn.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [before.id]);
