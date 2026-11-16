@@ -43,6 +43,26 @@ export async function buatVaMidtrans(code: string, amount: number, bank: BankVa,
   return { transaction_id: String(r.transaction_id), bank: String(va.bank), va_number: String(va.va_number) };
 }
 
+// QRIS langsung di aplikasi (Core API): aplikasi menggambar qr_string sendiri; qr_url = gambar QR dari Midtrans (simulator sandbox).
+// 406 = order_id sudah dipakai transaksi lain (pembeli sudah memilih metode di halaman Snap) → tidak bisa dibuat QRIS baru.
+export async function buatQrisMidtrans(code: string, amount: number, menit: number) {
+  const r = await panggil(`${host()}/v2/charge`, {
+    payment_type: "qris",
+    transaction_details: { order_id: code, gross_amount: amount },
+    qris: { acquirer: "gopay" },
+    custom_expiry: { expiry_duration: menit, unit: "minute" },
+  });
+  if (r.status_code === "406") {
+    throw new AppError(409, "CONFLICT", "Pembayaran pesanan ini sudah dimulai di halaman Midtrans. Lanjutkan di sana.");
+  }
+  const qrUrl = (r.actions as { name?: string; url?: string }[] | undefined)?.find((a) => a.name === "generate-qr-code")?.url;
+  if (!["200", "201"].includes(r.status_code) || !r.transaction_id || !r.qr_string || !qrUrl) {
+    console.error(`Midtrans QRIS ${code} gagal: ${r.status_code} ${r.status_message}`);
+    throw new AppError(502, "BAD_GATEWAY", "Gagal membuat QRIS. Coba lagi.");
+  }
+  return { transaction_id: String(r.transaction_id), qr_string: String(r.qr_string), qr_url: String(qrUrl) };
+}
+
 // F21/F26: halaman bayar Snap (QRIS, e-wallet, VA) untuk pesanan meja dan pre-order; kartu kredit tidak dibuka (alur capture/fraud).
 // Masa berlaku = sisa hold pesanan; `kembali` = halaman status di web setelah bayar (aplikasi mobile tanpa `kembali`: URL bawaan Midtrans).
 export async function buatSnap(code: string, amount: number, menit: number, kembali?: string) {

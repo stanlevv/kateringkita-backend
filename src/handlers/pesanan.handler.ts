@@ -4,7 +4,7 @@ import { kirimUlasan } from "../services/ulasan.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { bacaPesanan, batalkan, buatPesanan, daftarPesananSaya, pesanLagi, quote, selesaikan, waPesanan } from "../services/pesanan.service";
-import { bayarOnline, buatVa, terimaNotifikasiMidtrans } from "../services/pembayaran-va.service";
+import { bayarOnline, buatQris, buatVa, terimaNotifikasiMidtrans } from "../services/pembayaran-va.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
 
@@ -17,6 +17,11 @@ export const buatVaHandler: RequestHandler = async (req, res) => {
 export const bayarOnlineHandler: RequestHandler = async (req, res) => {
   const { kembali } = parse(bayarOnlineSchema, bodyObjek(req.body));
   res.json({ data: await bayarOnline(uid(req), String(req.params.code), kembali) });
+};
+
+// QRIS di aplikasi: tanpa body
+export const buatQrisHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await buatQris(uid(req), String(req.params.code)) });
 };
 
 // F10: Midtrans mengulang notifikasi sampai dijawab 2xx

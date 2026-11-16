@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { env } from "../config/env";
 import { AppError } from "../utils/errors";
-import { BankVa, buatSnap, buatVaMidtrans, notifikasiSah } from "../utils/midtrans";
+import { BankVa, buatQrisMidtrans, buatSnap, buatVaMidtrans, notifikasiSah } from "../utils/midtrans";
 import { dalamTransaksi } from "./admin-audit.service";
 import { bacaPesanan } from "./pesanan.service";
 import { transisi } from "./pesanan-status.service";
@@ -52,6 +52,37 @@ export async function bayarOnline(userId: number, code: string, kembali?: string
   return bacaPesanan(userId, code);
 }
 
+// QRIS langsung di aplikasi untuk pesanan "online": satu QRIS per pesanan (idempoten), Midtrans dipanggil di luar transaksi.
+export async function buatQris(userId: number, code: string) {
+  const [[o]] = await db.query<RowDataPacket[]>(
+    `SELECT o.id, o.total, o.status, o.payment_method, o.payment_status, TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), o.hold_until) AS menit,
+       EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'qris') AS ada
+     FROM orders o WHERE o.code = ? AND o.customer_id = ?`,
+    [code, userId],
+  );
+  if (!o) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
+  if (o.payment_method !== "online") throw konflik("Pesanan ini tidak memakai bayar online.");
+  if (o.status !== "holding" || o.payment_status === "paid") throw konflik("Pesanan ini tidak menunggu pembayaran.");
+  if (!Number(o.ada)) {
+    // menit dibulatkan ke bawah: QR kedaluwarsa sebelum hold habis
+    const menit = Number(o.menit);
+    if (menit < 1) throw konflik("Batas waktu pesanan sudah habis.");
+    const q = await buatQrisMidtrans(code, o.total, menit);
+    try {
+      await db.query(
+        `INSERT INTO payments (order_id, method, provider, provider_ref, qr_string, redirect_url, amount, status, expires_at)
+         VALUES (?, 'qris', 'midtrans', ?, ?, ?, ?, 'pending', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE))`,
+        [o.id, q.transaction_id, q.qr_string, q.qr_url, o.total, menit],
+      );
+    } catch (e) {
+      // permintaan kembar yang sama-sama lolos charge → transaksi Midtrans yang sama → provider_ref duplikat
+      if ((e as { code?: string }).code !== "ER_DUP_ENTRY") throw e;
+    }
+    await db.query("UPDATE orders SET payment_status = 'pending' WHERE id = ? AND payment_status = 'unpaid'", [o.id]);
+  }
+  return bacaPesanan(userId, code);
+}
+
 // F10: VA untuk pesanan VA milik pembeli yang masih holding. Midtrans dipanggil di luar transaksi agar kunci tidak ditahan
 // selama HTTP; idempoten: VA yang sudah ada dikembalikan.
 // shortcut: satu VA per pesanan (bank pertama dipakai); ganti bank butuh order_id Midtrans baru, tambahkan bila diminta
@@ -97,11 +128,14 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
   if (!baru) return; // pending: belum ada yang berubah
   const code = String(n.order_id);
   await dalamTransaksi(async (conn) => {
-    // VA (pembeli, F10) atau Snap 'online' (pesanan meja F21, pre-order F26)
+    // VA (pembeli, F10), Snap 'online' (pesanan meja F21, pre-order F26) atau QRIS di aplikasi.
+    // Pesanan online bisa punya baris Snap dan QRIS: utamakan baris yang transaction_id-nya cocok.
+    const trx = typeof n.transaction_id === "string" ? n.transaction_id : null;
     const [[p]] = await conn.query<RowDataPacket[]>(
       `SELECT p.id, p.status, p.amount FROM payments p JOIN orders o ON o.id = p.order_id
-       WHERE o.code = ? AND p.method IN ('va', 'online') AND p.provider = 'midtrans' ORDER BY p.id LIMIT 1`,
-      [code],
+       WHERE o.code = ? AND p.method IN ('va', 'online', 'qris') AND p.provider = 'midtrans'
+       ORDER BY (p.provider_ref <=> ?) DESC, p.id LIMIT 1`,
+      [code, trx],
     );
     if (!p || p.status === "paid") return;
     if (Number(n.gross_amount) !== p.amount) {
@@ -120,7 +154,7 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
     await conn.query(
       `UPDATE payments SET status = ?, paid_at = IF(? = 'paid', UTC_TIMESTAMP(), paid_at), raw_payload = ?, provider_ref = COALESCE(provider_ref, ?)
        WHERE id = ? AND status <> 'paid'`,
-      [baru, baru, JSON.stringify(n), typeof n.transaction_id === "string" ? n.transaction_id : null, p.id],
+      [baru, baru, JSON.stringify(n), trx, p.id],
     );
   });
 }

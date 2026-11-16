@@ -7,7 +7,7 @@ Sejak F26 semua pembayaran non-tunai lewat Midtrans dan masuk ke akun Midtrans p
 |---|---|---|
 | `cod` | Tunai saat mengambil | Penjual menekan Konfirmasi |
 | `va` | Virtual Account Midtrans (BCA, BNI, BRI), bank dipilih pembeli | Otomatis saat Midtrans melaporkan lunas |
-| `online` | Halaman bayar Midtrans Snap: QRIS, GoPay, ShopeePay, VA BCA/BNI/BRI | Otomatis saat Midtrans melaporkan lunas |
+| `online` | QRIS yang digambar langsung di aplikasi (`/qris`), atau halaman bayar Midtrans Snap: QRIS, GoPay, ShopeePay, VA BCA/BNI/BRI (`/online`) | Otomatis saat Midtrans melaporkan lunas |
 
 `qris` hanya ada di data lama. Checkout dengan `qris` ditolak `400`.
 
@@ -16,7 +16,8 @@ Sejak F26 semua pembayaran non-tunai lewat Midtrans dan masuk ke akun Midtrans p
 1. `POST /orders` dengan `payment_method`. Pesanan lahir berstatus `holding`, `payment.status = "unpaid"`.
    Porsi ditahan sampai `hold_until` (durasi = `hold_minutes` toko, 1–30 menit).
 2. Untuk `va`: `POST /orders/:code/va` dengan `{ "bank": "bca" | "bni" | "bri" }`, lalu tampilkan `payment.va.va_number`.
-   Untuk `online`: `POST /orders/:code/online`, lalu buka `payment.payment_url` di browser atau WebView.
+   Untuk `online` di mobile: `POST /orders/:code/qris`, lalu gambar `payment.qris.qr_string` sebagai kode QR di layar.
+   Cadangan / web: `POST /orders/:code/online`, lalu buka `payment.payment_url` di browser atau WebView.
 3. Pembeli membayar. Midtrans mengirim notifikasi ke backend (`POST /payments/midtrans`, signature SHA512 dicek).
    Saat `settlement`, pesanan menjadi `confirmed` dan `payment.status = "paid"`. Pembeli mendapat notifikasi status.
 4. Aplikasi mengecek hasil dengan `GET /orders/:code`, misalnya tiap 5 detik selama layar bayar terbuka dan saat
@@ -63,6 +64,35 @@ Respons `200` = bentuk pesanan yang sama dengan `GET /orders/:code`:
 `payment.payment_url` bernilai `null` sebelum endpoint ini dipanggil, dan juga setelah pesanan lunas, batal, atau
 kedaluwarsa.
 
+## `POST /orders/:code/qris`
+
+QRIS langsung di aplikasi (Midtrans Core API, `payment_type: "qris"`), tanpa halaman Snap. Header `Authorization: Bearer
+<token pembeli>`, tanpa body. Hanya untuk pesanan `payment_method: "online"` yang masih menunggu bayar.
+
+Idempoten: satu QRIS per pesanan; memanggil ulang mengembalikan QR yang sama tanpa membuat transaksi baru. Respons `200` =
+bentuk pesanan, dengan:
+
+```json
+"payment": {
+  "method": "online",
+  "status": "pending",
+  "amount": 30000,
+  "payment_url": null,
+  "qris": {
+    "qr_string": "00020101021226...",
+    "qr_url": "https://api.sandbox.midtrans.com/v2/qris/<transaction_id>/qr-code",
+    "expires_at": "2026-11-10T03:04:00.000Z"
+  }
+}
+```
+
+- `qr_string` = isi QR standar QRIS; aplikasi menggambarnya sendiri (mis. `qr_flutter`).
+- `qr_url` = gambar QR dari Midtrans, untuk dibuka/disimpan di browser (dan untuk simulator QRIS sandbox).
+- `payment.qris` bernilai `null` sebelum endpoint ini dipanggil, dan setelah pesanan lunas, batal, atau kedaluwarsa.
+
+QRIS dan halaman Snap memakai `order_id` Midtrans yang sama (kode pesanan). Bila pembeli sudah memilih metode di halaman
+Snap, QRIS tidak bisa dibuat lagi (`409`). Sebaliknya, setelah QRIS dibuat, aplikasi tidak menawarkan halaman Snap lagi.
+
 ## `POST /orders/:code/va`
 
 Body `{ "bank": "bca" }`. Idempoten: VA yang sudah dibuat dikembalikan (satu VA per pesanan; bank pertama yang dipakai).
@@ -74,8 +104,10 @@ Respons: bentuk pesanan dengan `payment.va = { "bank", "va_number", "expires_at"
 |---|---|---|
 | Checkout `payment_method` selain `cod`/`va`/`online` | 400 | `Pilih bayar tunai, Virtual Account, atau bayar online.` |
 | Checkout VA/online, Midtrans belum dipasang di server | 409 | `Pembayaran Virtual Account belum tersedia. Pilih metode lain.` / `Pembayaran online belum tersedia. Pilih metode lain.` |
-| `/online` untuk pesanan bukan `online` | 409 | `Pesanan ini tidak memakai bayar online.` |
-| `/online` untuk pesanan yang sudah lunas, batal, atau kedaluwarsa | 409 | `Pesanan ini tidak menunggu pembayaran.` |
+| `/online` atau `/qris` untuk pesanan bukan `online` | 409 | `Pesanan ini tidak memakai bayar online.` |
+| `/online` atau `/qris` untuk pesanan yang sudah lunas, batal, atau kedaluwarsa | 409 | `Pesanan ini tidak menunggu pembayaran.` |
+| `/qris` setelah pembeli memilih metode di halaman Snap | 409 | `Pembayaran pesanan ini sudah dimulai di halaman Midtrans. Lanjutkan di sana.` |
+| `/qris`, Midtrans menolak atau tidak menjawab | 502 | `Gagal membuat QRIS. Coba lagi.` |
 | `/va` untuk pesanan yang tidak menunggu VA | 409 | `Pesanan ini tidak menunggu pembayaran Virtual Account.` |
 | Sisa waktu tahan < 1 menit | 409 | `Batas waktu pesanan sudah habis.` |
 | `kembali` bukan alamat web KateringKita | 400 | `fields.kembali`: `Alamat kembali tidak diizinkan.` |

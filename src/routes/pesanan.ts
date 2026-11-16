@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { quoteSchema, ulasanSchema, vaSchema } from "../dto/pesanan.dto";
 import {
-  bacaPesananHandler, batalkanHandler, bayarOnlineHandler, buatPesananHandler, buatVaHandler, daftarPesananSayaHandler, kirimUlasanHandler, notifikasiMidtransHandler,
+  bacaPesananHandler, batalkanHandler, bayarOnlineHandler, buatPesananHandler, buatQrisHandler, buatVaHandler, daftarPesananSayaHandler, kirimUlasanHandler, notifikasiMidtransHandler,
   pesanLagiHandler, quoteHandler, selesaikanHandler, waPesananHandler,
 } from "../handlers/pesanan.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -38,4 +38,6 @@ pesanan.post("/orders/:code/reorder", ...pembeli, pesanLagiHandler);
 pesanan.post("/orders/:code/va", ...pembeli, validate(vaSchema), buatVaHandler);
 // F26: halaman bayar online Snap (QRIS, e-wallet, VA) untuk pesanan payment_method "online"
 pesanan.post("/orders/:code/online", ...pembeli, bayarOnlineHandler);
+// QRIS langsung di aplikasi (Core API) untuk pesanan "online": QR digambar aplikasi, tanpa halaman Snap
+pesanan.post("/orders/:code/qris", ...pembeli, buatQrisHandler);
 pesanan.post("/payments/midtrans", notifikasiMidtransHandler);

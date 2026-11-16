@@ -144,7 +144,7 @@ Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar dita
 | Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
 | Toko favorit | `GET /me/favorite-merchants`, `PUT` dan `DELETE /me/favorite-merchants/:merchantId` (kartu = profil `GET /merchants/:slug`) | pembeli |
 | Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder` | pembeli |
-| Pembayaran Midtrans | `POST /orders/:code/va`, `POST /orders/:code/online` (kontrak: [`docs/pembayaran.md`](docs/pembayaran.md)) | pembeli |
+| Pembayaran Midtrans | `POST /orders/:code/va`, `POST /orders/:code/online`, `POST /orders/:code/qris` (kontrak: [`docs/pembayaran.md`](docs/pembayaran.md)) | pembeli |
 | Meja (penjual) | `GET` dan `POST /merchant/tables`, `PATCH /merchant/tables/:id` | penjual |
 | Pesan dari meja | `GET /tables/:token`, `POST /tables/:token/orders`, `GET /guest/orders/:code`, `POST /guest/orders/:code/pay` (header `X-Guest-Token`) | publik |
 | Notifikasi Midtrans | `POST /payments/midtrans` (diverifikasi signature) | publik |

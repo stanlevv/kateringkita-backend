@@ -263,11 +263,22 @@ export async function bacaPesanan(userId: number, code: string) {
   const payment = { method: o.payment_method, status: o.payment_status, amount: o.total };
   if (o.payment_method === "online") {
     // F26: halaman bayar Snap; null sampai POST /orders/:code/online, dan setelah lunas/tidak menunggu bayar lagi
+    // QRIS di aplikasi: null sampai POST /orders/:code/qris; redirect_url baris qris = gambar QR Midtrans
     const [[p]] = await db.query<RowDataPacket[]>(
       "SELECT redirect_url FROM payments WHERE order_id = ? AND method = 'online' ORDER BY id DESC LIMIT 1", [o.id],
     );
+    const [[q]] = await db.query<RowDataPacket[]>(
+      "SELECT qr_string, redirect_url, expires_at FROM payments WHERE order_id = ? AND method = 'qris' ORDER BY id DESC LIMIT 1", [o.id],
+    );
     const menunggu = o.status === "holding" && o.payment_status !== "paid";
-    return { ...petaPesanan(o, items.get(o.id) ?? []), payment: { ...payment, payment_url: menunggu ? p?.redirect_url ?? null : null } };
+    return {
+      ...petaPesanan(o, items.get(o.id) ?? []),
+      payment: {
+        ...payment,
+        payment_url: menunggu ? p?.redirect_url ?? null : null,
+        qris: menunggu && q ? { qr_string: q.qr_string, qr_url: q.redirect_url, expires_at: q.expires_at } : null,
+      },
+    };
   }
   if (o.payment_method !== "va") return { ...petaPesanan(o, items.get(o.id) ?? []), payment };
   // F10: VA null sampai pembeli memilih bank lewat POST /orders/:code/va
