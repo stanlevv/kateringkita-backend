@@ -11,6 +11,7 @@ import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { verifikasiAiSchema } from "../dto/hasil-ai.dto";
 import { adminUploadSchema } from "../dto/upload.dto";
 import { buatBannerAdminHandler, daftarBannerAdminHandler, tinjauBannerHandler, uploadAdminHandler } from "../handlers/banner.handler";
+import { buatPopupHandler, daftarPopupHandler, ubahPopupHandler } from "../handlers/popup.handler";
 import { uploadLimiter } from "../middleware/rateLimiter";
 import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/hasil-ai.handler";
 import { buatAiHandler, daftarAiHandler, hapusAiHandler, pemakaianAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
@@ -105,6 +106,10 @@ admin.get("/banners", daftarBannerAdminHandler);
 admin.post("/banners", buatBannerAdminHandler);
 admin.patch("/banners/:id", tinjauBannerHandler);
 admin.post("/uploads", validate(adminUploadSchema), uploadLimiter, uploadAdminHandler);
+// Pop-up promo mobile: semua tingkat melihat, super & ops membuat / mengubah
+admin.get("/popups", daftarPopupHandler);
+admin.post("/popups", buatPopupHandler);
+admin.patch("/popups/:id", ubahPopupHandler);
 // Rubrik AI: hasil AI tersimpan diverifikasi manual (ops & super; support hanya melihat — bukan path "ai-" khusus super)
 admin.get("/hasil-ai", daftarHasilAiHandler);
 admin.patch("/hasil-ai/:id", validate(verifikasiAiSchema), verifikasiHasilAiHandler);

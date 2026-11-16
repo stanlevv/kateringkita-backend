@@ -59,3 +59,12 @@ Urutan hitung: voucher toko dari `subtotal`, voucher platform dari sisa barang (
 | `GET/POST /merchant/banners`, `PATCH/DELETE /merchant/banners/:id` | penjual | `{ title 3–80, image_url (unggah purpose "banner"), target: "merchant"\|"promo", promo_id (voucher tokonya), starts_at, ends_at }`; status awal `menunggu`, diubah → `menunggu` lagi; 1 banner aktif per toko (`409`) |
 | `GET /admin/banners?status=`, `POST /admin/banners`, `PATCH /admin/banners/:id` | admin (support hanya GET) | buat banner platform (`target: "promo"\|"none"`, `sort_order`, langsung `disetujui`); tinjau `{ status: "disetujui"\|"ditolak"\|"nonaktif", catatan (wajib bila ditolak), sort_order }`; diaudit `banner.*` |
 | `POST /admin/uploads` | admin | `{ purpose: "banner"\|"popup", content_type, size }` → URL unggah ke `platform/<purpose>/` |
+
+## Pop-up promo (mobile)
+
+| Endpoint | Siapa | Isi |
+|---|---|---|
+| `GET /popup` | publik | `{ id, title, image_url, promo: VoucherKartu\|null }` atau `null`: pop-up aktif terbaru dalam periode yang vouchernya (bila ada) masih tersedia |
+| `GET/POST /admin/popups`, `PATCH /admin/popups/:id` | admin (support hanya GET) | `{ title 3–80, image_url (unggah purpose "popup"), promo_id (voucher platform), starts_at, ends_at, is_active }`; diaudit `popup.*` |
+
+Aplikasi menampilkan pop-up sekali per hari per pop-up (disimpan di perangkat) dan tidak lagi bila vouchernya sudah diklaim.

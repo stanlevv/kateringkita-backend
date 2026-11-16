@@ -5,6 +5,7 @@ import {
 } from "../handlers/katalog.handler";
 import { klaimVoucherHandler, voucherPlatformHandler, voucherSayaHandler } from "../handlers/voucher.handler";
 import { bannerPublikHandler } from "../handlers/banner.handler";
+import { popupPublikHandler } from "../handlers/popup.handler";
 import { rekomendasiSchema } from "../dto/rekomendasi.dto";
 import { authOpsional, requireAuth, requireRole } from "../middleware/auth";
 import { asistenLimiter } from "../middleware/rateLimiter";
@@ -25,6 +26,8 @@ katalog.get("/merchants/:slug", authOpsional, profilTokoHandler);
 katalog.get("/vouchers/platform", authOpsional, voucherPlatformHandler);
 // Banner beranda yang tayang (maks 8); promo.claimed hanya untuk pembeli login
 katalog.get("/banners", authOpsional, bannerPublikHandler);
+// Pop-up promo yang tayang (atau null); promo.claimed hanya untuk pembeli login
+katalog.get("/popup", authOpsional, popupPublikHandler);
 katalog.post("/me/vouchers/:id/claim", requireAuth, requireRole("customer"), klaimVoucherHandler);
 katalog.get("/me/vouchers", requireAuth, requireRole("customer"), voucherSayaHandler);
 

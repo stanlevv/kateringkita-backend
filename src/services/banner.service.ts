@@ -33,7 +33,7 @@ const tidakAda = () => new AppError(404, "NOT_FOUND", "Banner tidak ditemukan.")
 const tidakValid = (fields: Record<string, string[]>) => new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
 
 /** zod + cek gambar sekaligus, agar semua galat kolom keluar dalam satu respons. */
-function rapikan<S extends z.ZodType>(skema: S, body: unknown, prefix: string): z.infer<S> {
+export function rapikan<S extends z.ZodType>(skema: S, body: unknown, prefix: string): z.infer<S> {
   const r = skema.safeParse(body);
   const fields: Record<string, string[]> = {};
   if (!r.success) for (const i of r.error.issues) (fields[i.path.join(".") || "body"] ??= []).push(i.message);
