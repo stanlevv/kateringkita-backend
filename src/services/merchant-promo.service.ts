@@ -62,10 +62,11 @@ export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknow
   const b = objek(body);
   const aktif = aktifDari(b);
   const publik = publikDari(b);
-  if ("type" in b) tanpaGratisLayanan(b.type);
   try {
     const { after, dinyalakan } = await dalamTransaksi(async (conn) => {
       const before = await kunciPromoToko(conn, merchantId, idRaw);
+      // C2: promo toko lama "free_service_fee" tetap berlaku & bisa diubah; yang dilarang hanya mengganti jenis ke sana
+      if ("type" in b && b.type !== before.type) tanpaGratisLayanan(b.type);
       const merged = {
         ...Object.fromEntries(FIELD.map((k) => [k, before[k] instanceof Date ? (before[k] as Date).toISOString() : before[k]])),
         ...Object.fromEntries(FIELD.filter((k) => k in b).map((k) => [k, b[k]])),

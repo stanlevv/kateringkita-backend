@@ -22,8 +22,9 @@ ALTER TABLE orders ADD COLUMN merchant_promo_id INT NULL;
 ALTER TABLE orders ADD COLUMN merchant_discount INT NOT NULL DEFAULT 0;
 ALTER TABLE orders ADD COLUMN platform_promo_id INT NULL;
 ALTER TABLE orders ADD COLUMN platform_discount INT NOT NULL DEFAULT 0;
-ALTER TABLE orders ADD CONSTRAINT fk_orders_merchant_promo FOREIGN KEY (merchant_promo_id) REFERENCES promos(id);
-ALTER TABLE orders ADD CONSTRAINT fk_orders_platform_promo FOREIGN KEY (platform_promo_id) REFERENCES promos(id);
+-- SET NULL seperti orders.promo_id (001): promo yang kuotanya sudah kembali (pesanan batal/kedaluwarsa) tetap bisa dihapus
+ALTER TABLE orders ADD CONSTRAINT fk_orders_merchant_promo FOREIGN KEY (merchant_promo_id) REFERENCES promos(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD CONSTRAINT fk_orders_platform_promo FOREIGN KEY (platform_promo_id) REFERENCES promos(id) ON DELETE SET NULL;
 
 -- satu baris redemption per voucher: pesanan boleh punya 2 baris (toko + platform), promo yang sama tetap sekali per pesanan.
 -- Indeks unik baru dibuat dulu agar FK order_id tetap punya indeks saat indeks unik lama (nama bawaan "order_id") dihapus.

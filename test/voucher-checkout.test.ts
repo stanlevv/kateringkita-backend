@@ -127,6 +127,29 @@ describe("pesanan dua voucher", () => {
     await pesan({ promo_codes: ["TOKO5"] }, "cod").expect(201);
   });
 
+  test("voucher platform yang membuat total Rp 0 ditolak (non-tunai tidak bisa dibayar Rp 0); kuota tidak terpakai", async () => {
+    const t = await promo({ merchant_id: s.idA, code: "TOKOPENUH", type: "fixed", value: 50000 });
+    const g = await promo({ code: "LAYANANGRATIS", type: "free_service_fee" });
+    await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
+    try {
+      expect((await quote({ promo_codes: ["TOKOPENUH"] }).expect(200)).body.data.total).toBe(2000);
+      const msg = ["Total pesanan jadi Rp 0. Lepas voucher platform."];
+      expect((await quote({ promo_codes: ["TOKOPENUH", "LAYANANGRATIS"] }).expect(422)).body.error.fields.promo_codes).toEqual(msg);
+      expect((await pesan({ promo_codes: ["TOKOPENUH", "LAYANANGRATIS"] }).expect(422)).body.error.fields.promo_codes).toEqual(msg);
+      expect([(await promoRow(t)).used_count, (await promoRow(g)).used_count]).toEqual([0, 0]);
+    } finally {
+      await db.query("UPDATE app_settings SET setting_value = '0' WHERE setting_key = 'service_fee'");
+    }
+  });
+
+  test("promo toko yang pernah dipakai pesanan batal bisa dihapus; pesanan lama tetap utuh", async () => {
+    const id = await promo({ merchant_id: s.idA, code: "HAPUSAKU", type: "fixed", value: 1000 });
+    const code = (await pesan({ promo_codes: ["HAPUSAKU"] }).expect(201)).body.data.code;
+    await request(app).post(`/api/v1/orders/${code}/cancel`).set("Authorization", `Bearer ${s.tCust}`).send({}).expect(200);
+    await request(app).delete(`/api/v1/merchant/promos/${id}`).set("Authorization", `Bearer ${s.tA}`).expect(200);
+    expect(await order(code)).toMatchObject({ merchant_promo_id: null, merchant_discount: 1000, status: "cancelled" });
+  });
+
   test("C2: dua voucher gratis biaya layanan tidak bisa digabung", async () => {
     await promo({ merchant_id: s.idA, code: "TOKOGRATIS", type: "free_service_fee" });
     await promo({ code: "PLATGRATIS", type: "free_service_fee" });

@@ -190,6 +190,8 @@ export async function terapkanVoucher(conn: Q, h: Hasil, codes: string[], userId
   h.platform_discount = platform ? potongan(platform, sisaBarang, h.service_fee) : 0;
   h.discount = h.merchant_discount + h.platform_discount;
   h.total = Math.max(0, h.subtotal + h.service_fee - h.discount);
+  // voucher platform hanya non-tunai (C1), dan Midtrans tidak menerima tagihan Rp 0
+  if (platform && h.platform_discount > 0 && h.total <= 0) throw tolakPromo("Total pesanan jadi Rp 0. Lepas voucher platform.");
   return { toko, platform };
 }
 

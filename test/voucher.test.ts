@@ -110,6 +110,16 @@ describe("voucher platform & Voucher Saya", () => {
 });
 
 describe("pengaturan promo", () => {
+  test("promo toko lama gratis biaya layanan tetap bisa diubah selama jenisnya tidak diganti (C2)", async () => {
+    const [r] = await db.query<any>(
+      `INSERT INTO promos (merchant_id, code, type, value, starts_at, ends_at)
+       VALUES (?, 'LAMAGRATIS', 'free_service_fee', 0, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 5 DAY)`, [s.idA],
+    );
+    const p = await request(app).patch(`/api/v1/merchant/promos/${r.insertId}`).set(H(s.tA))
+      .send({ type: "free_service_fee", is_public: false, ends_at: "2099-01-01T00:00:00Z" }).expect(200);
+    expect(p.body.data).toMatchObject({ type: "free_service_fee", is_public: false });
+  });
+
   test("promo toko: tanpa gratis biaya layanan (C2); is_public bisa dimatikan", async () => {
     const isi = { type: "fixed", value: 1000, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
     const r = await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "GRATISTOKO", type: "free_service_fee" }).expect(400);
