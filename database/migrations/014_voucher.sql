@@ -27,8 +27,10 @@ ALTER TABLE orders ADD CONSTRAINT fk_orders_merchant_promo FOREIGN KEY (merchant
 ALTER TABLE orders ADD CONSTRAINT fk_orders_platform_promo FOREIGN KEY (platform_promo_id) REFERENCES promos(id) ON DELETE SET NULL;
 
 -- satu baris redemption per voucher: pesanan boleh punya 2 baris (toko + platform), promo yang sama tetap sekali per pesanan.
--- Indeks unik baru dibuat dulu agar FK order_id tetap punya indeks saat indeks unik lama (nama bawaan "order_id") dihapus.
+-- Indeks unik baru dibuat dulu, plus indeks biasa (order_id) yang persis sama dengan kolom FK, agar FK order_id tetap punya
+-- indeks saat indeks unik lama (nama bawaan "order_id") dihapus — tanpa bergantung pada aturan prefiks indeks (TiDB/MySQL).
 ALTER TABLE promo_redemptions ADD UNIQUE KEY uq_redemption_order_promo (order_id, promo_id);
+ALTER TABLE promo_redemptions ADD INDEX idx_redemption_order (order_id);
 ALTER TABLE promo_redemptions DROP INDEX order_id;
 
 -- backfill: pesanan lama berpromo tunggal dipindah ke slot menurut pemilik promo
