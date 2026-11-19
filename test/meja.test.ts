@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { mejaLimiter } from "../src/middleware/rateLimiter";
+import { kirimNotif } from "./helpers/midtrans";
 import { menuRow, siapCheckout, sisipMenu } from "./helpers/toko";
 
 // F21 pesan dari meja: penjual kelola meja, tamu tanpa login lihat menu → pesan → bayar Snap (di-stub) → notifikasi → status
@@ -24,11 +24,8 @@ const pesan = (body: Record<string, unknown> = {}, tk = token) => request(app).p
 const status = (code: string, tamu: string) => request(app).get(`/api/v1/guest/orders/${code}`).set("X-Guest-Token", tamu);
 const bayar = (code: string, tamu: string, kembali = KEMBALI) =>
   request(app).post(`/api/v1/guest/orders/${code}/pay`).set("X-Guest-Token", tamu).send({ kembali });
-const notif = (o: Record<string, string>) => {
-  const n = { status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: "trx-meja", ...o };
-  const signature_key = createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${KEY}`).digest("hex");
-  return request(app).post("/api/v1/payments/midtrans").send({ ...n, signature_key });
-};
+const notif = (o: Record<string, string>) =>
+  kirimNotif({ status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: "trx-meja", ...o }, KEY);
 const pesanan = async (code: string) => ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 
 beforeAll(async () => {

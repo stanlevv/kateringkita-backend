@@ -2,8 +2,10 @@ import request from "supertest";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
+import { env } from "../src/config/env";
 import { passwordLimiter } from "../src/middleware/rateLimiter";
 import { createAdmin } from "../src/scripts/create-admin";
+import { kirimNotif } from "./helpers/midtrans";
 import { login, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F26: rekening pencairan penjual, saldo & pencatatan pencairan oleh admin super, daftar pengembalian dana Midtrans.
@@ -161,6 +163,24 @@ test("pengembalian dana: hanya dana Midtrans lunas dari pesanan batal/kedaluwars
     .toEqual({ reference: ["Nomor referensi transfer 3–100 karakter."] });
   const [[log]] = await db.query<any[]>("SELECT target_type, target_id, after_json FROM admin_audit_logs WHERE action = 'refund.mark'");
   expect(log).toEqual({ target_type: "order", target_id: tolak, after_json: { amount: t.body.data.amount, reference: "RF-0001" } });
+});
+
+// AUD-24: settlement Midtrans yang dikirim ulang setelah refund ditandai tidak boleh mengembalikan pembayaran menjadi lunas
+test("settlement dikirim ulang setelah refund → tetap refunded, tidak muncul lagi di daftar refund", async () => {
+  env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
+  const code = await bayarLaluBatal("online", "cancelled");
+  await post(`/admin/refunds/${code}`, { reference: "RF-0003" }, tAdmin).expect(200);
+  const status = async () => ((await db.query<any[]>(
+    "SELECT p.status, p.amount, o.payment_status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?", [code],
+  ))[0] as any[])[0];
+  const { amount } = await status();
+  await kirimNotif({ order_id: code, status_code: "200", gross_amount: `${amount}.00`, transaction_status: "settlement" }, "SB-Mid-server-uji")
+    .expect(200);
+  expect(await status()).toMatchObject({ status: "refunded", payment_status: "refunded" });
+  expect((await get("/admin/refunds", tAdmin)).body.data.map((x: { code: string }) => x.code)).not.toContain(code);
+  await post(`/admin/refunds/${code}`, { reference: "RF-0003" }, tAdmin).expect(404);
+  env.MIDTRANS_SERVER_KEY = undefined;
+  vi.unstubAllGlobals();
 });
 
 test("akses: pencairan & pengembalian dana hanya admin super; rekening hanya penjual", async () => {

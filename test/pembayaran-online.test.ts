@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
+import { kirimNotif } from "./helpers/midtrans";
 import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F26: QRIS statis toko (verifikasi manual) dihapus; pre-order bayar online lewat Snap Midtrans (di-stub) → notifikasi → diterima otomatis
@@ -15,11 +16,8 @@ const pesan = (payment_method: string, token = s.tCust) => request(app).post("/a
   .set("Idempotency-Key", randomUUID()).send({ items: [{ menu_id: s.menu, qty: 2 }], pickup_point_id: 1, payment_method });
 const bayar = (code: string, body?: object, token = s.tCust) =>
   request(app).post(`/api/v1/orders/${code}/online`).set("Authorization", `Bearer ${token}`).send(body);
-const notif = (o: Record<string, string>) => {
-  const n = { status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: `trx-${o.order_id}`, ...o };
-  const signature_key = createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${KEY}`).digest("hex");
-  return request(app).post("/api/v1/payments/midtrans").send({ ...n, signature_key });
-};
+const notif = (o: Record<string, string>) =>
+  kirimNotif({ status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: `trx-${o.order_id}`, ...o }, KEY);
 const pesanan = async (code: string) => ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 const stubSnap = () => {
   const f = vi.fn().mockResolvedValue(new Response(JSON.stringify({ token: "snap-uji", redirect_url: SNAP })));

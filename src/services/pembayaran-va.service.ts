@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { env } from "../config/env";
 import { AppError } from "../utils/errors";
-import { BankVa, buatQrisMidtrans, buatSnap, buatVaMidtrans, notifikasiSah } from "../utils/midtrans";
+import { BankVa, buatQrisMidtrans, buatSnap, buatVaMidtrans, notifikasiSah, statusMidtrans } from "../utils/midtrans";
 import { dalamTransaksi } from "./admin-audit.service";
 import { bacaPesanan } from "./pesanan.service";
 import { transisi } from "./pesanan-status.service";
@@ -121,25 +121,30 @@ const STATUS: Record<string, "paid" | "expired" | "failed"> = { settlement: "pai
 
 // F10: notifikasi HTTP Midtrans (rute publik). Sah = signature cocok dan nominal sama dengan pembayaran tersimpan.
 // settlement → transisi pay oleh sistem (holding → confirmed, stok terjual, notifikasi pembeli) lalu payments lunas.
-// Notifikasi berulang aman: baris yang sudah lunas tidak disentuh, transisi kedua ditolak 409.
+// Notifikasi berulang aman: baris yang sudah lunas atau sudah di-refund tidak disentuh (AUD-24), transisi kedua ditolak 409.
 export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Promise<void> {
   if (!notifikasiSah(n)) throw new AppError(403, "FORBIDDEN", "Tanda tangan notifikasi tidak sah.");
-  const baru = STATUS[String(n.transaction_status)];
-  if (!baru) return; // pending: belum ada yang berubah
+  if (!STATUS[String(n.transaction_status)]) return; // pending: belum ada yang berubah
   const code = String(n.order_id);
+  // AUD-23: signature hanya mencakup order_id + status_code + gross_amount; transaction_status bisa diganti pada body
+  // bertanda tangan yang bocor → status, nominal, dan transaction_id diambil dari Get Status Midtrans, bukan dari body.
+  // Midtrans tidak terjangkau → 502 → Midtrans mengirim ulang notifikasi nanti.
+  const s = await statusMidtrans(code);
+  const baru = STATUS[String(s.transaction_status)];
+  if (!baru || String(s.order_id) !== code) return;
   await dalamTransaksi(async (conn) => {
     // VA (pembeli, F10), Snap 'online' (pesanan meja F21, pre-order F26) atau QRIS di aplikasi.
     // Pesanan online bisa punya baris Snap dan QRIS: utamakan baris yang transaction_id-nya cocok.
-    const trx = typeof n.transaction_id === "string" ? n.transaction_id : null;
+    const trx = typeof s.transaction_id === "string" ? s.transaction_id : null;
     const [[p]] = await conn.query<RowDataPacket[]>(
       `SELECT p.id, p.status, p.amount FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE o.code = ? AND p.method IN ('va', 'online', 'qris') AND p.provider = 'midtrans'
        ORDER BY (p.provider_ref <=> ?) DESC, p.id LIMIT 1`,
       [code, trx],
     );
-    if (!p || p.status === "paid") return;
-    if (Number(n.gross_amount) !== p.amount) {
-      console.error(`Notifikasi Midtrans ${code}: nominal ${String(n.gross_amount)} ≠ ${p.amount}, diabaikan`);
+    if (!p || p.status === "paid" || p.status === "refunded") return;
+    if (Number(s.gross_amount) !== p.amount) {
+      console.error(`Notifikasi Midtrans ${code}: nominal ${String(s.gross_amount)} ≠ ${p.amount}, diabaikan`);
       return;
     }
     if (baru === "paid") {
@@ -153,8 +158,8 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
     // Snap baru tahu transaction_id dari notifikasi
     await conn.query(
       `UPDATE payments SET status = ?, paid_at = IF(? = 'paid', UTC_TIMESTAMP(), paid_at), raw_payload = ?, provider_ref = COALESCE(provider_ref, ?)
-       WHERE id = ? AND status <> 'paid'`,
-      [baru, baru, JSON.stringify(n), trx, p.id],
+       WHERE id = ? AND status NOT IN ('paid', 'refunded')`,
+      [baru, baru, JSON.stringify(s), trx, p.id],
     );
   });
 }

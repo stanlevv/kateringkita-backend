@@ -25,6 +25,9 @@ async function panggil(url: string, body?: unknown): Promise<Record<string, any>
   return json;
 }
 
+// Get Status: status transaksi menurut Midtrans sendiri (dipanggil dengan Server Key, jadi tidak bisa dipalsukan pengirim notifikasi)
+export const statusMidtrans = (code: string) => panggil(`${host()}/v2/${encodeURIComponent(code)}/status`);
+
 // Satu VA per pesanan (order_id = kode pesanan); masa berlaku VA tidak melewati hold pesanan.
 // Charge ulang setelah timeout dijawab 406 (order_id sudah dipakai) → ambil VA dari status transaksi.
 export async function buatVaMidtrans(code: string, amount: number, bank: BankVa, menit: number) {
@@ -34,7 +37,7 @@ export async function buatVaMidtrans(code: string, amount: number, bank: BankVa,
     bank_transfer: { bank },
     custom_expiry: { expiry_duration: menit, unit: "minute" },
   });
-  if (r.status_code === "406") r = await panggil(`${host()}/v2/${encodeURIComponent(code)}/status`);
+  if (r.status_code === "406") r = await statusMidtrans(code);
   const va = r.va_numbers?.[0];
   if (!["200", "201"].includes(r.status_code) || !r.transaction_id || !va?.va_number) {
     console.error(`Midtrans charge ${code} gagal: ${r.status_code} ${r.status_message}`);

@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
+import { kirimNotif } from "./helpers/midtrans";
 import { menuRow, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F10: VA Midtrans — checkout VA, POST /orders/:code/va (Midtrans di-stub), notifikasi POST /payments/midtrans
@@ -15,13 +16,10 @@ const pesanVa = () => request(app).post("/api/v1/orders").set("Authorization", `
   .send({ items: [{ menu_id: s.menu, qty: 2 }], pickup_point_id: 1, payment_method: "va" });
 const mintaVa = (code: string, bank: unknown = "bca") =>
   request(app).post(`/api/v1/orders/${code}/va`).set("Authorization", `Bearer ${s.tCust}`).send({ bank });
-// signature sama dengan Midtrans: SHA512(order_id + status_code + gross_amount + server key)
-const notif = (o: Record<string, string>, key = KEY) => {
-  const n = { status_code: "200", gross_amount: "30000.00", transaction_status: "settlement", payment_type: "bank_transfer", ...o };
-  const signature_key = createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${key}`).digest("hex");
-  return request(app).post("/api/v1/payments/midtrans").send({ ...n, signature_key });
-};
-const midtrans = (code: string) => vi.fn().mockResolvedValue(new Response(JSON.stringify({
+const notif = (o: Record<string, string>, key = KEY, jujur = true) =>
+  kirimNotif({ status_code: "200", gross_amount: "30000.00", transaction_status: "settlement", payment_type: "bank_transfer", ...o }, key, jujur);
+// Response baru tiap panggilan: body Response hanya bisa dibaca sekali (charge lalu Get Status)
+const midtrans = (code: string) => vi.fn().mockImplementation(async () => new Response(JSON.stringify({
   status_code: "201", transaction_id: `trx-${code}`, order_id: code, gross_amount: "30000.00", transaction_status: "pending",
   va_numbers: [{ bank: "bca", va_number: VA }],
 })));
@@ -114,5 +112,14 @@ describe("notifikasi Midtrans", () => {
     expect((await bayar(code))[0].status).toBe("pending");
     await notif({ order_id: code, transaction_status: "expire" }).expect(200);
     expect((await bayar(code))[0].status).toBe("expired");
+  });
+
+  // AUD-23: transaction_status tidak ikut ditandatangani; body pending asli (201) yang statusnya diganti tidak boleh melunasi
+  test("body bertanda tangan sah dengan status diganti settlement → dicek ke Get Status Midtrans (masih pending), tidak lunas", async () => {
+    const code = await siapVa();
+    await notif({ order_id: code, status_code: "201", transaction_status: "settlement" }, KEY, false).expect(200);
+    expect(await pesanan(code)).toMatchObject({ status: "holding", payment_status: "pending" });
+    expect((await bayar(code))[0].status).toBe("pending");
+    expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toBe(`https://api.sandbox.midtrans.com/v2/${code}/status`);
   });
 });

@@ -120,7 +120,8 @@ export async function riwayatPencairan(page: number) {
 
 // Dana Midtrans yang harus dikembalikan ke pembeli: lunas tetapi pesanan batal/kedaluwarsa (ditolak penjual, atau dibayar
 // setelah batas waktu habis). Pengembalian dilakukan admin di luar aplikasi (dashboard Midtrans / transfer), lalu ditandai di sini.
-const REFUND = "p.provider = 'midtrans' AND p.status = 'paid' AND o.status IN ('cancelled', 'expired')";
+// refunded_at IS NULL (AUD-24): pembayaran yang pernah ditandai refund tidak masuk antrian lagi walau statusnya berubah
+const REFUND = "p.provider = 'midtrans' AND p.status = 'paid' AND p.refunded_at IS NULL AND o.status IN ('cancelled', 'expired')";
 
 export async function daftarRefund() {
   const [rows] = await db.query<RowDataPacket[]>(
