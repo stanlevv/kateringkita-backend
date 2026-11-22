@@ -118,4 +118,13 @@ describe("pesanan tamu", () => {
     for (let i = 0; i < 5; i++) await pesan({ items: [{ menu_id: s.menu2, qty: 1 }] }).expect(201);
     expect((await pesan({ items: [{ menu_id: s.menu2, qty: 1 }] }).expect(409)).body.error.message).toMatch(/menunggu pembayaran/);
   });
+
+  // AUD-32: tamu anonim tanpa bayar dulu tidak boleh menahan seluruh sisa stok lewat satu meja
+  test("maksimal 30 porsi menunggu per meja", async () => {
+    const besar = await sisipMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
+    await pesan({ items: [{ menu_id: besar, qty: 25 }] }).expect(201);
+    expect((await pesan({ items: [{ menu_id: besar, qty: 6 }] }).expect(409)).body.error.message)
+      .toBe("Maksimal 30 porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.");
+    await pesan({ items: [{ menu_id: besar, qty: 5 }] }).expect(201); // tepat 30 masih boleh
+  });
 });

@@ -40,6 +40,19 @@ export const kodePesanan = (hari: string) => `KK-${hari.replace(/-/g, "")}-${kod
 
 const tidakAda = () => new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
 const dup = (e: unknown) => (e as { code?: string } | null)?.code === "ER_DUP_ENTRY";
+
+// AUD-31/32: porsi yang boleh ditahan sekaligus, agar satu akun atau satu meja QR tidak memborong sisa stok toko
+export const MAKS_PORSI_PEMBELI = 20;
+export const MAKS_PORSI_MEJA = 30;
+export const totalPorsi = (items: { qty: number }[]) => items.reduce((s, i) => s + i.qty, 0);
+// baca berkunci (FOR UPDATE) seperti hitungan pesanan menunggu: data terbaru, dan pemanggil sudah serial per pembeli/meja
+export async function porsiTertahan(conn: PoolConnection, kolom: "customer_id" | "table_id", id: number): Promise<number> {
+  const [[r]] = await conn.query<RowDataPacket[]>(
+    `SELECT COALESCE(SUM(i.qty), 0) AS porsi FROM orders o JOIN order_items i ON i.order_id = o.id
+     WHERE o.${kolom} = ? AND o.status = 'holding' AND o.hold_until > UTC_TIMESTAMP() FOR UPDATE`, [id],
+  );
+  return Number(r.porsi);
+}
 // D7: hanya duplikat pada kunci unik orders.code yang berarti tabrakan kode (MySQL 8 "orders.code", lama/TiDB "code")
 const bentrokKode = (e: unknown) => dup(e) && /for key '(orders\.)?code'/.test(String((e as Error).message));
 const KLAIM_ADA = Symbol("klaim");
@@ -119,6 +132,11 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
       const hari = hariIniWib(new Date(ms));
       const h = periksa(await muatKeranjang(conn, data, { segarkan: true, hari, ms }), data, ms);
       if (h.kurang.length) throw habis(h.kurang);
+      // AUD-31: batas 3 pesanan saja tidak cukup (satu pesanan bisa berisi ratusan porsi): batasi juga porsi yang tertahan.
+      // Setelah cek stok: stok yang memang kurang tetap dijawab OUT_OF_STOCK
+      if (await porsiTertahan(conn, "customer_id", userId) + totalPorsi(data.items) > MAKS_PORSI_PEMBELI) {
+        throw new AppError(409, "CONFLICT", `Maksimal ${MAKS_PORSI_PEMBELI} porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.`);
+      }
       const v = await terapkanVoucher(conn, h, kodeVoucher(data), userId, ms, data.payment_method);
       const dipakai = [v.toko, v.platform].filter((p): p is RowDataPacket => p !== null).sort((a, b) => a.id - b.id);
       for (const p of dipakai) {

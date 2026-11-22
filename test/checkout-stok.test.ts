@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { lepasStok } from "../src/services/pesanan-stok.service";
-import { menuRow, siapCheckout } from "./helpers/toko";
+import { menuRow, siapCheckout, sisipMenu } from "./helpers/toko";
 
 // F06 Task 5: lepasStok untuk F07/F08 (R-01, R-03, R-12, D14)
 let s: Awaited<ReturnType<typeof siapCheckout>>;
@@ -80,4 +80,15 @@ test("dua menu (baris menu sama dijumlah) → keduanya diperbarui; stock_date NU
   await db.query("UPDATE orders SET stock_date = NULL WHERE id = ?", [b]);
   await lepas(b, "terjual");
   expect(await stok(s.menu)).toEqual({ held: 2, sold: 3, total: 5 });
+});
+
+// AUD-31: batas 3 pesanan menunggu tidak cukup (satu pesanan bisa berisi ratusan porsi); porsi tertahan juga dibatasi
+test("satu pembeli maksimal 20 porsi menunggu", async () => {
+  const besar = await sisipMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
+  await pesan([{ menu_id: besar, qty: 15 }]);
+  const r = await request(app).post("/api/v1/orders").set("Authorization", `Bearer ${s.tCust}`).set("Idempotency-Key", randomUUID())
+    .send({ items: [{ menu_id: besar, qty: 6 }], pickup_point_id: 1, payment_method: "cod" }).expect(409);
+  expect(r.body.error.message).toBe("Maksimal 20 porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.");
+  expect((await menuRow(besar)).held_today).toBe(15);
+  await pesan([{ menu_id: besar, qty: 5 }]); // tepat 20 masih boleh
 });

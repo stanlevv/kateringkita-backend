@@ -9,7 +9,7 @@ import { DARI, jam, JOIN_FAVORIT, kartu, KOLOM_KARTU, TAMPIL, tokoBuka, TOKO_TAM
 import { hariIniWib } from "./merchant-kuota.service";
 import { idToko } from "./merchant-menu.service";
 import { muatKeranjang, periksa } from "./pesanan-keranjang.service";
-import { habis, muatItem, sisipPesanan, tahanStokDanItem } from "./pesanan.service";
+import { habis, MAKS_PORSI_MEJA, muatItem, porsiTertahan, sisipPesanan, tahanStokDanItem, totalPorsi } from "./pesanan.service";
 
 // F21 pesan dari meja: QR meja → menu tanpa login → pesanan tamu → bayar lewat Snap → status lewat token tamu.
 // Token tamu hanya dipegang peramban tamu; DB menyimpan SHA-256-nya.
@@ -133,6 +133,10 @@ export async function pesanMeja(token: string, data: PesananMejaInput) {
     const h = periksa(await muatKeranjang(conn, q, { segarkan: true, hari, ms }), q, ms, { tanpaTitikTemu: true });
     if (h.merchant.id !== t.merchant_id) throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { items: ["Menu bukan dari toko ini."] });
     if (h.kurang.length) throw habis(h.kurang);
+    // AUD-32: tamu anonim tanpa bayar dulu; batasi porsi tertahan per meja, bukan hanya jumlah pesanannya (setelah cek stok)
+    if (await porsiTertahan(conn, "table_id", t.id) + totalPorsi(data.items) > MAKS_PORSI_MEJA) {
+      throw konflik(`Maksimal ${MAKS_PORSI_MEJA} porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.`);
+    }
     const { orderId, code } = await sisipPesanan(conn, hari,
       `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, table_id, guest_token_hash, status, customer_name, customer_phone,
          note, subtotal, discount, service_fee, total, payment_method, payment_status, hold_until, stock_date)
