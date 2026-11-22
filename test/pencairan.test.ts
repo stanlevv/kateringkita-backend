@@ -13,11 +13,14 @@ import { login, pesanDulu, siapCheckout } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 let tAdmin: string;
 let asOf: string;
+// AUD-34: versi rekening (account.updated_at) yang dilihat admin di daftar saldo saat mentransfer
+let versiRekening: string | null = null;
 
 const get = (u: string, t: string) => request(app).get(`/api/v1${u}`).set("Authorization", `Bearer ${t}`);
 const post = (u: string, b: object, t: string) => request(app).post(`/api/v1${u}`).set("Authorization", `Bearer ${t}`).send(b);
 const rekening = (b: object) => request(app).put("/api/v1/merchant/payout-account").set("Authorization", `Bearer ${s.tA}`).send(b);
-const cairkan = (b: object) => post("/admin/payouts", { merchant_id: s.idA, until: asOf, reference: "TRF-0001", ...b }, tAdmin);
+const cairkan = (b: object) =>
+  post("/admin/payouts", { merchant_id: s.idA, until: asOf, reference: "TRF-0001", account_updated_at: versiRekening, ...b }, tAdmin);
 const REKENING = { bank: "bca", account_number: "012 345-678.901", account_name: " Siti Aminah ", password: "rahasia123" };
 
 const promo = async (merchantId: number | null, code: string) => ((await db.query<any>(
@@ -101,6 +104,7 @@ test("saldo: hanya VA/online lunas & selesai; bagian penjual = subtotal − prom
 test("catat pencairan: wajib rekening, nominal harus cocok, pesanan setelah as_of tidak ikut, tidak bisa dobel", async () => {
   expect((await cairkan({ amount: 58000 }).expect(409)).body.error.message).toBe("Penjual belum mengisi rekening pencairan.");
   const rek = await rekening(REKENING).expect(200);
+  versiRekening = rek.body.data.account.updated_at;
   expect(rek.body.data.account).toEqual({
     bank: "bca", bank_name: "BCA", account_number: "012345678901", account_name: "Siti Aminah", updated_at: expect.any(String),
   });
@@ -125,6 +129,19 @@ test("catat pencairan: wajib rekening, nominal harus cocok, pesanan setelah as_o
   const [[log]] = await db.query<any[]>("SELECT target_type, target_id, after_json FROM admin_audit_logs WHERE action = 'payout.create'");
   expect(log).toMatchObject({ target_type: "merchant", target_id: String(s.idA) });
   expect(log.after_json).toEqual({ payout_id: r.body.data.id, amount: 58000, orders: 3, reference: "TRF-0001" });
+});
+
+// AUD-34: pencatatan terikat ke rekening yang dilihat admin; rekening diganti sesudahnya → 409, tidak tercatat ke rekening baru
+test("rekening diganti setelah daftar saldo dimuat → pencatatan 409", async () => {
+  await db.query("UPDATE merchants SET payout_updated_at = DATE_SUB(payout_updated_at, INTERVAL 1 MINUTE) WHERE id = ?", [s.idA]);
+  const lama = (await get("/admin/payouts/balances", tAdmin).expect(200)).body.data.rows[0]?.account?.updated_at
+    ?? (await get("/merchant/payouts", s.tA).expect(200)).body.data.account.updated_at;
+  await rekening({ ...REKENING, account_number: "999 888 777 666" }).expect(200);
+  const r = await cairkan({ amount: 15000, account_updated_at: lama }).expect(409);
+  expect(r.body.error.message).toBe("Rekening penjual berubah. Muat ulang lalu periksa lagi.");
+  expect((await cairkan({ amount: 15000, account_updated_at: undefined }).expect(409)).body.error.message)
+    .toBe("Rekening penjual berubah. Muat ulang lalu periksa lagi.");
+  await rekening(REKENING).expect(200);
 });
 
 test("validasi pencairan → 400; penjual tidak dikenal → 404", async () => {

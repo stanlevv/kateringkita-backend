@@ -85,10 +85,17 @@ export async function daftarSaldo() {
 export async function catatPencairan(adminId: number, input: PencairanInput) {
   return dalamTransaksi(async (conn) => {
     const [[m]] = await conn.query<RowDataPacket[]>(
-      "SELECT id, payout_bank, payout_account_number, payout_account_name FROM merchants WHERE id = ?", [input.merchant_id],
+      // FOR UPDATE (AUD-34): rekening tidak bisa diganti penjual di tengah pencatatan
+      "SELECT id, payout_bank, payout_account_number, payout_account_name, payout_updated_at FROM merchants WHERE id = ? FOR UPDATE",
+      [input.merchant_id],
     );
     if (!m) throw new AppError(404, "NOT_FOUND", "Penjual tidak ditemukan.");
     if (!m.payout_bank) throw konflik("Penjual belum mengisi rekening pencairan.");
+    // AUD-34: pencatatan terikat ke rekening yang dilihat admin saat mentransfer, bukan rekening yang berlaku sekarang
+    const versi = input.account_updated_at ? new Date(input.account_updated_at).getTime() : NaN;
+    if (!(m.payout_updated_at instanceof Date) || versi !== m.payout_updated_at.getTime()) {
+      throw konflik("Rekening penjual berubah. Muat ulang lalu periksa lagi.");
+    }
     // hanya baris orders yang dikunci (tanpa join): pencatatan kembar menunggu di sini, lalu melihat payout_id terisi → 409
     const [os] = await conn.query<RowDataPacket[]>(
       `SELECT o.id FROM orders o WHERE o.merchant_id = ? AND ${LAYAK} AND o.completed_at <= ? FOR UPDATE`, [m.id, new Date(input.until)],

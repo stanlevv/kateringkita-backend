@@ -30,6 +30,8 @@ export const pencairanSchema = z.object({
   until: z.iso.datetime({ offset: true, error: "Waktu saldo tidak valid. Muat ulang halaman." }),
   reference: referensi,
   note: z.string({ error: "Catatan maksimal 255 karakter." }).trim().max(255, "Catatan maksimal 255 karakter.").nullish().transform((s) => s || null),
+  // AUD-34: account.updated_at dari daftar saldo = rekening yang dilihat admin saat mentransfer; kosong/berbeda → 409
+  account_updated_at: z.iso.datetime({ offset: true, error: "Versi rekening tidak valid. Muat ulang halaman." }).nullish(),
 }, { error: "Data pencairan tidak valid." });
 
 export const refundSchema = z.object({ reference: referensi }, { error: "Data pengembalian dana tidak valid." });
