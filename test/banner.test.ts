@@ -43,8 +43,20 @@ beforeEach(async () => {
 afterAll(() => {
   isiR2(false);
 });
+// AUD-36: pengajuan baru bisa disetujui setelah URL unggah (presign) gambarnya kedaluwarsa; tes memundurkan waktunya
+const lewatJendela = () => db.query("UPDATE banners SET updated_at = updated_at - INTERVAL 10 MINUTE");
 
 describe("penjual mengajukan banner", () => {
+  test("baru diajukan → belum bisa disetujui selama URL unggah gambarnya masih berlaku (409)", async () => {
+    const id = (await ajukan().expect(201)).body.data.id;
+    const r = await admin("patch", `/banners/${id}`, { status: "disetujui" }).expect(409);
+    expect(r.body.error.message).toBe("Gambar banner baru saja diunggah. Setujui setelah 6 menit.");
+    await admin("patch", `/banners/${id}`, { status: "ditolak", catatan: "Gambar buram" }).expect(200); // menolak tetap boleh
+    await lewatJendela();
+    await request(app).patch(`/api/v1/merchant/banners/${id}`).set(H(s.tA)).send({ title: "Judul baru" }).expect(200);
+    await admin("patch", `/banners/${id}`, { status: "disetujui" }).expect(409); // diubah lagi → jendela mulai dari awal
+  });
+
   test("status menunggu, tidak tampil publik; maks 1 banner aktif per toko", async () => {
     const r = await ajukan().expect(201);
     expect(r.body.data).toMatchObject({ title: "Diskon pembukaan", target: "merchant", status: "menunggu", catatan: null, promo: null });
@@ -64,6 +76,7 @@ describe("penjual mengajukan banner", () => {
 
   test("diubah setelah disetujui → kembali menunggu; hapus", async () => {
     const id = (await ajukan().expect(201)).body.data.id;
+    await lewatJendela();
     await admin("patch", `/banners/${id}`, { status: "disetujui" }).expect(200);
     const u = await request(app).patch(`/api/v1/merchant/banners/${id}`).set(H(s.tA)).send({ title: "Judul baru" }).expect(200);
     expect(u.body.data).toMatchObject({ title: "Judul baru", status: "menunggu" });
@@ -81,6 +94,7 @@ describe("admin meninjau & membuat banner", () => {
       .toEqual(["Tulis alasan penolakan (3–300 karakter)."]);
     await admin("patch", `/banners/${id}`, { status: "ditolak", catatan: "Gambar buram" }).expect(200);
     expect((await request(app).get("/api/v1/merchant/banners").set(H(s.tA))).body.data[0]).toMatchObject({ status: "ditolak", catatan: "Gambar buram" });
+    await lewatJendela();
     await admin("patch", `/banners/${id}`, { status: "disetujui" }).expect(200);
     const p = (await publik(s.tCust).expect(200)).body.data;
     expect(p).toEqual([{
@@ -93,6 +107,7 @@ describe("admin meninjau & membuat banner", () => {
 
   test("banner platform dari admin langsung tayang, dulu dari banner toko; urutan sort_order", async () => {
     const t = (await ajukan().expect(201)).body.data.id;
+    await lewatJendela();
     await admin("patch", `/banners/${t}`, { status: "disetujui" }).expect(200);
     const isi = { image_url: fotoUrl("platform/banner/"), starts_at: jam(-1), ends_at: jam(24) };
     const a = (await admin("post", "/banners", { ...isi, title: "Voucher KateringKita", target: "promo", promo_id: promoPlat, sort_order: 2 }).expect(201)).body.data;
@@ -110,6 +125,7 @@ describe("admin meninjau & membuat banner", () => {
     await admin("post", "/banners", { ...isi, target: "promo", promo_id: mati, starts_at: jam(-1), ends_at: jam(24) }).expect(201);
     await db.query("UPDATE promos SET is_active = FALSE WHERE id = ?", [mati]);
     const t = (await ajukan().expect(201)).body.data.id;
+    await lewatJendela();
     await admin("patch", `/banners/${t}`, { status: "disetujui" }).expect(200);
     await db.query("UPDATE merchants SET verification_status = 'pending' WHERE id = ?", [s.idA]);
     expect((await publik()).body.data).toEqual([]);

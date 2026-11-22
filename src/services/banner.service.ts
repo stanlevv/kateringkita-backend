@@ -5,6 +5,7 @@ import {
   BannerAdmin, BannerToko, TinjauBanner, UbahBannerToko, bannerAdminSchema, bannerTokoSchema, tinjauBannerSchema, ubahBannerTokoSchema,
 } from "../dto/banner.dto";
 import { AppError } from "../utils/errors";
+import { PRESIGN_DETIK } from "../utils/r2";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { jam } from "./katalog.service";
 import { idToko } from "./merchant-menu.service";
@@ -178,6 +179,8 @@ export async function buatBannerAdmin(adminId: number, body: unknown) {
 }
 
 const AKSI: Record<string, string> = { disetujui: "banner.approve", ditolak: "banner.reject", nonaktif: "banner.deactivate" };
+// masa berlaku presign + 1 menit toleransi selisih jam
+const JEDA_SETUJUI_DETIK = PRESIGN_DETIK + 60;
 
 /** Status (setujui / tolak + alasan / nonaktifkan) & urutan untuk semua banner; isi hanya untuk banner platform. */
 export async function tinjauBanner(adminId: number, idRaw: unknown, body: unknown) {
@@ -190,6 +193,14 @@ export async function tinjauBanner(adminId: number, idRaw: unknown, body: unknow
   const d: TinjauBanner = r.data;
   const id = await dalamTransaksi(async (conn) => {
     const b = await kunci(conn, "banners", idRaw, { notFound: "Banner tidak ditemukan." });
+    // AUD-36: URL unggah (presign PUT) bisa dipakai ulang selama berlaku, jadi isi gambar pengajuan penjual baru pasti
+    // setelah URL itu kedaluwarsa; pengajuan/ubahan penjual memperbarui updated_at
+    if (d.status === "disetujui" && b.merchant_id !== null && b.status === "menunggu") {
+      const [[u]] = await conn.query<RowDataPacket[]>("SELECT TIMESTAMPDIFF(SECOND, updated_at, CURRENT_TIMESTAMP) AS umur FROM banners WHERE id = ?", [b.id]);
+      if (Number(u.umur) < JEDA_SETUJUI_DETIK) {
+        throw new AppError(409, "CONFLICT", `Gambar banner baru saja diunggah. Setujui setelah ${JEDA_SETUJUI_DETIK / 60} menit.`);
+      }
+    }
     const isi = b.merchant_id === null
       ? { title: d.title, image_url: d.image_url, starts_at: d.starts_at && new Date(d.starts_at), ends_at: d.ends_at && new Date(d.ends_at) }
       : {};
