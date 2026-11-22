@@ -64,7 +64,7 @@ export async function daftarSaldo() {
   const [[w]] = await db.query<RowDataPacket[]>("SELECT UTC_TIMESTAMP() AS now");
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT m.id AS merchant_id, m.business_name, m.payout_bank, m.payout_account_number, m.payout_account_name, m.payout_updated_at,
-       COUNT(*) AS orders, SUM(${BAGIAN}) AS amount, MIN(o.completed_at) AS since
+       COUNT(*) AS orders, SUM(${BAGIAN}) AS amount, SUM(o.platform_discount) AS platform_discount, MIN(o.completed_at) AS since
      FROM ${DARI} JOIN merchants m ON m.id = o.merchant_id
      WHERE ${LAYAK} AND o.completed_at <= ?
      GROUP BY m.id, m.business_name, m.payout_bank, m.payout_account_number, m.payout_account_name, m.payout_updated_at
@@ -75,7 +75,8 @@ export async function daftarSaldo() {
     as_of: w.now,
     rows: rows.map((r) => ({
       merchant_id: r.merchant_id, business_name: r.business_name, account: rekening(r),
-      amount: Number(r.amount), orders: Number(r.orders), since: r.since,
+      // AUD-25: batas voucher platform per akun bisa dipanen penjual lewat akun palsu; porsi besar = periksa dulu sebelum transfer
+      amount: Number(r.amount), orders: Number(r.orders), platform_discount: Number(r.platform_discount), since: r.since,
     })),
   };
 }

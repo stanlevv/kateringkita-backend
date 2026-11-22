@@ -92,7 +92,8 @@ test("saldo: hanya VA/online lunas & selesai; bagian penjual = subtotal − prom
   const r = await get("/admin/payouts/balances", tAdmin).expect(200);
   asOf = r.body.data.as_of;
   expect(r.body.data.rows).toEqual([
-    { merchant_id: s.idA, business_name: "Dapur Siti", account: null, amount: 58000, orders: 3, since: expect.any(String) },
+    // platform_discount (AUD-25): voucher platform yang dibayar platform di pesanan saldo ini, dicek admin sebelum transfer
+    { merchant_id: s.idA, business_name: "Dapur Siti", account: null, amount: 58000, orders: 3, platform_discount: 6000, since: expect.any(String) },
   ]);
   expect((await get("/merchant/payouts", s.tA)).body.data.balance).toMatchObject({ amount: 58000, orders: 3 });
 });
