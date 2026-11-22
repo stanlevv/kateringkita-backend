@@ -16,9 +16,10 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
     res.status(409).json({ error: { code: "CONFLICT", message: "Data sudah terdaftar." } });
     return;
   }
-  // error body-parser (JSON rusak, body terlalu besar, charset salah) membawa `type` + status 4xx
+  // error body-parser (JSON rusak, body terlalu besar, charset salah) membawa `type` + status 4xx; URIError dari path
+  // dengan persen rusak (mis. /tables/%ZZ) membawa status 400 tanpa `type` (AUD-44): galat permintaan, bukan galat server
   const { type, status } = (err ?? {}) as { type?: string; status?: number };
-  if (type && status && status >= 400 && status < 500) {
+  if (status && status >= 400 && status < 500) {
     const message = type === "entity.parse.failed" ? "Format JSON tidak valid." : "Permintaan tidak valid.";
     res.status(status).json({ error: { code: "VALIDATION_ERROR", message } });
     return;

@@ -62,6 +62,14 @@ describe("pencatatan", () => {
     expect(r).toMatchObject({ level: "slow", status: 200 });
     expect(r.duration_ms).toBeGreaterThanOrEqual(2000);
   });
+
+  // AUD-44: URL rusak dari siapa saja (URIError berstatus 400) bukan galat server: jawab 400, jangan isi server_logs
+  test("path dengan persen rusak → 400, tidak tercatat", async () => {
+    const r = await request(app).get("/api/v1/tables/%ZZ").set("X-Request-Id", "uji-persen").expect(400);
+    expect(r.body.error.code).toBe("VALIDATION_ERROR");
+    await new Promise((x) => setTimeout(x, 300)); // pencatatan berjalan setelah respons
+    expect((await db.query<any[]>("SELECT id FROM server_logs WHERE request_id = 'uji-persen'"))[0]).toEqual([]);
+  });
 });
 
 describe("dashboard admin", () => {
