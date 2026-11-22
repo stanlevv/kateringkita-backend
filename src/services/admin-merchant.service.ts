@@ -117,7 +117,8 @@ export async function detailPenjual(id: number) {
   );
   const { data: logs } = await daftarLog({ page: 1, limit: 10, targetType: "merchant", targetId: String(id) });
   const profile = Object.fromEntries(
-    Object.entries(r).filter((e) => notChk(e) && !e[0].startsWith("owner_")),
+    // payout_* (AUD-26): rekening pencairan hanya untuk admin super lewat /payouts, sedangkan detail ini terbuka untuk semua tier
+    Object.entries(r).filter((e) => notChk(e) && !e[0].startsWith("owner_") && !e[0].startsWith("payout_")),
   );
   return {
     ...profile,

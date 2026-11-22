@@ -180,6 +180,14 @@ test("q dengan _ dicocokkan apa adanya", async () => {
   expect((await get("/merchants?q=Dapur Siti")).body.data).toHaveLength(1);
 });
 
+// AUD-26: rekening pencairan hanya untuk admin super lewat /payouts; detail penjual terbuka untuk semua tier admin
+test("detail penjual tidak membawa rekening pencairan", async () => {
+  await db.query("UPDATE merchants SET payout_bank = 'bca', payout_account_number = '0123456789', payout_account_name = 'Siti' WHERE id = ?", [sitiId]);
+  const d = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
+  expect(Object.keys(d).filter((k) => k.startsWith("payout_"))).toEqual([]);
+  expect(JSON.stringify(d)).not.toContain("0123456789");
+});
+
 test("detail: merchant_type_name dan menu_count", async () => {
   const d = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
   expect(typeof d.merchant_type_name).toBe("string");
