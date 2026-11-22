@@ -78,7 +78,8 @@ test("tanpa token -> 401", async () => {
 
 afterEach(() => vi.restoreAllMocks());
 
-test("UPDATE hash gagal -> 500, sesi lain sudah dicabut, sandi lama tetap berlaku", async () => {
+// AUD-29: hash ditulis sebelum sesi dicabut, jadi kegagalan di langkah ini belum mengubah apa pun (aman diulang)
+test("UPDATE hash gagal -> 500, belum ada yang berubah: sesi lain tetap, sandi lama tetap berlaku", async () => {
   const orig = db.query.bind(db) as (...a: unknown[]) => Promise<unknown>;
   vi.spyOn(db, "query").mockImplementation(((sql: unknown, ...rest: unknown[]) =>
     typeof sql === "string" && sql.startsWith("UPDATE users SET password_hash")
@@ -87,6 +88,6 @@ test("UPDATE hash gagal -> 500, sesi lain sudah dicabut, sandi lama tetap berlak
   const res = await change({ current_password: "rahasia123", new_password: "baru12345" }, tokenA);
   expect(res.status).toBe(500);
   vi.restoreAllMocks();
-  await me(tokenB).expect(401);
+  await me(tokenB).expect(200);
   await login("rahasia123").expect(200);
 });

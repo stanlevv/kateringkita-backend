@@ -203,13 +203,13 @@ export async function login(input: LoginInput, userAgent?: string) {
   const expiresIn = (input.client === "web" ? env.JWT_TTL_WEB : env.JWT_TTL_MOBILE) as SignOptions["expiresIn"];
   const token = jwt.sign({ sub: String(row.id), role: row.role }, env.JWT_SECRET, { jwtid: jti, expiresIn });
   const expiresAt = new Date((jwt.decode(token) as JwtPayload).exp! * 1000);
-  await db.query("INSERT INTO auth_sessions (user_id, jti, client, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)", [
-    row.id,
-    jti,
-    input.client,
-    userAgent?.slice(0, 255) ?? null,
-    expiresAt,
-  ]);
+  // AUD-29: sesi hanya dibuat bila hash di DB masih hash yang tadi dicocokkan. Sandi diganti di antara compare dan INSERT
+  // → 0 baris; INSERT sebelum hash baru ditulis → ikut dicabut, karena ganti/reset sandi mencabut sesi setelah menulis hash
+  const [ins] = await db.query<ResultSetHeader>(
+    "INSERT INTO auth_sessions (user_id, jti, client, user_agent, expires_at) SELECT id, ?, ?, ?, ? FROM users WHERE id = ? AND password_hash = ?",
+    [jti, input.client, userAgent?.slice(0, 255) ?? null, expiresAt, row.id, row.password_hash],
+  );
+  if (!ins.affectedRows) throw new AppError(401, "UNAUTHENTICATED", "Email/WA atau password salah.");
   return { token, expires_at: expiresAt.toISOString(), user: toPublicUser(row) };
 }
 
@@ -223,10 +223,11 @@ export async function changePassword(userId: number, currentJti: string, input: 
   const [rows] = await db.query<RowDataPacket[]>("SELECT password_hash FROM users WHERE id = ?", [userId]);
   await assertPassword(input.current_password, rows[0].password_hash);
   const hash = await bcrypt.hash(input.new_password, BCRYPT_COST);
-  // sesi lain dicabut lebih dulu: bila langkah kedua gagal, pengguna keluar di tempat lain dan sandi tetap lama, jadi ulang aman
+  // AUD-29: hash baru ditulis lebih dulu, lalu sesi lain dicabut, agar login yang sedang berjalan dengan sandi lama tidak lolos
+  // (lihat login). Bila pencabutan gagal, mengganti sandi sekali lagi (dengan sandi baru) mencabutnya.
+  await db.query("UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?", [hash, userId]);
   await db.query(
     "UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND jti <> ? AND revoked_at IS NULL",
     [userId, currentJti],
   );
-  await db.query("UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?", [hash, userId]);
 }

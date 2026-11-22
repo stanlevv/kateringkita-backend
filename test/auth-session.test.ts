@@ -1,6 +1,7 @@
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import request from "supertest";
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
@@ -122,4 +123,26 @@ test("merchant lolos requireRole di route menu penjual", async () => {
 test("/me merchant: tidak ada password_hash di mana pun dalam body", async () => {
   const res = await me(merchantToken);
   expect(JSON.stringify(res.body)).not.toContain("password_hash");
+});
+
+// AUD-29: login yang sudah lolos bcrypt.compare dengan sandi lama tidak boleh mendapat sesi setelah sandi diganti
+test("login yang dijeda setelah compare, lalu sandi diganti → login itu 401", async () => {
+  const asli = bcrypt.compare.bind(bcrypt) as (a: string, b: string) => Promise<boolean>;
+  let lepas!: () => void;
+  const gerbang = new Promise<void>((r) => (lepas = r));
+  let sampai!: () => void;
+  const dijeda = new Promise<void>((r) => (sampai = r));
+  vi.spyOn(bcrypt, "compare").mockImplementationOnce((async (a: string, b: string) => {
+    const ok = await asli(a, b);
+    sampai();
+    await gerbang;
+    return ok;
+  }) as never);
+  const telat = login("budi@mail.com").then((r) => r);
+  await dijeda;
+  await request(app).put("/api/v1/me/password").set("Authorization", `Bearer ${customerToken}`)
+    .send({ current_password: "rahasia123", new_password: "sandibaru123" }).expect(204);
+  lepas();
+  expect((await telat).status).toBe(401);
+  vi.restoreAllMocks();
 });

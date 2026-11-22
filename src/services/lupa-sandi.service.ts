@@ -43,7 +43,7 @@ export async function resetSandi(input: ResetPasswordInput) {
   // UPDATE bersyarat: dua reset paralel dengan kode sama → hanya satu yang lolos
   const [pakai] = await db.query<ResultSetHeader>("UPDATE password_resets SET used_at = UTC_TIMESTAMP() WHERE id = ? AND used_at IS NULL", [r.id]);
   if (!pakai.affectedRows) throw salahKode();
-  // semua sesi dicabut lebih dulu, sama dengan changePassword
-  await db.query("UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL", [r.user_id]);
+  // AUD-29: urutan sama dengan changePassword: hash baru dulu, baru semua sesi dicabut
   await db.query("UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?", [await bcrypt.hash(input.password, BCRYPT_COST), r.user_id]);
+  await db.query("UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL", [r.user_id]);
 }
