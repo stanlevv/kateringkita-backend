@@ -19,7 +19,7 @@ export async function kirimPengumuman(adminId: number, p: PengumumanInput) {
 }
 
 // Broadcast: promo toko yang aktif dan belum berakhir → notifikasi tipe "promo" ke pembeli yang memfavoritkan menu toko itu.
-// shortcut: dikirim setiap kali promo diaktifkan (mati-hidup berulang = notifikasi berulang); beri jeda per promo bila dikeluhkan
+// AUD-43: satu notifikasi per promo per penerima per 24 jam, jadi mati-nyala berulang tidak membanjiri pemfavorit
 export async function kabariPromoToko(p: RowDataPacket) {
   // AUD-27: kode tersembunyi (is_public = 0) hanya dibagikan penjual sendiri, jangan disiarkan
   if (!p.is_active || !p.is_public || new Date(p.ends_at).getTime() <= Date.now()) return;
@@ -34,7 +34,9 @@ export async function kabariPromoToko(p: RowDataPacket) {
     `INSERT INTO notifications (user_id, type, title, body, data, created_at)
      SELECT DISTINCT f.user_id, 'promo', ?, ?, JSON_OBJECT('promo_code', ?, 'merchant_id', ?), UTC_TIMESTAMP()
      FROM favorites f JOIN menus x ON x.id = f.menu_id JOIN users u ON u.id = f.user_id
-     WHERE x.merchant_id = ? AND x.deleted_at IS NULL AND u.is_active`,
-    [title, body, p.code, p.merchant_id, p.merchant_id],
+     WHERE x.merchant_id = ? AND x.deleted_at IS NULL AND u.is_active
+       AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id = f.user_id AND n.type = 'promo'
+         AND JSON_UNQUOTE(JSON_EXTRACT(n.data, '$.promo_code')) = ? AND n.created_at > UTC_TIMESTAMP() - INTERVAL 24 HOUR)`,
+    [title, body, p.code, p.merchant_id, p.merchant_id, p.code],
   );
 }
