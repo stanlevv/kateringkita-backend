@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)
 ![MySQL / TiDB](https://img.shields.io/badge/TiDB%20Cloud-MySQL%208-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-489%20Passed-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-714%20Tes-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **RESTful API tangguh dan berkinerja tinggi untuk KateringKita — platform marketplace katering kampus terpercaya.**
@@ -64,12 +64,48 @@
 | F26 | Semua non-tunai lewat Midtrans (VA + bayar online Snap untuk pre-order), rekening & pencairan dana toko, daftar refund admin | Selesai |
 | — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
 | — | Tiket bantuan (CS) dua arah pembeli ↔ tim admin, notifikasi balasan | Selesai |
+| — | Voucher: klaim voucher, Voucher Saya, voucher tersembunyi, maksimal satu voucher toko + satu voucher platform per pesanan | Selesai |
+| — | Banner beranda (diajukan penjual, disetujui admin) dan pop-up promo aplikasi mobile yang diatur admin | Selesai |
+| — | Perbaikan hasil audit keamanan November 2026 (lihat bagian Keamanan di bawah) | Sebagian |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
 
 ---
 
 ## 🛠️ Arsitektur & Tumpukan Teknologi
+
+```mermaid
+flowchart LR
+  subgraph Klien
+    MB["Aplikasi pembeli<br/>Flutter (Android + web)"]
+    WB["Dashboard penjual & admin<br/>Next.js 16 · Vercel"]
+    MJ["Pesan dari meja<br/>PWA /meja (QR)"]
+  end
+  subgraph Heroku
+    API["REST API /api/v1<br/>Express 5 · TypeScript"]
+    JOB["Job kedaluwarsa<br/>(di proses yang sama)"]
+  end
+  DB[("TiDB Cloud<br/>MySQL 8")]
+  R2[("Cloudflare R2<br/>foto")]
+  MT["Midtrans<br/>VA · Snap · QRIS"]
+  AI["AI gateway<br/>Gemini · Groq · OpenRouter · NIM"]
+  EM["SMTP<br/>OTP email"]
+
+  MB -- "Bearer JWT" --> API
+  WB -- "server-side, cookie httpOnly" --> API
+  MJ -- "token tamu" --> API
+  API --> DB
+  JOB --> DB
+  API -- "presigned URL" --> R2
+  MB -. "unggah/unduh foto" .-> R2
+  WB -. "unggah/unduh foto" .-> R2
+  API -- "charge + Get Status" --> MT
+  MT -- "notifikasi bertanda tangan" --> API
+  API -- "prompt aman + skema JSON" --> AI
+  API --> EM
+```
+
+Semua aturan bisnis ada di backend: aplikasi pembeli dan dashboard tidak pernah menyentuh database, Midtrans, atau penyedia AI secara langsung.
 
 - **Bahasa & Runtime:** TypeScript 5.8 & Node.js ≥ 22.12 (Production di Heroku dengan Node 24).
 - **Web Framework:** Express 5.2.
@@ -94,10 +130,10 @@ src/
 ├── services/          <fitur>[-bagian].service.ts: aturan bisnis dan kueri SQL
 ├── dto/               <fitur>[-bagian].dto.ts: skema zod untuk body/query dan tipe inputnya
 ├── middleware/        auth.ts (sesi & peran), rateLimiter.ts, validate.ts, errorHandler.ts, requestLogger.ts
-├── utils/             errors.ts (AppError), r2.ts (URL Cloudflare R2), mail.ts (SMTP), gemini.ts (Gemini REST)
+├── utils/             errors.ts (AppError), r2.ts (URL Cloudflare R2), mail.ts (SMTP), midtrans.ts, kripto.ts (enkripsi key AI), prompt-aman.ts (filter injeksi & anonimisasi)
 └── scripts/           migrate.ts, seed-demo.ts, create-admin.ts (dijalankan lewat npm run)
 database/
-└── migrations/        001_init.sql … 012_tiket_bantuan.sql (berurutan, satu kali jalan per database)
+└── migrations/        001_init.sql … 016_popup.sql (berurutan, satu kali jalan per database)
 test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
 ```
 
@@ -116,7 +152,7 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **Toko harus diverifikasi admin** sebelum tampil di katalog dan bisa menerima pesanan.
 - **Idempotensi checkout.** Header `Idempotency-Key` yang sama menghasilkan pesanan yang sama, bukan pesanan ganda.
 - **Metode bayar (F10, F26).** Checkout `payment_method`: `cod` (tunai, penjual menekan Konfirmasi), `va`, atau `online`. QRIS statis toko dengan verifikasi manual penjual dihapus di F26; `qris` hanya ada di data lama dan ditolak `400` di checkout. Kontrak mobile: [`docs/pembayaran.md`](docs/pembayaran.md).
-- **Virtual Account Midtrans (F10).** Checkout `payment_method: "va"`, lalu pembeli memilih bank (BCA, BNI, BRI) lewat `POST /orders/:code/va`; masa berlaku VA tidak melewati batas tahan pesanan. Notifikasi `settlement` dari Midtrans (signature SHA512 dicek) menandai lunas dan mengonfirmasi pesanan otomatis. Tanpa `MIDTRANS_SERVER_KEY`, checkout VA/online ditolak `409`.
+- **Virtual Account Midtrans (F10).** Checkout `payment_method: "va"`, lalu pembeli memilih bank (BCA, BNI, BRI) lewat `POST /orders/:code/va`; masa berlaku VA tidak melewati batas tahan pesanan. Notifikasi dari Midtrans dicek signature SHA512-nya, lalu statusnya dipastikan ulang lewat Get Status Midtrans (signature tidak mencakup `transaction_status`); `settlement` menandai lunas dan mengonfirmasi pesanan otomatis. Pembayaran yang sudah di-refund tidak bisa kembali lunas. Tanpa `MIDTRANS_SERVER_KEY`, checkout VA/online ditolak `409`.
 - **Bayar online pre-order (F26).** Checkout `payment_method: "online"`, lalu `POST /orders/:code/online` membuat halaman Snap (QRIS, GoPay, ShopeePay, VA) dan mengembalikan `payment.payment_url`. Idempoten; halaman bayar tutup sebelum batas tahan. Penjual tidak bisa mengonfirmasi pesanan VA/online yang belum lunas (`409`).
 - **Pencairan dana (F26).** Uang VA/online masuk akun Midtrans platform. Bagian toko per pesanan selesai = `subtotal` − diskon promo toko; biaya layanan, promo platform, dan biaya Midtrans milik/ditanggung platform. Tunai tidak ikut. Penjual mengisi rekening (`PUT /merchant/payout-account`, wajib kata sandi). Admin super melihat saldo per toko (`GET /admin/payouts/balances`, berisi `as_of` dan `platform_discount`, yaitu total voucher platform di pesanan saldo itu, untuk diperiksa sebelum transfer), mentransfer lewat bank, lalu mencatat (`POST /admin/payouts` dengan `amount` dan `until` = `as_of`). Saldo yang berubah atau catatan ganda ditolak `409`; pesanan yang tercatat diberi `payout_id`.
 - **Pengembalian dana (F26).** Pembayaran Midtrans yang lunas pada pesanan `cancelled`/`expired` (ditolak, dibatalkan, atau lunas setelah batas waktu) tetap lunas dan muncul di `GET /admin/refunds`. Admin mengembalikan dana di luar aplikasi lalu menandai `POST /admin/refunds/:code` dengan nomor referensi; status menjadi `refunded`.
@@ -128,6 +164,23 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 - **Moderasi (F19).** Ulasan yang disembunyikan admin tidak tampil dan tidak dihitung. Menu yang diturunkan admin nonaktif dan tidak bisa diaktifkan penjual sampai dipulihkan.
 - **Lupa sandi (F11).** OTP 6 digit lewat email, berlaku 10 menit, maksimal 5 percobaan, sekali pakai. Jawaban permintaan kode selalu sama agar keberadaan email tidak bocor.
 - **Tiket bantuan (CS).** Pembeli membuat tiket (kategori, judul, pesan, pesanan opsional miliknya) berkode `TK-YYYYMMDD-XXXX`; maksimal 3 tiket belum ditutup dan 10 tiket baru per jam. Status `open` (menunggu admin) → `answered` (admin membalas) → `closed`; balasan pembeli mengembalikan ke `open`. Semua tingkat admin boleh membaca, membalas, dan menutup; balasan dan penutupan admin dicatat di audit dan dikirim sebagai notifikasi `info` berisi `data.ticket_code`. Pembeli melihat balasan atas nama "Tim KateringKita". Urusan pesanan tetap langsung ke penjual lewat WhatsApp.
+
+---
+
+## 🛡️ Keamanan
+
+Pada November 2026 tim mengaudit kode sendiri dengan [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill). Setiap perbaikan diawali tes yang membuktikan celahnya (gagal di kode lama), lalu kode diperbaiki sampai tes itu lolos.
+
+| Perbaikan | Isi |
+|---|---|
+| Webhook Midtrans | Status, nominal, dan `transaction_id` diambil dari Get Status Midtrans, bukan dari body notifikasi; pembayaran `refunded` tidak bisa kembali lunas dan tidak masuk antrian refund lagi |
+| Data rekening | Detail penjual untuk admin ops/support tidak membawa rekening pencairan (hanya admin super lewat `/admin/payouts`) |
+| Notifikasi promo | Voucher tersembunyi dan promo dari toko yang tidak tampil (mis. di-suspend) tidak disiarkan |
+| Limiter OTP | Batas per email memakai pola rute, sehingga variasi huruf besar-kecil atau garis miring akhir pada path tidak membuat jatah baru |
+| Sesi | Login yang berpacu dengan ganti/reset sandi tidak mendapat sesi |
+| Voucher platform | Saldo pencairan per toko menampilkan porsi voucher platform agar admin bisa memeriksa sebelum mentransfer |
+
+Temuan yang belum diperbaiki dicatat dan dilacak di luar repo publik ini.
 
 ---
 
