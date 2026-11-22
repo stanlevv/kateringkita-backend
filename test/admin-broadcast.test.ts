@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, pembeliBaru, siapkanToko, sisipMenu } from "./helpers/toko";
+import { login, pembeliBaru, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
 
 // Broadcast pengumuman admin, notifikasi promo toko ke pemfavorit, dan kontak CS
 let s: Awaited<ReturnType<typeof siapkanToko>>;
@@ -14,6 +14,7 @@ const notif = async (token: string) => (await request(app).get("/api/v1/me/notif
 
 beforeAll(async () => {
   s = await siapkanToko();
+  await tampilkan(s.idA); // AUD-33: hanya toko yang tampil di katalog yang boleh mengirim notifikasi promo
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   tAdmin = await login("081300000009");
   tLain = await pembeliBaru(1);
@@ -58,6 +59,19 @@ describe("notifikasi promo toko", () => {
     await request(app).patch(`/api/v1/merchant/promos/${mati.body.data.id}`).set(H(s.tA)).send({ is_active: true }).expect(200);
     await request(app).patch(`/api/v1/merchant/promos/${r.body.data.id}`).set(H(s.tA)).send({ value: 1500 }).expect(200);
     expect((await notif(s.tCust)).filter((n) => n.type === "promo")).toHaveLength(2);
+  });
+
+  // AUD-27: kode tersembunyi hanya dibagikan penjual sendiri; AUD-33: toko yang tidak tampil (suspend) tidak bisa menyiarkan
+  test("promo tersembunyi dan promo toko yang di-suspend tidak dikirim", async () => {
+    const isi = { type: "fixed", value: 1000, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
+    const jumlah = async () => (await notif(s.tCust)).filter((n) => n.type === "promo").length;
+    const awal = await jumlah();
+    await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "RAHASIA", is_public: false }).expect(201);
+    expect(await jumlah()).toBe(awal);
+    await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [s.idA]);
+    await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "SUSPEN" }).expect(201);
+    expect(await jumlah()).toBe(awal);
+    await tampilkan(s.idA);
   });
 });
 

@@ -2,6 +2,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { PengumumanInput } from "../dto/admin.dto";
 import { catat, dalamTransaksi } from "./admin-audit.service";
+import { TOKO_TAMPIL } from "./katalog.service";
 
 // Broadcast: pengumuman admin → notifikasi tipe "info" ke semua pengguna aktif sesuai peran (admin tidak ikut)
 export async function kirimPengumuman(adminId: number, p: PengumumanInput) {
@@ -20,8 +21,13 @@ export async function kirimPengumuman(adminId: number, p: PengumumanInput) {
 // Broadcast: promo toko yang aktif dan belum berakhir → notifikasi tipe "promo" ke pembeli yang memfavoritkan menu toko itu.
 // shortcut: dikirim setiap kali promo diaktifkan (mati-hidup berulang = notifikasi berulang); beri jeda per promo bila dikeluhkan
 export async function kabariPromoToko(p: RowDataPacket) {
-  if (!p.is_active || new Date(p.ends_at).getTime() <= Date.now()) return;
-  const [[m]] = await db.query<RowDataPacket[]>("SELECT business_name FROM merchants WHERE id = ?", [p.merchant_id]);
+  // AUD-27: kode tersembunyi (is_public = 0) hanya dibagikan penjual sendiri, jangan disiarkan
+  if (!p.is_active || !p.is_public || new Date(p.ends_at).getTime() <= Date.now()) return;
+  // AUD-33: toko yang tidak tampil di katalog (suspend, belum verifikasi, pemilik nonaktif) tidak boleh menyiarkan promo
+  const [[m]] = await db.query<RowDataPacket[]>(
+    `SELECT m.business_name FROM merchants m JOIN users u ON u.id = m.user_id WHERE m.id = ? AND ${TOKO_TAMPIL}`, [p.merchant_id],
+  );
+  if (!m) return;
   const title = `Promo baru dari ${m.business_name}`.slice(0, 120);
   const body = `Pakai kode ${p.code}${p.description ? `: ${p.description}` : " saat checkout."}`.slice(0, 255);
   await db.query(
