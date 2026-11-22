@@ -45,6 +45,13 @@ describe("forgot", () => {
     for (let i = 0; i < 5; i++) await post("forgot", { email: EMAIL }).expect(200);
     expect((await post("forgot", { email: EMAIL }).expect(429)).body.error.code).toBe("RATE_LIMITED");
   });
+
+  // AUD-28: router Express tidak peka huruf besar-kecil dan menerima garis miring akhir; varian path tidak boleh dapat bucket baru
+  test("varian huruf besar dan garis miring akhir memakai batas per email yang sama", async () => {
+    for (let i = 0; i < 5; i++) await post("forgot", { email: EMAIL }).expect(200);
+    await request(app).post("/api/v1/AUTH/password/Forgot").send({ email: EMAIL }).expect(429);
+    await request(app).post("/api/v1/auth/password/forgot/").send({ email: EMAIL }).expect(429);
+  });
 });
 
 describe("verify & reset", () => {

@@ -109,7 +109,8 @@ export const otpLimiter: RequestHandler & { reset: () => void } = Object.assign(
   ((req, _res, next) => {
     const now = Date.now();
     // validate berjalan lebih dulu: email sudah dirapikan huruf kecil
-    const email = `${req.path}:${String(req.body.email)}`;
+    // AUD-28: pola rute (req.route.path), bukan req.path: /AUTH/... atau garis miring akhir tidak boleh membuat bucket baru
+    const email = `${req.route?.path ?? req.path.toLowerCase()}:${String(req.body.email)}`;
     const ip = String(clientIp(req));
     if (full(otpEmail, email, now) || full(otpIp, ip, now)) {
       return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak permintaan. Coba lagi beberapa menit lagi."));
