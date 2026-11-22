@@ -48,8 +48,12 @@ export async function insertUser(
   role: PublicUser["role"],
   input: { full_name: string; email?: string; phone: string; password: string },
 ): Promise<PublicUser> {
-  const hash = await bcrypt.hash(input.password, BCRYPT_COST);
   const email = input.email ?? null;
+  // AUD-37: nomor/email terdaftar ditolak sebelum bcrypt. Bentuknya sama dengan ER_DUP_ENTRY (yang tetap menjaga race)
+  // agar semua penanganan duplikat yang ada (errorHandler, admin-akun) tetap berlaku
+  const [ada] = await conn.query<RowDataPacket[]>("SELECT 1 FROM users WHERE phone = ? OR email = ? LIMIT 1", [input.phone, email]);
+  if (ada.length) throw Object.assign(new Error("Duplicate entry (dicek sebelum bcrypt)"), { code: "ER_DUP_ENTRY" });
+  const hash = await bcrypt.hash(input.password, BCRYPT_COST);
   const [result] = await conn.query<ResultSetHeader>(
     "INSERT INTO users (role, full_name, email, phone, password_hash) VALUES (?, ?, ?, ?, ?)",
     [role, input.full_name, email, input.phone, hash],

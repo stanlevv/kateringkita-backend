@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
 import request from "supertest";
 import { RowDataPacket } from "mysql2";
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
+import { registerLimiter } from "../src/middleware/rateLimiter";
 import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
@@ -108,4 +109,25 @@ test("merchant dengan phone yang sudah dipakai → 409 dan tidak ada baris baru"
   const [merchants] = await db.query<RowDataPacket[]>("SELECT id FROM merchants");
   expect(users).toHaveLength(1);
   expect(merchants).toHaveLength(1);
+});
+
+// AUD-37: nomor/email yang sudah terdaftar ditolak sebelum bcrypt (tidak membakar CPU), dan pendaftaran per sumber dibatasi
+test("nomor sudah terdaftar → 409 tanpa menjalankan bcrypt", async () => {
+  await request(app).post("/api/v1/auth/customer/register").send(customer).expect(201);
+  const hash = vi.spyOn(bcrypt, "hash");
+  const r = await request(app).post("/api/v1/auth/customer/register").send({ ...customer, email: "lain@mail.com" }).expect(409);
+  expect(r.body.error).toEqual({ code: "CONFLICT", message: "Data sudah terdaftar." });
+  expect(hash).not.toHaveBeenCalled();
+  hash.mockRestore();
+});
+
+test("pendaftaran berhasil ke-61 dari satu sumber dalam 1 jam → 429", async () => {
+  registerLimiter.reset();
+  for (let i = 0; i < 60; i++) {
+    await request(app).post("/api/v1/auth/customer/register")
+      .send({ full_name: "Budi", email: `budi${i}@mail.com`, phone: `08130000${String(i).padStart(4, "0")}`, password: "rahasia123" }).expect(201);
+  }
+  const r = await request(app).post("/api/v1/auth/customer/register").send({ full_name: "Budi", email: "budi99@mail.com", phone: "081399999999", password: "rahasia123" }).expect(429);
+  expect(r.body.error.code).toBe("RATE_LIMITED");
+  registerLimiter.reset();
 });

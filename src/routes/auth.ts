@@ -10,14 +10,14 @@ import {
   uploadAvatarHandler,
 } from "../handlers/auth.handler";
 import { requireAuth } from "../middleware/auth";
-import { loginLimiter, otpLimiter, passwordLimiter, uploadLimiter } from "../middleware/rateLimiter";
+import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rateLimiter";
 import { validate } from "../middleware/validate";
 
 export const v1 = Router();
 
-v1.post("/auth/customer/register", validate(registerCustomerSchema), registerCustomerHandler);
+v1.post("/auth/customer/register", registerLimiter, validate(registerCustomerSchema), registerCustomerHandler);
 
-v1.post("/auth/merchant/register", validate(registerMerchantSchema), registerMerchantHandler);
+v1.post("/auth/merchant/register", registerLimiter, validate(registerMerchantSchema), registerMerchantHandler);
 
 v1.post("/auth/login", validate(loginSchema), loginLimiter, loginHandler);
 

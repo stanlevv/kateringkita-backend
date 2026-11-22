@@ -71,6 +71,24 @@ export const loginLimiter: RequestHandler & { reset: () => void } = Object.assig
 // Ganti kata sandi: 5 kata sandi lama salah (400) per pengguna per menit; pola jatah sama dengan loginLimiter
 const perUser = newBucket(5, 60_000);
 
+// AUD-37: pendaftaran berhasil per sumber (IP klien) 60/jam. Hanya yang berhasil dihitung: gagal validasi atau nomor
+// terdaftar tidak menjalankan bcrypt. Longgar karena satu WiFi kampus / proxy web bisa berbagi satu IP.
+const perDaftar = newBucket(60, 3600_000);
+
+export const registerLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, res, next) => {
+    const key = String(clientIp(req));
+    if (full(perDaftar, key, Date.now())) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak pendaftaran dari jaringan ini. Coba lagi nanti."));
+    }
+    res.on("finish", () => {
+      if (res.statusCode === 201) hit(perDaftar, key, Date.now());
+    });
+    next();
+  }) as RequestHandler,
+  { reset: () => perDaftar.hits.clear() },
+);
+
 export const passwordLimiter: RequestHandler & { reset: () => void } = Object.assign(
   ((req, res, next) => {
     const now = Date.now();
