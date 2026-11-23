@@ -1,6 +1,6 @@
 // Isi file: katalog publik, yaitu daftar dan pencarian menu, detail menu, ulasan menu, dan profil toko. Alurnya
 // routes/catalog.ts → handlers/catalog.handler.ts → file ini → database. Potongan SQL dan pemeta (mapper) di sini juga
-// dipakai catalog-favorite, recommendation, table, order, dan order-cart service. File ini hanya membaca (SELECT).
+// dipakai service lain, antara lain favorit, rekomendasi, meja (table), dan pesanan. File ini hanya membaca (SELECT).
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { sedangBuka } from "./admin-summary.service";
@@ -303,7 +303,7 @@ export async function listMenuReviews(rawId: unknown, pagination: Pagination) {
     "SELECT COUNT(*) AS total FROM reviews WHERE menu_id = ? AND hidden_at IS NULL",
     [id],
   );
-  // 4. Samarkan nama pembeli. Array.from memotong per karakter, jadi emoji tidak terbelah.
+  // 4. Samarkan nama pembeli. Array.from memecah per karakter Unicode, jadi satu emoji tidak terbelah dua.
   return {
     data: rows.map((review) => ({
       rating: review.rating,
