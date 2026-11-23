@@ -55,7 +55,7 @@ export const recordServerLog: RequestHandler = (req, res, next) => {
       method: req.method,
       path: req.originalUrl.split("?")[0],
       status: res.statusCode,
-      durationMs: durationMs,
+      durationMs,
       message: typeof res.locals.errorSummary === "string" ? res.locals.errorSummary : null,
       userId: (req as Partial<AuthedRequest>).auth?.userId ?? null,
     }).catch(() => {});
