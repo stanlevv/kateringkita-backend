@@ -30,3 +30,9 @@ d0b90c60c989d5d5d7ad63b6449c035da76a7a7e
 
 # refactor(dasar): shorthand durationMs di request-logger (F28)
 ea70f964152d666308cd1878e1960866add76064
+
+# refactor(auth): nama file bahasa Inggris (F28)
+64930be4d38fd7c66ae9bc0375cd318b14789848
+
+# refactor(auth): nama kode bahasa Inggris yang jelas (F28)
+0a6e5979c062875d98162ef9c0ae162d79cd9de5
