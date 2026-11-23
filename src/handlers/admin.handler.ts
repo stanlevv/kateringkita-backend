@@ -9,7 +9,7 @@ import { ringkasan } from "../services/admin-summary.service";
 import { rekapKeuangan } from "../services/admin-keuangan.service";
 import { rentangAdminSchema } from "../dto/merchant-laporan.dto";
 import { parse } from "../middleware/validate";
-import { daftarMenuAdmin, daftarUlasanAdmin, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
+import { daftarMenuAdmin, daftarUlasanAdmin, hapusFotoMenu, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
 import { buatAdmin, daftarAdmin, resetSandiAdmin, setAktifAdmin, ubahLevel } from "../services/admin-akun.service";
 import { AppError } from "../utils/errors";
 
@@ -103,6 +103,9 @@ export const daftarMenuAdminHandler: RequestHandler = async (req, res) => {
 };
 export const moderasiMenuHandler = (turun: boolean): RequestHandler => async (req, res) => {
   res.json({ data: await moderasiMenu(adminId(req), req.params.id, turun, turun ? req.body.reason : null) });
+};
+export const hapusFotoMenuHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await hapusFotoMenu(adminId(req), req.params.id, req.body.url, req.body.reason) });
 };
 
 // F20 rekap keuangan ?from&to (tanggal WIB, maks 92 hari)

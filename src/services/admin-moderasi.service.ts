@@ -3,6 +3,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { pola } from "./pesanan.service";
+import { galeri } from "./merchant-menu.service";
 import { hitungUlangRating } from "./ulasan.service";
 
 // F19 moderasi admin: sembunyikan ulasan & turunkan menu (suspend toko sudah ada di admin-merchant F18). Semua aksi dicatat audit.
@@ -66,10 +67,10 @@ export async function moderasiUlasan(adminId: number, idRaw: unknown, sembunyi: 
 
 // --- Menu ---
 const DARI_MENU = "FROM menus x JOIN merchants m ON m.id = x.merchant_id";
-const KOLOM_MENU = `x.id, x.name, x.price, x.image_url, x.is_active, x.moderated_at, x.moderation_reason, x.created_at,
+const KOLOM_MENU = `x.id, x.name, x.price, x.image_url, x.gallery, x.is_active, x.moderated_at, x.moderation_reason, x.created_at,
   m.id AS merchant_id, m.business_name`;
 const petaMenu = (x: RowDataPacket) => ({
-  id: x.id, name: x.name, price: x.price, image_url: x.image_url, is_active: Boolean(x.is_active), moderated: x.moderated_at !== null,
+  id: x.id, name: x.name, price: x.price, image_url: x.image_url, gallery: galeri(x.gallery), is_active: Boolean(x.is_active), moderated: x.moderated_at !== null,
   moderated_at: x.moderated_at, moderation_reason: x.moderation_reason, created_at: x.created_at,
   merchant: { id: x.merchant_id, business_name: x.business_name },
 });
@@ -101,6 +102,31 @@ export async function moderasiMenu(adminId: number, idRaw: unknown, turun: boole
       before: { moderated: !turun, is_active: Boolean(x.is_active), reason: x.moderation_reason },
       after: { moderated: turun, is_active: turun ? false : Boolean(x.is_active), reason: turun ? reason : null },
     });
+    return x.id;
+  });
+  const [[x]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_MENU} ${DARI_MENU} WHERE x.id = ?`, [id]);
+  return petaMenu(x);
+}
+
+// Hapus satu foto melanggar; menu tetap dijual. Foto utama dihapus → foto tambahan pertama naik jadi foto utama (kartu katalog tidak kosong).
+// shortcut: objek di R2 tidak dihapus (sama dengan buatUnggahan)
+export async function hapusFotoMenu(adminId: number, idRaw: unknown, url: string, reason: string) {
+  const id = await dalamTransaksi(async (conn) => {
+    const x = await kunci(conn, "menus", idRaw, { where: "deleted_at IS NULL", notFound: "Menu tidak ditemukan." });
+    const sebelum = { image_url: x.image_url as string | null, gallery: galeri(x.gallery) };
+    let sesudah: typeof sebelum;
+    if (sebelum.image_url === url) sesudah = { image_url: sebelum.gallery[0] ?? null, gallery: sebelum.gallery.slice(1) };
+    else if (sebelum.gallery.includes(url)) sesudah = { image_url: sebelum.image_url, gallery: sebelum.gallery.filter((u) => u !== url) };
+    else throw new AppError(404, "NOT_FOUND", "Foto tidak ditemukan di menu ini.");
+    await conn.query("UPDATE menus SET image_url = ?, gallery = ? WHERE id = ?",
+      [sesudah.image_url, sesudah.gallery.length ? JSON.stringify(sesudah.gallery) : null, x.id]);
+    await catat(conn, { adminId, action: "menu.photo_remove", targetType: "menu", targetId: x.id, reason, before: sebelum, after: sesudah });
+    // kabari pemilik toko (halaman Notifikasi dashboard penjual)
+    await conn.query(
+      `INSERT INTO notifications (user_id, type, title, body, data, created_at)
+       SELECT m.user_id, 'moderation', 'Foto menu dihapus admin', ?, JSON_OBJECT('menu_id', ?), UTC_TIMESTAMP() FROM merchants m WHERE m.id = ?`,
+      [`Satu foto "${x.name}" dihapus karena: ${reason}. Menu tetap dijual; unggah foto pengganti bila perlu.`.slice(0, 255), x.id, x.merchant_id],
+    );
     return x.id;
   });
   const [[x]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_MENU} ${DARI_MENU} WHERE x.id = ?`, [id]);

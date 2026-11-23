@@ -36,6 +36,8 @@ export const updateProfileSchema = z.object({
   daily_revenue_target: angka("Target omzet", 0, 1_000_000_000),
   wa_template: waTemplate,
   logo_url: urlFoto,
+  // background profil toko (unggahan purpose cover)
+  cover_url: urlFoto,
   // F21: terima pesanan dari meja (QR)
   dine_in_enabled: z.boolean({ error: "Pilihan pesan dari meja tidak valid." }),
   pickup_point_ids: z.array(z.unknown(), { error: "Pilih minimal satu titik temu." })

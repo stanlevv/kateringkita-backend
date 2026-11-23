@@ -1,10 +1,10 @@
 import { RequestHandler, Router } from "express";
-import { buatAdminSchema, kontakCsSchema, levelAdminSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
+import { buatAdminSchema, hapusFotoSchema, kontakCsSchema, levelAdminSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
 import {
   aksiPenjualHandler, ambilBiayaHandler, antrianVerifikasiHandler, buatMasterHandler, buatPromoHandler, daftarLogHandler,
   daftarMasterHandler, daftarPenjualHandler, daftarPromoHandler, detailPenjualHandler, idParam, ringkasanHandler,
   setAktifMasterHandler, setAktifPromoHandler, ubahBiayaHandler, ubahMasterHandler, ubahPromoHandler,
-  daftarMenuAdminHandler, daftarUlasanAdminHandler, kirimPengumumanHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
+  daftarMenuAdminHandler, daftarUlasanAdminHandler, hapusFotoMenuHandler, kirimPengumumanHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
   ubahKontakCsHandler, daftarAdminHandler, buatAdminHandler, ubahLevelAdminHandler, setAktifAdminHandler, resetSandiAdminHandler,
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
@@ -92,6 +92,7 @@ admin.post("/reviews/:id/unhide", moderasiUlasanHandler(false));
 admin.get("/menus", daftarMenuAdminHandler);
 admin.post("/menus/:id/takedown", validate(reasonBody), moderasiMenuHandler(true));
 admin.post("/menus/:id/restore", moderasiMenuHandler(false));
+admin.post("/menus/:id/photos/remove", validate(hapusFotoSchema), hapusFotoMenuHandler);
 
 // F22 AI gateway: penyedia AI, urutan fallback, uji koneksi
 admin.get("/ai-providers", daftarAiHandler);

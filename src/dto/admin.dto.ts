@@ -5,6 +5,11 @@ export const reasonBody = z.object({
   reason: z.string({ error: "Alasan wajib diisi." }).trim().min(1, "Alasan wajib diisi.").max(500, "Alasan maksimal 500 karakter."),
 });
 
+// F19: hapus satu foto menu (foto utama atau tambahan) tanpa menurunkan menunya
+export const hapusFotoSchema = reasonBody.extend({
+  url: z.string({ error: "Foto wajib dipilih." }).min(1, "Foto wajib dipilih.").max(500, "Foto tidak valid."),
+});
+
 // Broadcast pengumuman admin (tab Info di aplikasi pembeli); panjang = kolom notifications
 export const pengumumanSchema = z.object({
   audience: z.enum(["all", "customer", "merchant"], { error: "Pilih penerima pengumuman." }),

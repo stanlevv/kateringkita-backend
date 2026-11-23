@@ -8,7 +8,7 @@ export const uploadSchema = z.object({
   size: z.number({ error: "Ukuran foto tidak valid." }).int("Ukuran foto tidak valid.").min(1, "Ukuran foto tidak valid.").max(5_242_880, UKURAN),
 });
 export const merchantUploadSchema = uploadSchema.extend({
-  purpose: z.enum(["menu", "logo", "banner"], { error: "Jenis foto tidak dikenal." }),
+  purpose: z.enum(["menu", "logo", "banner", "cover"], { error: "Jenis foto tidak dikenal." }),
 });
 // gambar banner / pop-up platform (admin) → platform/<purpose>/
 export const adminUploadSchema = uploadSchema.extend({

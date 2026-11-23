@@ -35,6 +35,10 @@ const fields = {
   category_id: z.number({ error: "Kategori wajib dipilih." }).int("Kategori wajib dipilih.").min(1, "Kategori wajib dipilih."),
   description: z.string({ error: "Deskripsi harus berupa teks." }).trim().max(500, "Maksimal 500 karakter.").nullable(),
   image_url: urlFoto,
+  // foto tambahan selain foto utama; aturan pemilik dicek service
+  gallery: z.array(z.string({ error: "Foto tidak valid. Unggah ulang foto." }).max(500, "Foto tidak valid. Unggah ulang foto."), { error: "Foto tambahan tidak valid." })
+    .max(4, "Maksimal 4 foto tambahan.")
+    .refine((l) => new Set(l).size === l.length, "Foto tambahan tidak boleh sama."),
   unit_label: wajib("Satuan wajib diisi.", 30),
   price: angka("Harga jual", 1000, 100_000_000),
   hpp: angka("HPP", 0, 100_000_000),
@@ -47,7 +51,7 @@ const fields = {
 };
 
 // POST: field asing (merchant_id, sold_today, …) dibuang zod
-export const menuSchema = z.object({ ...fields, description: fields.description.optional(), options: opsi.default([]) });
+export const menuSchema = z.object({ ...fields, description: fields.description.optional(), gallery: fields.gallery.default([]), options: opsi.default([]) });
 // PATCH: semua opsional + is_active (D2)
 export const menuPatchSchema = z.object(fields).partial().extend({ is_active: z.boolean({ error: "Status menu tidak valid." }).optional() });
 

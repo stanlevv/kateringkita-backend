@@ -8,11 +8,17 @@ import { hariIniWib, segarkanKuota } from "./merchant-kuota.service";
 import { KuotaInput, MenuInput, MenuQuery, menuSchema } from "../dto/merchant-menu.dto";
 
 export type MerchantMenu = {
-  id: number; name: string; description: string | null; image_url: string | null;
+  id: number; name: string; description: string | null; image_url: string | null; gallery: string[];
   category: { id: number; name: string; slug: string }; unit_label: string;
   price: number; hpp: number; margin: number; daily_quota: number; quota_today: number; sold_today: number; held_today: number;
   available: number; prep_minutes: number; is_preorder: boolean; preorder_days: number; min_order_qty: number; is_active: boolean;
   options: { id: number; name: string; extra_price: number }[]; rating_avg: number; rating_count: number;
+};
+
+// Kolom JSON: mysql2 mengurai JSON MySQL, tapi teks (mis. dari sisipan SQL) tetap diterima
+export const galeri = (v: unknown): string[] => {
+  const l = typeof v === "string" ? JSON.parse(v) : v;
+  return Array.isArray(l) ? l : [];
 };
 
 export const menuTidakAda = () => new AppError(404, "NOT_FOUND", "Menu tidak ditemukan.");
@@ -51,7 +57,7 @@ export async function bacaMenu(merchantId: number, where: string[] = [], args: u
     [rows.map((r) => r.id)],
   );
   return rows.map((r) => ({
-    id: r.id, name: r.name, description: r.description, image_url: r.image_url,
+    id: r.id, name: r.name, description: r.description, image_url: r.image_url, gallery: galeri(r.gallery),
     category: { id: r.category_id, name: r.c_name, slug: r.c_slug }, unit_label: r.unit_label,
     price: r.price, hpp: r.hpp, margin: r.price - r.hpp, daily_quota: r.daily_quota,
     quota_today: r.quota_today, sold_today: r.sold_today, held_today: r.held_today,
@@ -125,6 +131,12 @@ async function kolomMenu(conn: Conn, merchantId: number, input: MenuInput, lama:
     if (!c[0]) throw invalidField("category_id", "Kategori tidak ditemukan.");
   }
   cekUrlGambar(input.image_url, lama?.image_url ?? null, `merchants/${merchantId}/menu/`, "image_url");
+  if (input.gallery !== undefined) {
+    // foto tersimpan boleh dipertahankan / diurutkan ulang; yang baru wajib unggahan menu toko ini
+    const tersimpan = galeri(lama?.gallery);
+    for (const u of input.gallery) if (!tersimpan.includes(u)) cekUrlGambar(u, null, `merchants/${merchantId}/menu/`, "gallery");
+    sets.gallery = input.gallery.length ? JSON.stringify(input.gallery) : null;
+  }
   return sets;
 }
 
