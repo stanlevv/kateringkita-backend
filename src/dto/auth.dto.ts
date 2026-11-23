@@ -118,7 +118,8 @@ export const loginSchema = z.object({
 });
 
 /**
- * Menentukan apakah teks login adalah email atau nomor HP. Ada "@" berarti email (spasi dibuang, huruf kecil);
+ * Menentukan apakah teks login adalah email atau nomor HP. Ada "@" berarti email (spasi di awal dan akhir dibuang,
+ * huruf kecil);
  * selain itu nomor HP (semua selain angka dibuang, contoh "0812-3456" → "08123456").
  * @param raw teks yang diketik di kolom login
  * @returns `{ email }` atau `{ phone }`

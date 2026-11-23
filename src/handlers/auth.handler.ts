@@ -67,8 +67,10 @@ export const uploadAvatarHandler: RequestHandler = (req, res) => {
 };
 
 /**
- * `POST /auth/password/forgot`: meminta kode OTP lupa sandi. Jawabannya sama persis untuk email terdaftar maupun
- * tidak, supaya fitur ini tidak bisa dipakai untuk mengecek email mana yang terdaftar.
+ * `POST /auth/password/forgot`: meminta kode OTP lupa sandi. Bila email berhasil dikirim, jawabannya sama untuk email
+ * terdaftar maupun tidak, supaya fitur ini tidak bisa dipakai untuk mengecek email mana yang terdaftar. Pengecualian:
+ * di production tanpa SMTP (atau saat server email gagal), hanya email terdaftar yang berakhir galat (503 bila SMTP
+ * belum diatur), karena email hanya dikirim untuk akun yang ada.
  */
 export const forgotPasswordHandler: RequestHandler = async (req, res) => {
   await requestOtp(req.body.email);

@@ -15,8 +15,9 @@ const FILE_EXTENSIONS = { "image/jpeg": "jpg", "image/png": "png", "image/webp":
 /**
  * Membuat alamat unggah sementara untuk satu foto. Nama file (kunci objek) selalu dibuat server: awalan folder milik
  * pengguna + UUID (id acak yang praktis tidak mungkin kembar) + ekstensi. Aplikasi tidak bisa memilih lokasi sendiri.
- * @param prefix awalan folder pemilik, contoh `users/12/avatar/`; selalu dibentuk pemanggil dari data login, bukan dari
- *               isi permintaan
+ * @param prefix awalan folder pemilik, contoh `users/12/avatar/`. Dibentuk handler dari id di token login; untuk foto
+ *               toko dan gambar platform ditambah `purpose` dari isi permintaan yang dibatasi daftar nilai (z.enum),
+ *               jadi pengguna tidak bisa menulis ke folder sembarang
  * @param input  tipe gambar (`content_type`) dan ukuran dalam byte (`size`) yang sudah lolos uploadSchema; keduanya
  *               ikut ditandatangani, jadi R2 menolak file dengan tipe atau ukuran lain
  * @returns `upload_url` (alamat PUT ke R2), `public_url` (alamat foto setelah terunggah), dan `expires_at` (batas waktu
