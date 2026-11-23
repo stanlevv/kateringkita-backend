@@ -6,3 +6,6 @@ a72d0982600ff76588b6e5ff4b238acea3e11797
 
 # refactor(pesanan): nama kode bahasa Inggris (F28)
 364ec20f207ada52c7a346e3cc4edb615b8501ee
+
+# refactor(pesanan): akhiran _MSG untuk konstanta pesan (F28)
+b12c34eabf3565ce2d52032158383d7d6cf9aba3
