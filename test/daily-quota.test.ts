@@ -18,8 +18,10 @@ test("tengah malam: permintaan yang masih membawa tanggal kemarin tidak me-reset
     held_today: 2,
   });
   await refreshDailyQuota(db, idA, "2026-11-01");
-  const [[r]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s FROM menus WHERE id = ?", [id]);
-  expect(r.s).toBe("2026-11-02");
+  const [[row]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s FROM menus WHERE id = ?", [
+    id,
+  ]);
+  expect(row.s).toBe("2026-11-02");
   expect(await menuRow(id)).toMatchObject({ quota_today: 10, sold_today: 5, held_today: 2 });
   await refreshDailyQuota(db, idA, "2026-11-03"); // maju tetap me-reset
   expect(await menuRow(id)).toMatchObject({ quota_today: 20, sold_today: 0, held_today: 0 });

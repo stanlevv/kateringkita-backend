@@ -8,102 +8,102 @@ import { releaseStock } from "../src/services/order-stock.service";
 import { menuRow, prepareCheckout, insertMenu } from "./helpers/merchant";
 
 // F06 Task 5: releaseStock untuk F07/F08 (R-01, R-03, R-12, D14)
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const pesan = async (items: { menu_id: number; qty: number }[]) => {
-  const r = await request(app)
+  const res = await request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.customerToken}`)
+    .set("Authorization", `Bearer ${setup.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({ items, pickup_point_id: 1, payment_method: "cod" })
     .expect(201);
-  const [[o]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [r.body.data.code]);
-  return o.id as number;
+  const [[order]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [res.body.data.code]);
+  return order.id as number;
 };
-const lepas = (id: number, jadi: "terjual" | "kembali") => dalamTransaksi((c) => releaseStock(c, id, jadi));
+const lepas = (id: number, jadi: "terjual" | "kembali") => dalamTransaksi((conn) => releaseStock(conn, id, jadi));
 const stok = async (id: number) => {
-  const m = await menuRow(id);
-  return { held: m.held_today, sold: m.sold_today, total: m.sold_total };
+  const menu = await menuRow(id);
+  return { held: menu.held_today, sold: menu.sold_today, total: menu.sold_total };
 };
 
 beforeEach(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
 });
 
 test("hari sama: kembali → held turun; terjual → held turun, sold_today & sold_total naik", async () => {
-  const a = await pesan([{ menu_id: s.menu, qty: 2 }]);
-  expect(await stok(s.menu)).toEqual({ held: 2, sold: 0, total: 0 });
-  await lepas(a, "kembali");
-  expect(await stok(s.menu)).toEqual({ held: 0, sold: 0, total: 0 });
+  const firstOrderId = await pesan([{ menu_id: setup.menu, qty: 2 }]);
+  expect(await stok(setup.menu)).toEqual({ held: 2, sold: 0, total: 0 });
+  await lepas(firstOrderId, "kembali");
+  expect(await stok(setup.menu)).toEqual({ held: 0, sold: 0, total: 0 });
 
-  const b = await pesan([{ menu_id: s.menu, qty: 2 }]);
-  await lepas(b, "terjual");
-  expect(await stok(s.menu)).toEqual({ held: 0, sold: 2, total: 2 });
+  const secondOrderId = await pesan([{ menu_id: setup.menu, qty: 2 }]);
+  await lepas(secondOrderId, "terjual");
+  expect(await stok(setup.menu)).toEqual({ held: 0, sold: 2, total: 2 });
 });
 
 test("lintas tengah malam: penghitung harian hari baru tidak disentuh, sold_total tetap naik", async () => {
-  const a = await pesan([{ menu_id: s.menu, qty: 2 }]);
+  const firstOrderId = await pesan([{ menu_id: setup.menu, qty: 2 }]);
   const geser = () =>
     db.query(
       "UPDATE menus SET stock_date = DATE_ADD(stock_date, INTERVAL 1 DAY), held_today = 5, sold_today = 1 WHERE id = ?",
-      [s.menu],
+      [setup.menu],
     );
   await geser();
-  await lepas(a, "kembali");
-  expect(await stok(s.menu)).toEqual({ held: 5, sold: 1, total: 0 });
-  await lepas(a, "terjual");
-  expect(await stok(s.menu)).toEqual({ held: 5, sold: 1, total: 2 });
+  await lepas(firstOrderId, "kembali");
+  expect(await stok(setup.menu)).toEqual({ held: 5, sold: 1, total: 0 });
+  await lepas(firstOrderId, "terjual");
+  expect(await stok(setup.menu)).toEqual({ held: 5, sold: 1, total: 2 });
 });
 
 test("menu sudah dihapus (soft delete) tetap dilepas", async () => {
-  const a = await pesan([{ menu_id: s.menu, qty: 2 }]);
-  await db.query("UPDATE menus SET deleted_at = UTC_TIMESTAMP(), is_active = FALSE WHERE id = ?", [s.menu]);
-  await lepas(a, "terjual");
-  expect(await stok(s.menu)).toEqual({ held: 0, sold: 2, total: 2 });
+  const firstOrderId = await pesan([{ menu_id: setup.menu, qty: 2 }]);
+  await db.query("UPDATE menus SET deleted_at = UTC_TIMESTAMP(), is_active = FALSE WHERE id = ?", [setup.menu]);
+  await lepas(firstOrderId, "terjual");
+  expect(await stok(setup.menu)).toEqual({ held: 0, sold: 2, total: 2 });
 });
 
 test("menu stock_date NULL + pesanan lama stock_date NULL → penghitung harian tidak disentuh", async () => {
-  const a = await pesan([{ menu_id: s.menu, qty: 2 }]);
-  await db.query("UPDATE orders SET stock_date = NULL WHERE id = ?", [a]);
-  await db.query("UPDATE menus SET stock_date = NULL, held_today = 2, sold_today = 1 WHERE id = ?", [s.menu]);
-  await lepas(a, "terjual");
-  expect(await stok(s.menu)).toEqual({ held: 2, sold: 1, total: 2 });
+  const firstOrderId = await pesan([{ menu_id: setup.menu, qty: 2 }]);
+  await db.query("UPDATE orders SET stock_date = NULL WHERE id = ?", [firstOrderId]);
+  await db.query("UPDATE menus SET stock_date = NULL, held_today = 2, sold_today = 1 WHERE id = ?", [setup.menu]);
+  await lepas(firstOrderId, "terjual");
+  expect(await stok(setup.menu)).toEqual({ held: 2, sold: 1, total: 2 });
 });
 
 test("held_today dijepit ≥ 0", async () => {
-  const a = await pesan([{ menu_id: s.menu, qty: 2 }]);
-  await db.query("UPDATE menus SET held_today = 1 WHERE id = ?", [s.menu]);
-  await lepas(a, "kembali");
-  expect((await stok(s.menu)).held).toBe(0);
+  const firstOrderId = await pesan([{ menu_id: setup.menu, qty: 2 }]);
+  await db.query("UPDATE menus SET held_today = 1 WHERE id = ?", [setup.menu]);
+  await lepas(firstOrderId, "kembali");
+  expect((await stok(setup.menu)).held).toBe(0);
 });
 
 test("dua menu (baris menu sama dijumlah) → keduanya diperbarui; stock_date NULL → penghitung harian tetap", async () => {
-  const a = await pesan([
-    { menu_id: s.menu, qty: 1 },
-    { menu_id: s.menu2, qty: 3 },
-    { menu_id: s.menu, qty: 2 },
+  const firstOrderId = await pesan([
+    { menu_id: setup.menu, qty: 1 },
+    { menu_id: setup.menu2, qty: 3 },
+    { menu_id: setup.menu, qty: 2 },
   ]);
-  await lepas(a, "terjual");
-  expect(await stok(s.menu)).toEqual({ held: 0, sold: 3, total: 3 });
-  expect(await stok(s.menu2)).toEqual({ held: 0, sold: 3, total: 3 });
+  await lepas(firstOrderId, "terjual");
+  expect(await stok(setup.menu)).toEqual({ held: 0, sold: 3, total: 3 });
+  expect(await stok(setup.menu2)).toEqual({ held: 0, sold: 3, total: 3 });
 
-  const b = await pesan([{ menu_id: s.menu, qty: 2 }]);
-  await db.query("UPDATE orders SET stock_date = NULL WHERE id = ?", [b]);
-  await lepas(b, "terjual");
-  expect(await stok(s.menu)).toEqual({ held: 2, sold: 3, total: 5 });
+  const secondOrderId = await pesan([{ menu_id: setup.menu, qty: 2 }]);
+  await db.query("UPDATE orders SET stock_date = NULL WHERE id = ?", [secondOrderId]);
+  await lepas(secondOrderId, "terjual");
+  expect(await stok(setup.menu)).toEqual({ held: 2, sold: 3, total: 5 });
 });
 
 // AUD-31: batas 3 pesanan menunggu tidak cukup (satu pesanan bisa berisi ratusan porsi); porsi tertahan juga dibatasi
 test("satu pembeli maksimal 20 porsi menunggu", async () => {
-  const besar = await insertMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
+  const besar = await insertMenu(setup.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
   await pesan([{ menu_id: besar, qty: 15 }]);
-  const r = await request(app)
+  const res = await request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.customerToken}`)
+    .set("Authorization", `Bearer ${setup.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({ items: [{ menu_id: besar, qty: 6 }], pickup_point_id: 1, payment_method: "cod" })
     .expect(409);
-  expect(r.body.error.message).toBe(
+  expect(res.body.error.message).toBe(
     "Maksimal 20 porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.",
   );
   expect((await menuRow(besar)).held_today).toBe(15);

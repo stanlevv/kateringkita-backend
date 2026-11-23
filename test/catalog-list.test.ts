@@ -7,8 +7,8 @@ import { PRIVATE_KEYS, freezeClock, prepareMerchants, insertMenu, makeVisible } 
 let idA: number, idB: number, slugA: string;
 let ayam: number, esTeh: number;
 
-const get = (u: string) => request(app).get(`/api/v1${u}`);
-const ids = async (q = "") => (await get(`/menus${q}`).expect(200)).body.data.map((m: any) => m.id);
+const get = (path: string) => request(app).get(`/api/v1${path}`);
+const ids = async (query = "") => (await get(`/menus${query}`).expect(200)).body.data.map((menu: any) => menu.id);
 const KUNCI = [
   "available",
   "badge",
@@ -36,12 +36,12 @@ beforeEach(async () => {
 });
 
 test("GET /menus tanpa token: kartu D6, tanpa angka internal (R-11, BE-02)", async () => {
-  const r = await get("/menus").expect(200);
-  expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 2 });
-  expect(r.body.data.map((m: any) => m.id)).toEqual([ayam, esTeh]);
-  const k = r.body.data[0];
-  expect(Object.keys(k).sort()).toEqual(KUNCI);
-  expect(k).toEqual({
+  const res = await get("/menus").expect(200);
+  expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 2 });
+  expect(res.body.data.map((menu: any) => menu.id)).toEqual([ayam, esTeh]);
+  const card = res.body.data[0];
+  expect(Object.keys(card).sort()).toEqual(KUNCI);
+  expect(card).toEqual({
     id: ayam,
     name: "Nasi Ayam",
     image_url: null,
@@ -55,13 +55,13 @@ test("GET /menus tanpa token: kartu D6, tanpa angka internal (R-11, BE-02)", asy
     rating_count: 0,
     is_favorite: false,
   });
-  const s = JSON.stringify(r.body);
-  for (const kunci of PRIVATE_KEYS) expect(s).not.toContain(kunci);
+  const json = JSON.stringify(res.body);
+  for (const kunci of PRIVATE_KEYS) expect(json).not.toContain(kunci);
 });
 
 test("R-14: toko belum terverifikasi, pemilik nonaktif, menu nonaktif/terhapus tidak tampil", async () => {
-  for (const st of ["pending", "needs_fix", "suspended"]) {
-    await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [st, idB]);
+  for (const status of ["pending", "needs_fix", "suspended"]) {
+    await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [status, idB]);
     expect(await ids()).toEqual([ayam]);
   }
   await db.query("UPDATE merchants SET verification_status = 'verified' WHERE id = ?", [idB]);
@@ -88,12 +88,12 @@ test("D2: toko tutup (saklar atau jam) tidak tampil; rentang lewat tengah malam 
 test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko tutup tetap berisi menu)", async () => {
   const habis = await insertMenu(idA, { name: "Habis", quota_today: 5, sold_today: 5, sold_total: 999 });
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
-  const r = (await get(`/menus?merchant=${slugA}`).expect(200)).body;
-  expect(r.data.map((m: any) => [m.id, m.merchant.is_open])).toEqual([
+  const res = (await get(`/menus?merchant=${slugA}`).expect(200)).body;
+  expect(res.data.map((menu: any) => [menu.id, menu.merchant.is_open])).toEqual([
     [ayam, false],
     [habis, false],
   ]);
-  expect(r.meta.total).toBe(2);
+  expect(res.meta.total).toBe(2);
   await makeVisible(idA, { open: false });
   expect(await ids(`?merchant=${slugA}`)).toEqual([ayam, habis]);
   expect(await ids()).toEqual([esTeh]);
@@ -110,7 +110,7 @@ test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async ()
     sold_total: 999,
   });
   const sedikit = await insertMenu(idA, { name: "Sedikit", quota_today: 7 });
-  const po = await insertMenu(idA, { name: "PO", is_preorder: true, preorder_days: 2 });
+  const preorderMenu = await insertMenu(idA, { name: "PO", is_preorder: true, preorder_days: 2 });
   // TiDB tidak menegakkan CHECK: tiru data rusak (ditahan melebihi sisa) dengan mematikan CHECK di MySQL uji
   const [[chk]] = await db.query<any[]>(
     "SELECT CONSTRAINT_NAME AS n FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND CHECK_CLAUSE LIKE '%held_today%'",
@@ -125,16 +125,16 @@ test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async ()
     sold_today: 5,
   });
   const data = (await get("/menus").expect(200)).body.data;
-  const by = (id: number) => data.find((m: any) => m.id === id);
-  expect(by(habis)).toMatchObject({ available: 0, badge: "sold_out" });
-  expect(by(sedikit)).toMatchObject({ available: 7, badge: "low_stock" });
-  expect(by(po)).toMatchObject({ badge: "preorder" });
-  expect(by(rusak)).toMatchObject({ available: 0, badge: "sold_out" });
-  expect(by(basi)).toMatchObject({ available: 20, badge: "available" });
+  const findMenu = (id: number) => data.find((menu: any) => menu.id === id);
+  expect(findMenu(habis)).toMatchObject({ available: 0, badge: "sold_out" });
+  expect(findMenu(sedikit)).toMatchObject({ available: 7, badge: "low_stock" });
+  expect(findMenu(preorderMenu)).toMatchObject({ badge: "preorder" });
+  expect(findMenu(rusak)).toMatchObject({ available: 0, badge: "sold_out" });
+  expect(findMenu(basi)).toMatchObject({ available: 20, badge: "available" });
   expect(
     data
       .slice(-2)
-      .map((m: any) => m.id)
+      .map((menu: any) => menu.id)
       .sort(),
   ).toEqual([habis, rusak].sort());
   const [[row]] = await db.query<any[]>(
@@ -150,8 +150,8 @@ test("D8: q nama menu/toko dengan escape, kategori, toko, titik temu", async () 
   expect(await ids("?q=%25")).toEqual([]);
   expect(await ids("?q=_")).toEqual([]);
   expect(await ids("?q=%5C")).toEqual([]);
-  const r = await get(`/menus?q=${"a".repeat(101)}`).expect(400);
-  expect(r.body.error.fields.q).toEqual(["Pencarian maksimal 100 karakter."]);
+  const res = await get(`/menus?q=${"a".repeat(101)}`).expect(400);
+  expect(res.body.error.fields.q).toEqual(["Pencarian maksimal 100 karakter."]);
   expect(await ids("?category=minuman")).toEqual([esTeh]);
   expect(await ids(`?merchant=${slugA}`)).toEqual([ayam]);
   expect(await ids("?category=tidak-ada")).toEqual([]);
@@ -160,8 +160,8 @@ test("D8: q nama menu/toko dengan escape, kategori, toko, titik temu", async () 
   expect(await ids("?pickup_point_id=1")).toEqual([ayam]);
   await db.query("UPDATE pickup_points SET is_active = FALSE WHERE id = 1");
   expect(await ids("?pickup_point_id=1")).toEqual([]);
-  for (const v of ["abc", "0", "1.5"]) {
-    const bad = await get(`/menus?pickup_point_id=${v}`).expect(400);
+  for (const value of ["abc", "0", "1.5"]) {
+    const bad = await get(`/menus?pickup_point_id=${value}`).expect(400);
     expect(bad.body.error.fields.pickup_point_id).toEqual(["Titik temu tidak valid."]);
   }
 });
@@ -189,8 +189,8 @@ test("D9: urutan", async () => {
   expect(await ids("?sort=price_desc")).toEqual([mahal, ayam, esTeh, murah]);
   expect(await ids("?sort=rating")).toEqual([murah, mahal, esTeh, ayam]);
   expect(await ids("?sort=newest")).toEqual([mahal, murah, esTeh, ayam]);
-  for (const v of ["x", "id;DROP TABLE menus"]) {
-    const bad = await get(`/menus?sort=${encodeURIComponent(v)}`).expect(400);
+  for (const value of ["x", "id;DROP TABLE menus"]) {
+    const bad = await get(`/menus?sort=${encodeURIComponent(value)}`).expect(400);
     expect(bad.body.error.fields.sort).toEqual(["Urutan tidak dikenal."]);
   }
 });
@@ -199,9 +199,9 @@ test("D10: pagination", async () => {
   await db.query("DELETE FROM menu_options");
   await db.query("DELETE FROM menus");
   for (let i = 0; i < 25; i++) await insertMenu(idA, { name: `Menu ${i}` });
-  const r = await get("/menus?limit=10&page=3").expect(200);
-  expect(r.body.data).toHaveLength(5);
-  expect(r.body.meta).toEqual({ page: 3, limit: 10, total: 25 });
+  const res = await get("/menus?limit=10&page=3").expect(200);
+  expect(res.body.data).toHaveLength(5);
+  expect(res.body.meta).toEqual({ page: 3, limit: 10, total: 25 });
   expect((await get("/menus?limit=500").expect(200)).body.meta.limit).toBe(100);
   expect((await get("/menus?page=0&limit=abc").expect(200)).body.meta).toEqual({ page: 1, limit: 20, total: 25 });
 });

@@ -38,7 +38,7 @@ describe("seed demo (F18)", () => {
     const rows = await query(
       "SELECT verification_status s, verification_note n, suspended_reason r FROM merchants ORDER BY id",
     );
-    expect(rows.map((r) => r.s)).toEqual(["pending", "needs_fix", "verified", "suspended"]);
+    expect(rows.map((row) => row.s)).toEqual(["pending", "needs_fix", "verified", "suspended"]);
     expect(rows[1].n).toBeTruthy();
     expect(rows[3].r).toBeTruthy();
     expect(await query("SELECT id FROM admin_audit_logs")).toHaveLength(0);

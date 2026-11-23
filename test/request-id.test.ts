@@ -20,8 +20,8 @@ describe("X-Request-Id", () => {
     );
   });
   test("header berbahaya atau terlalu panjang diganti", async () => {
-    for (const v of ["a b<script>", "x".repeat(129)]) {
-      expect((await request(app).get("/x").set("X-Request-Id", v)).headers["x-request-id"]).toMatch(UUID);
+    for (const value of ["a b<script>", "x".repeat(129)]) {
+      expect((await request(app).get("/x").set("X-Request-Id", value)).headers["x-request-id"]).toMatch(UUID);
     }
   });
 });

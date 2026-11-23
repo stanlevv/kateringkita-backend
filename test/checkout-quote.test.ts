@@ -6,51 +6,51 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { menuRow, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F06 Task 2: POST /orders/quote (C-09, R-07, R-13, R-14, D1–D3, D10, D13)
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
-const quote = (body: unknown, token = s.customerToken) =>
+const quote = (body: unknown, token = setup.customerToken) =>
   request(app)
     .post("/api/v1/orders/quote")
     .set("Authorization", `Bearer ${token}`)
     .send(body as object);
-const satu = (o: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
-  items: [{ menu_id: s.menu, qty: 1, ...item }],
+const satu = (overrides: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
+  items: [{ menu_id: setup.menu, qty: 1, ...item }],
   pickup_point_id: 1,
-  ...o,
+  ...overrides,
 });
 const tolak400 = async (body: unknown, field: string, pesan: string) => {
-  const r = await quote(body).expect(400);
-  expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid." });
-  expect(r.body.error.fields[field]).toEqual([pesan]);
+  const res = await quote(body).expect(400);
+  expect(res.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid." });
+  expect(res.body.error.fields[field]).toEqual([pesan]);
 };
 const tolak409 = async (body: unknown, code: string, pesan: string) => {
-  const r = await quote(body).expect(409);
-  expect(r.body.error).toMatchObject({ code, message: pesan });
+  const res = await quote(body).expect(409);
+  expect(res.body.error).toMatchObject({ code, message: pesan });
 };
 // Waktu WIB d hari dari "sekarang" yang dibekukan (10:00 WIB hari ini)
-const wib = (d: number, jam = "10:00") =>
-  `${getWibDate(new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + d * 86400e3))}T${jam}:00+07:00`;
+const wib = (dayOffset: number, jam = "10:00") =>
+  `${getWibDate(new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + dayOffset * 86400e3))}T${jam}:00+07:00`;
 
 beforeEach(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
 });
 
 test("harga dihitung server: opsi + biaya layanan, field harga client diabaikan, tanpa angka internal", async () => {
   await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
-  const r = await quote({
-    items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju], unit_price: 1, total: 1 }],
+  const res = await quote({
+    items: [{ menu_id: setup.menu, qty: 2, option_ids: [setup.keju], unit_price: 1, total: 1 }],
     pickup_point_id: 1,
     total: 1,
     subtotal: 1,
   }).expect(200);
-  expect(r.body.data).toEqual({
+  expect(res.body.data).toEqual({
     items: [
       {
-        menu_id: s.menu,
+        menu_id: setup.menu,
         menu_name: "Nasi Ayam",
         qty: 2,
         unit_price: 18000,
-        options: [{ id: s.keju, name: "Keju", extra_price: 3000 }],
+        options: [{ id: setup.keju, name: "Keju", extra_price: 3000 }],
         line_total: 36000,
         available: 20,
       },
@@ -64,45 +64,45 @@ test("harga dihitung server: opsi + biaya layanan, field harga client diabaikan,
     vouchers_applied: [],
     warnings: [],
   });
-  const json = JSON.stringify(r.body);
-  for (const k of ['"hpp"', '"sold_today"', '"held_today"', '"quota_today"']) expect(json).not.toContain(k);
+  const json = JSON.stringify(res.body);
+  for (const key of ['"hpp"', '"sold_today"', '"held_today"', '"quota_today"']) expect(json).not.toContain(key);
 });
 
 test("biaya layanan bukan angka → 0", async () => {
   await db.query("UPDATE app_settings SET setting_value = 'abc' WHERE setting_key = 'service_fee'");
-  const r = await quote(satu()).expect(200);
-  expect(r.body.data).toMatchObject({ subtotal: 15000, service_fee: 0, total: 15000 });
+  const res = await quote(satu()).expect(200);
+  expect(res.body.data).toMatchObject({ subtotal: 15000, service_fee: 0, total: 15000 });
 });
 
 test("menu sama dua baris (opsi berbeda) → dua item, stok dijumlah", async () => {
-  await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [s.menu]);
-  const r = await quote({
+  await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [setup.menu]);
+  const res = await quote({
     items: [
-      { menu_id: s.menu, qty: 1, option_ids: [s.keju] },
-      { menu_id: s.menu, qty: 1 },
+      { menu_id: setup.menu, qty: 1, option_ids: [setup.keju] },
+      { menu_id: setup.menu, qty: 1 },
     ],
     pickup_point_id: 1,
   }).expect(200);
-  expect(r.body.data.items.map((i: any) => i.unit_price)).toEqual([18000, 15000]);
-  expect(r.body.data.subtotal).toBe(33000);
-  expect(r.body.data.warnings).toEqual([
-    { code: "OUT_OF_STOCK", menu_id: s.menu, available: 1, message: "Sisa Nasi Ayam tinggal 1 porsi." },
+  expect(res.body.data.items.map((i: any) => i.unit_price)).toEqual([18000, 15000]);
+  expect(res.body.data.subtotal).toBe(33000);
+  expect(res.body.data.warnings).toEqual([
+    { code: "OUT_OF_STOCK", menu_id: setup.menu, available: 1, message: "Sisa Nasi Ayam tinggal 1 porsi." },
   ]);
 });
 
 test("stok kurang → 200 dengan warnings; stock_date lama → kuota harian, DB tidak ditulis", async () => {
-  await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [s.menu]);
-  const r = await quote(satu({}, { qty: 3 })).expect(200);
-  expect(r.body.data.warnings).toEqual([
-    { code: "OUT_OF_STOCK", menu_id: s.menu, available: 1, message: "Sisa Nasi Ayam tinggal 1 porsi." },
+  await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [setup.menu]);
+  const res = await quote(satu({}, { qty: 3 })).expect(200);
+  expect(res.body.data.warnings).toEqual([
+    { code: "OUT_OF_STOCK", menu_id: setup.menu, available: 1, message: "Sisa Nasi Ayam tinggal 1 porsi." },
   ]);
-  expect(r.body.data.items[0].available).toBe(1);
+  expect(res.body.data.items[0].available).toBe(1);
 
-  await db.query("UPDATE menus SET stock_date = '2000-01-01', daily_quota = 8 WHERE id = ?", [s.menu]);
-  const sebelum = await menuRow(s.menu);
-  const r2 = await quote(satu()).expect(200);
-  expect(r2.body.data.items[0].available).toBe(8);
-  expect(await menuRow(s.menu)).toEqual(sebelum);
+  await db.query("UPDATE menus SET stock_date = '2000-01-01', daily_quota = 8 WHERE id = ?", [setup.menu]);
+  const sebelum = await menuRow(setup.menu);
+  const res2 = await quote(satu()).expect(200);
+  expect(res2.body.data.items[0].available).toBe(8);
+  expect(await menuRow(setup.menu)).toEqual(sebelum);
 });
 
 describe("validasi body (zod)", () => {
@@ -127,9 +127,9 @@ describe("validasi body (zod)", () => {
 test("body bukan objek / kosong → pesan Indonesia", async () => {
   // primitif JSON sudah ditolak express.json (strict) dengan "Format JSON tidak valid."
   for (const body of [undefined, "[1,2]"]) {
-    const req = request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${s.customerToken}`);
-    const r = await (body === undefined ? req : req.set("Content-Type", "application/json").send(body)).expect(400);
-    expect(r.body.error).toEqual({
+    const req = request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${setup.customerToken}`);
+    const res = await (body === undefined ? req : req.set("Content-Type", "application/json").send(body)).expect(400);
+    expect(res.body.error).toEqual({
       code: "VALIDATION_ERROR",
       message: "Data tidak valid.",
       fields: { "": ["Data pesanan tidak valid."] },
@@ -138,28 +138,28 @@ test("body bukan objek / kosong → pesan Indonesia", async () => {
 });
 
 test("total melewati batas angka → 400 items", async () => {
-  await db.query("UPDATE menus SET price = 3000000, hpp = 0 WHERE id = ?", [s.menu]);
+  await db.query("UPDATE menus SET price = 3000000, hpp = 0 WHERE id = ?", [setup.menu]);
   await tolak400(satu({}, { qty: 1000 }), "items", "Total pesanan terlalu besar. Kurangi jumlah pesanan.");
-  await db.query("UPDATE menus SET price = 2000000 WHERE id = ?", [s.menu]);
+  await db.query("UPDATE menus SET price = 2000000 WHERE id = ?", [setup.menu]);
   await quote(satu({}, { qty: 1000 })).expect(200);
 });
 
 describe("urutan validasi D3", () => {
   test("menu nonaktif / terhapus / tidak ada → items.0.menu_id", async () => {
-    const mati = await insertMenu(s.idA, { is_active: false });
-    const hapus = await insertMenu(s.idA, { deleted_at: new Date() });
+    const mati = await insertMenu(setup.idA, { is_active: false });
+    const hapus = await insertMenu(setup.idA, { deleted_at: new Date() });
     for (const id of [mati, hapus, 99999])
       await tolak400(satu({}, { menu_id: id }), "items.0.menu_id", "Menu tidak tersedia.");
   });
 
   test("menu dari dua toko → items", async () => {
-    await makeVisible(s.idB);
-    const mB = await insertMenu(s.idB);
+    await makeVisible(setup.idB);
+    const menuB = await insertMenu(setup.idB);
     await tolak400(
       {
         items: [
-          { menu_id: s.menu, qty: 1 },
-          { menu_id: mB, qty: 1 },
+          { menu_id: setup.menu, qty: 1 },
+          { menu_id: menuB, qty: 1 },
         ],
         pickup_point_id: 1,
       },
@@ -169,21 +169,21 @@ describe("urutan validasi D3", () => {
   });
 
   test("R-14: toko pending / suspended / pemilik nonaktif → MERCHANT_UNAVAILABLE", async () => {
-    for (const st of ["pending", "suspended"]) {
-      await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [st, s.idA]);
+    for (const status of ["pending", "suspended"]) {
+      await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [status, setup.idA]);
       await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
     }
-    await makeVisible(s.idA);
+    await makeVisible(setup.idA);
     await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [
-      s.idA,
+      setup.idA,
     ]);
     await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
   });
 
   test("R-13: saklar mati / di luar jam → MERCHANT_CLOSED dengan jam buka", async () => {
-    await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [s.idA]);
+    await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [setup.idA]);
     await tolak409(satu(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 07.00–16.00 WIB.");
-    await makeVisible(s.idA, { open: false });
+    await makeVisible(setup.idA, { open: false });
     await tolak409(satu(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.");
     // dua galat sekaligus: toko tutup menang atas titik temu salah
     await tolak409(satu({ pickup_point_id: 2 }), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.");
@@ -196,22 +196,23 @@ describe("urutan validasi D3", () => {
   });
 
   test("qty di bawah minimum → items.0.qty", async () => {
-    await db.query("UPDATE menus SET min_order_qty = 3 WHERE id = ?", [s.menu]);
+    await db.query("UPDATE menus SET min_order_qty = 3 WHERE id = ?", [setup.menu]);
     await tolak400(satu({}, { qty: 2 }), "items.0.qty", "Minimal pesan 3 porsi.");
   });
 
   test("opsi nonaktif / milik menu lain → items.0.option_ids", async () => {
-    const [o] = await db.query<any>("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Gula', 0)", [
-      s.menu2,
-    ]);
-    for (const id of [s.basi, o.insertId]) {
+    const [result] = await db.query<any>(
+      "INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Gula', 0)",
+      [setup.menu2],
+    );
+    for (const id of [setup.basi, result.insertId]) {
       await tolak400(satu({}, { option_ids: [id] }), "items.0.option_ids", "Pilihan tidak tersedia.");
     }
   });
 
   test("promo tak dikenal → 422 PROMO_INVALID; promo kosong diabaikan", async () => {
-    const r = await quote(satu({ promo_code: "HEMAT" })).expect(422);
-    expect(r.body.error).toMatchObject({ code: "PROMO_INVALID", message: "Kode promo tidak ditemukan." });
+    const res = await quote(satu({ promo_code: "HEMAT" })).expect(422);
+    expect(res.body.error).toMatchObject({ code: "PROMO_INVALID", message: "Kode promo tidak ditemukan." });
     await quote(satu({ promo_code: "  " })).expect(200);
   });
 });
@@ -225,15 +226,15 @@ describe("pickup_at (D13)", () => {
   });
 
   test("pre-order H-2: tanpa waktu / besok → 400; lusa → 200", async () => {
-    await db.query("UPDATE menus SET is_preorder = TRUE, preorder_days = 2 WHERE id = ?", [s.menu]);
-    const PO = "Menu pre-order harus diambil paling cepat H-2.";
-    await tolak400(satu(), "pickup_at", PO);
-    await tolak400(satu({ pickup_at: wib(1, "15:00") }), "pickup_at", PO);
+    await db.query("UPDATE menus SET is_preorder = TRUE, preorder_days = 2 WHERE id = ?", [setup.menu]);
+    const PREORDER_MSG = "Menu pre-order harus diambil paling cepat H-2.";
+    await tolak400(satu(), "pickup_at", PREORDER_MSG);
+    await tolak400(satu({ pickup_at: wib(1, "15:00") }), "pickup_at", PREORDER_MSG);
     await quote(satu({ pickup_at: wib(2) })).expect(200);
   });
 });
 
 test("auth: tanpa token 401, penjual 403", async () => {
   await request(app).post("/api/v1/orders/quote").send(satu()).expect(401);
-  await quote(satu(), s.tokenA).expect(403);
+  await quote(satu(), setup.tokenA).expect(403);
 });

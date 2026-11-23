@@ -9,9 +9,9 @@ describe("migrasi 003_checkout", () => {
 
   beforeAll(async () => {
     await prepareMerchants();
-    const [u] = await db.query<any[]>("SELECT id, full_name FROM users WHERE full_name IN ('Budi','Siti')");
-    budi = u.find((r) => r.full_name === "Budi").id;
-    siti = u.find((r) => r.full_name === "Siti").id;
+    const [userRows] = await db.query<any[]>("SELECT id, full_name FROM users WHERE full_name IN ('Budi','Siti')");
+    budi = userRows.find((user) => user.full_name === "Budi").id;
+    siti = userRows.find((user) => user.full_name === "Siti").id;
   });
 
   test("orders.stock_date DATE NULL", async () => {

@@ -6,8 +6,8 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F07 Task 3: GET /merchant/orders & /merchant/orders/:code (M-04, R-10, R-11; D9, D11–D13)
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
-const k: Record<string, string> = {};
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
+const codes: Record<string, string> = {};
 
 const KUNCI = [
   "cancel_reason",
@@ -37,23 +37,24 @@ const KUNCI = [
   "total",
   "updated_at",
 ];
-const daftar = (qs = "", token = s.tokenA) =>
-  request(app).get(`/api/v1/merchant/orders${qs}`).set("Authorization", `Bearer ${token}`);
-const kodeDari = (r: request.Response) => r.body.data.map((o: { code: string }) => o.code).sort();
-const atur = (code: string, o: Record<string, unknown>) => db.query("UPDATE orders SET ? WHERE code = ?", [o, code]);
+const daftar = (query = "", token = setup.tokenA) =>
+  request(app).get(`/api/v1/merchant/orders${query}`).set("Authorization", `Bearer ${token}`);
+const kodeDari = (res: request.Response) => res.body.data.map((order: { code: string }) => order.code).sort();
+const atur = (code: string, fields: Record<string, unknown>) =>
+  db.query("UPDATE orders SET ? WHERE code = ?", [fields, code]);
 const kemarin = () => new Date(Date.parse(`${getWibDate()}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
 
 beforeAll(async () => {
-  s = await prepareCheckout();
-  await makeVisible(s.idB);
-  await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [s.idB]);
-  const menuB = await insertMenu(s.idB, { name: "Soto" });
-  k.holding = await placeOrder(s.customerToken, s.menu, 2);
-  k.confirmed = await placeOrder(s.customerToken, s.menu);
-  await atur(k.confirmed, { status: "confirmed" });
-  k.completed = await placeOrder(s.customerToken, s.menu2);
-  await atur(k.completed, { status: "completed" });
-  k.b = await placeOrder(s.customerToken, menuB);
+  setup = await prepareCheckout();
+  await makeVisible(setup.idB);
+  await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [setup.idB]);
+  const menuB = await insertMenu(setup.idB, { name: "Soto" });
+  codes.holding = await placeOrder(setup.customerToken, setup.menu, 2);
+  codes.confirmed = await placeOrder(setup.customerToken, setup.menu);
+  await atur(codes.confirmed, { status: "confirmed" });
+  codes.completed = await placeOrder(setup.customerToken, setup.menu2);
+  await atur(codes.completed, { status: "completed" });
+  codes.b = await placeOrder(setup.customerToken, menuB);
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -61,13 +62,13 @@ afterAll(() => {
 
 describe("GET /merchant/orders", () => {
   test("hanya pesanan toko sendiri, bentuk MerchantOrder tanpa hpp/merchant/can_*", async () => {
-    const r = await daftar().expect(200);
-    expect(kodeDari(r)).toEqual([k.holding, k.confirmed, k.completed].sort());
-    expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 3 });
-    for (const o of r.body.data) expect(Object.keys(o).sort()).toEqual(KUNCI);
-    expect(JSON.stringify(r.body)).not.toMatch(/"hpp"|"merchant"|"can_cancel"/);
-    const h = r.body.data.find((o: any) => o.code === k.holding);
-    expect(h).toMatchObject({
+    const res = await daftar().expect(200);
+    expect(kodeDari(res)).toEqual([codes.holding, codes.confirmed, codes.completed].sort());
+    expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 3 });
+    for (const listedOrder of res.body.data) expect(Object.keys(listedOrder).sort()).toEqual(KUNCI);
+    expect(JSON.stringify(res.body)).not.toMatch(/"hpp"|"merchant"|"can_cancel"/);
+    const holdingOrder = res.body.data.find((order: any) => order.code === codes.holding);
+    expect(holdingOrder).toMatchObject({
       customer_name: "Budi",
       customer_phone: "081234567890",
       cancel_reason: null,
@@ -76,26 +77,28 @@ describe("GET /merchant/orders", () => {
       status: "holding",
       items: [{ menu_name: "Nasi Ayam", qty: 2, unit_price: 15000, line_total: 30000, options: [] }],
     });
-    expect(h.seconds_left).toBeGreaterThan(0);
-    expect(r.body.data.find((o: any) => o.code === k.confirmed)).toMatchObject({
+    expect(holdingOrder.seconds_left).toBeGreaterThan(0);
+    expect(res.body.data.find((order: any) => order.code === codes.confirmed)).toMatchObject({
       hold_until: null,
       seconds_left: null,
     });
   });
 
   test("status daftar koma; status tak dikenal → 400", async () => {
-    expect(kodeDari(await daftar("?status=holding,confirmed").expect(200))).toEqual([k.holding, k.confirmed].sort());
-    const r = await daftar("?status=holding,dimasak").expect(400);
-    expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: { status: ["Status tidak dikenal."] } });
+    expect(kodeDari(await daftar("?status=holding,confirmed").expect(200))).toEqual(
+      [codes.holding, codes.confirmed].sort(),
+    );
+    const res = await daftar("?status=holding,dimasak").expect(400);
+    expect(res.body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: { status: ["Status tidak dikenal."] } });
   });
 
   test("date = tanggal WIB created_at", async () => {
     expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).toHaveLength(3);
-    await atur(k.completed, { created_at: `${kemarin()} 17:30:00` }); // hari ini 00:30 WIB
-    expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).toContain(k.completed);
-    await atur(k.completed, { created_at: `${kemarin()} 16:59:59` }); // kemarin 23:59:59 WIB
-    expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).not.toContain(k.completed);
-    expect(kodeDari(await daftar(`?date=${kemarin()}`).expect(200))).toEqual([k.completed]);
+    await atur(codes.completed, { created_at: `${kemarin()} 17:30:00` }); // hari ini 00:30 WIB
+    expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).toContain(codes.completed);
+    await atur(codes.completed, { created_at: `${kemarin()} 16:59:59` }); // kemarin 23:59:59 WIB
+    expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).not.toContain(codes.completed);
+    expect(kodeDari(await daftar(`?date=${kemarin()}`).expect(200))).toEqual([codes.completed]);
     expect((await daftar("?date=2026-13-01").expect(400)).body.error.fields).toEqual({
       date: ["Tanggal tidak valid."],
     });
@@ -103,22 +106,22 @@ describe("GET /merchant/orders", () => {
 
   test("q: nama pembeli tanpa beda huruf, sebagian kode", async () => {
     expect(kodeDari(await daftar("?q=budi").expect(200))).toHaveLength(3);
-    expect(kodeDari(await daftar(`?q=${k.holding.slice(-4)}`).expect(200))).toEqual([k.holding]);
+    expect(kodeDari(await daftar(`?q=${codes.holding.slice(-4)}`).expect(200))).toEqual([codes.holding]);
   });
 
   test("page/limit + meta.total", async () => {
-    const r = await daftar("?page=2&limit=2").expect(200);
-    expect(r.body.data).toHaveLength(1);
-    expect(r.body.meta).toEqual({ page: 2, limit: 2, total: 3 });
+    const res = await daftar("?page=2&limit=2").expect(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.meta).toEqual({ page: 2, limit: 2, total: 3 });
     expect((await daftar("?limit=0").expect(400)).body.error.fields).toEqual({ limit: ["Halaman tidak valid."] });
   });
 
   test("updated_since: status diabaikan; tidak valid → 400", async () => {
     await db.query("UPDATE orders SET updated_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR");
-    const t = new Date(Date.now() - 1800e3).toISOString();
-    await atur(k.confirmed, { status: "cooking", updated_at: new Date() });
-    const r = await daftar(`?status=holding&updated_since=${encodeURIComponent(t)}`).expect(200);
-    expect(r.body.data.map((o: any) => [o.code, o.status])).toEqual([[k.confirmed, "cooking"]]);
+    const since = new Date(Date.now() - 1800e3).toISOString();
+    await atur(codes.confirmed, { status: "cooking", updated_at: new Date() });
+    const res = await daftar(`?status=holding&updated_since=${encodeURIComponent(since)}`).expect(200);
+    expect(res.body.data.map((order: any) => [order.code, order.status])).toEqual([[codes.confirmed, "cooking"]]);
     expect((await daftar("?updated_since=kemarin").expect(400)).body.error.fields).toEqual({
       updated_since: ["Waktu tidak valid."],
     });
@@ -127,36 +130,36 @@ describe("GET /merchant/orders", () => {
 
 describe("updated_since berurut (review)", () => {
   test("urut updated_at naik: halaman berikutnya dari tanda air tidak melompat", async () => {
-    const t0 = Date.now() - 3600e3;
-    await db.query("UPDATE orders SET updated_at = ?", [new Date(t0 - 3600e3)]);
+    const startMs = Date.now() - 3600e3;
+    await db.query("UPDATE orders SET updated_at = ?", [new Date(startMs - 3600e3)]);
     const detik = [3, 1, 2]; // holding paling baru, confirmed paling lama
-    for (const [i, c] of [k.holding, k.confirmed, k.completed].entries())
-      await atur(c, { updated_at: new Date(t0 + detik[i] * 1000) });
-    const r1 = await daftar(`?updated_since=${new Date(t0).toISOString()}&limit=2`).expect(200);
-    expect(r1.body.data.map((o: any) => o.code)).toEqual([k.confirmed, k.completed]);
-    const r2 = await daftar(`?updated_since=${r1.body.data.at(-1).updated_at}&limit=2`).expect(200);
-    expect(r2.body.data.map((o: any) => o.code)).toEqual([k.completed, k.holding]);
+    for (const [i, code] of [codes.holding, codes.confirmed, codes.completed].entries())
+      await atur(code, { updated_at: new Date(startMs + detik[i] * 1000) });
+    const res1 = await daftar(`?updated_since=${new Date(startMs).toISOString()}&limit=2`).expect(200);
+    expect(res1.body.data.map((order: any) => order.code)).toEqual([codes.confirmed, codes.completed]);
+    const res2 = await daftar(`?updated_since=${res1.body.data.at(-1).updated_at}&limit=2`).expect(200);
+    expect(res2.body.data.map((order: any) => order.code)).toEqual([codes.completed, codes.holding]);
   });
 });
 
 describe("GET /merchant/orders/:code", () => {
   test("200 bentuk sama; toko lain → 404; pembeli → 403", async () => {
-    const r = await request(app)
-      .get(`/api/v1/merchant/orders/${k.holding}`)
-      .set("Authorization", `Bearer ${s.tokenA}`)
+    const res = await request(app)
+      .get(`/api/v1/merchant/orders/${codes.holding}`)
+      .set("Authorization", `Bearer ${setup.tokenA}`)
       .expect(200);
-    expect(Object.keys(r.body.data).sort()).toEqual(KUNCI);
-    expect(r.body.data.code).toBe(k.holding);
-    const b = await request(app)
-      .get(`/api/v1/merchant/orders/${k.b}`)
-      .set("Authorization", `Bearer ${s.tokenA}`)
+    expect(Object.keys(res.body.data).sort()).toEqual(KUNCI);
+    expect(res.body.data.code).toBe(codes.holding);
+    const otherRes = await request(app)
+      .get(`/api/v1/merchant/orders/${codes.b}`)
+      .set("Authorization", `Bearer ${setup.tokenA}`)
       .expect(404);
-    expect(b.body.error.message).toBe("Pesanan tidak ditemukan.");
+    expect(otherRes.body.error.message).toBe("Pesanan tidak ditemukan.");
     await request(app)
-      .get(`/api/v1/merchant/orders/${k.holding}`)
-      .set("Authorization", `Bearer ${s.customerToken}`)
+      .get(`/api/v1/merchant/orders/${codes.holding}`)
+      .set("Authorization", `Bearer ${setup.customerToken}`)
       .expect(403);
-    await daftar("", s.customerToken).expect(403);
+    await daftar("", setup.customerToken).expect(403);
   });
 });
 
@@ -166,5 +169,5 @@ test("q tak peka huruf walau kolom berkolasi biner", async () => {
     "ALTER TABLE orders MODIFY customer_name VARCHAR(150) NOT NULL COLLATE utf8mb4_bin, MODIFY code VARCHAR(20) NOT NULL COLLATE utf8mb4_bin",
   );
   expect(kodeDari(await daftar("?q=BUDI").expect(200))).toHaveLength(3);
-  expect(kodeDari(await daftar(`?q=${k.holding.toLowerCase()}`).expect(200))).toEqual([k.holding]);
+  expect(kodeDari(await daftar(`?q=${codes.holding.toLowerCase()}`).expect(200))).toEqual([codes.holding]);
 });

@@ -5,10 +5,12 @@ import { isValidNotification } from "../src/utils/midtrans";
 
 // Sejak 28 Okt 2026 Midtrans menandatangani notifikasi dengan Signature Secret Key, terpisah dari Server Key
 const tanda = (key: string) => {
-  const n = { order_id: "KK-UJI-1", status_code: "200", gross_amount: "30000.00" };
+  const notification = { order_id: "KK-UJI-1", status_code: "200", gross_amount: "30000.00" };
   return {
-    ...n,
-    signature_key: createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${key}`).digest("hex"),
+    ...notification,
+    signature_key: createHash("sha512")
+      .update(`${notification.order_id}${notification.status_code}${notification.gross_amount}${key}`)
+      .digest("hex"),
   };
 };
 

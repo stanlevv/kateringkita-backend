@@ -8,39 +8,39 @@ import { sendNotification } from "./helpers/midtrans";
 import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F26: QRIS statis toko (verifikasi manual) dihapus; pre-order bayar online lewat Snap Midtrans (di-stub) → notifikasi → diterima otomatis
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const KEY = "SB-Mid-server-uji";
 const SNAP = "https://app.sandbox.midtrans.com/snap/v4/redirection/pre-order";
 
-const pesan = (payment_method: string, token = s.customerToken) =>
+const pesan = (payment_method: string, token = setup.customerToken) =>
   request(app)
     .post("/api/v1/orders")
     .set("Authorization", `Bearer ${token}`)
     .set("Idempotency-Key", randomUUID())
-    .send({ items: [{ menu_id: s.menu, qty: 2 }], pickup_point_id: 1, payment_method });
-const bayar = (code: string, body?: object, token = s.customerToken) =>
+    .send({ items: [{ menu_id: setup.menu, qty: 2 }], pickup_point_id: 1, payment_method });
+const bayar = (code: string, body?: object, token = setup.customerToken) =>
   request(app).post(`/api/v1/orders/${code}/online`).set("Authorization", `Bearer ${token}`).send(body);
-const notif = (o: Record<string, string>) =>
+const notif = (fields: Record<string, string>) =>
   sendNotification(
     {
       status_code: "200",
       transaction_status: "settlement",
       payment_type: "qris",
-      transaction_id: `trx-${o.order_id}`,
-      ...o,
+      transaction_id: `trx-${fields.order_id}`,
+      ...fields,
     },
     KEY,
   );
 const pesanan = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 const stubSnap = () => {
-  const f = vi.fn().mockResolvedValue(new Response(JSON.stringify({ token: "snap-uji", redirect_url: SNAP })));
-  vi.stubGlobal("fetch", f);
-  return f;
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ token: "snap-uji", redirect_url: SNAP })));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 };
 
 beforeAll(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
   // .env lokal boleh berisi key sandbox; tes mulai tanpa Midtrans dan selalu sandbox
   env.MIDTRANS_SERVER_KEY = undefined;
   env.MIDTRANS_IS_PRODUCTION = "false";
@@ -61,23 +61,26 @@ describe("checkout", () => {
     expect((await pesan("qris").expect(400)).body.error.fields.payment_method).toEqual([
       "Pilih bayar tunai, Virtual Account, atau bayar online.",
     ]);
-    const r = await pesan("online").expect(409);
-    expect(r.body.error).toEqual({ code: "CONFLICT", message: "Pembayaran online belum tersedia. Pilih metode lain." });
-    expect((await menuRow(s.menu)).held_today).toBe(0);
+    const res = await pesan("online").expect(409);
+    expect(res.body.error).toEqual({
+      code: "CONFLICT",
+      message: "Pembayaran online belum tersedia. Pilih metode lain.",
+    });
+    expect((await menuRow(setup.menu)).held_today).toBe(0);
   });
 
   test("online → holding unpaid; payment_url null sampai halaman bayar dibuka; tanpa qris_image_url toko", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
-    const r = await pesan("online").expect(201);
-    expect(r.body.data).toMatchObject({ status: "holding", payment_method: "online", payment_status: "unpaid" });
-    expect(r.body.data.payment).toEqual({
+    const res = await pesan("online").expect(201);
+    expect(res.body.data).toMatchObject({ status: "holding", payment_method: "online", payment_status: "unpaid" });
+    expect(res.body.data.payment).toEqual({
       method: "online",
       status: "unpaid",
       amount: 30000,
       payment_url: null,
       qris: null,
     });
-    expect(r.body.data.merchant).not.toHaveProperty("qris_image_url");
+    expect(res.body.data.merchant).not.toHaveProperty("qris_image_url");
   });
 });
 
@@ -85,20 +88,20 @@ describe("POST /orders/:code/online", () => {
   test("Snap dibuat sekali (idempoten), tanpa callback bila tanpa kembali; settlement → confirmed + paid, payment_url hilang", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const { code, total } = (await pesan("online").expect(201)).body.data;
-    const f = stubSnap();
+    const fetchMock = stubSnap();
     expect((await bayar(code).expect(200)).body.data.payment).toMatchObject({ status: "pending", payment_url: SNAP });
-    const [url, init] = f.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://app.sandbox.midtrans.com/snap/v1/transactions");
     const kirim = JSON.parse(init.body);
     expect(kirim).toMatchObject({ transaction_details: { order_id: code, gross_amount: total } });
     expect(kirim).not.toHaveProperty("callbacks");
     await bayar(code).expect(200);
-    expect(f).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     await notif({ order_id: code, gross_amount: `${total}.00` }).expect(200);
     expect(await pesanan(code)).toMatchObject({ status: "confirmed", payment_status: "paid" });
     const baca = await request(app)
       .get(`/api/v1/orders/${code}`)
-      .set("Authorization", `Bearer ${s.customerToken}`)
+      .set("Authorization", `Bearer ${setup.customerToken}`)
       .expect(200);
     expect(baca.body.data.payment).toMatchObject({ status: "paid", payment_url: null });
     expect((await bayar(code).expect(409)).body.error.message).toBe("Pesanan ini tidak menunggu pembayaran.");
@@ -107,28 +110,30 @@ describe("POST /orders/:code/online", () => {
   test("kembali web sendiri jadi callback; asal lain 400; pesanan tunai 409; pembeli lain 404; penjual 403", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const code = (await pesan("online").expect(201)).body.data.code;
-    const f = stubSnap();
+    const fetchMock = stubSnap();
     expect((await bayar(code, { kembali: "https://jahat.example/x" }).expect(400)).body.error.fields.kembali).toEqual([
       "Alamat kembali tidak diizinkan.",
     ]);
     await bayar(code, { kembali: "http://localhost:3000/pesanan/x" }).expect(200);
-    expect(JSON.parse(f.mock.calls[0][1].body).callbacks).toEqual({ finish: "http://localhost:3000/pesanan/x" });
-    const cod = await placeOrder(s.customerToken, s.menu2);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).callbacks).toEqual({
+      finish: "http://localhost:3000/pesanan/x",
+    });
+    const cod = await placeOrder(setup.customerToken, setup.menu2);
     expect((await bayar(cod).expect(409)).body.error.message).toBe("Pesanan ini tidak memakai bayar online.");
     await bayar(code, undefined, await createCustomer(1)).expect(404);
-    await bayar(code, undefined, s.tokenA).expect(403);
+    await bayar(code, undefined, setup.tokenA).expect(403);
   });
 });
 
 // QRIS langsung di aplikasi: charge Core API payment_type qris → qr_string digambar sendiri oleh aplikasi (tanpa halaman Snap)
 describe("POST /orders/:code/qris", () => {
   const QR_URL = (id: string) => `https://api.sandbox.midtrans.com/v2/qris/${id}/qr-code`;
-  const qris = (code: string, token = s.customerToken) =>
+  const qris = (code: string, token = setup.customerToken) =>
     request(app).post(`/api/v1/orders/${code}/qris`).set("Authorization", `Bearer ${token}`).send();
   const stubCharge = (balas: Record<string, unknown>) => {
-    const f = vi.fn().mockImplementation(async () => new Response(JSON.stringify(balas)));
-    vi.stubGlobal("fetch", f);
-    return f;
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(balas)));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
   };
   const chargeQris = (code: string, total: number) => ({
     status_code: "201",
@@ -145,16 +150,16 @@ describe("POST /orders/:code/qris", () => {
   test("charge QRIS sekali (idempoten) → qr_string + qr_url; settlement → confirmed + paid, qris hilang", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const { code, total } = (await pesan("online").expect(201)).body.data;
-    const f = stubCharge(chargeQris(code, total));
-    const r = await qris(code).expect(200);
-    expect(r.body.data.payment).toMatchObject({
+    const fetchMock = stubCharge(chargeQris(code, total));
+    const res = await qris(code).expect(200);
+    expect(res.body.data.payment).toMatchObject({
       method: "online",
       status: "pending",
       payment_url: null,
       qris: { qr_string: `00020101021226QR-${code}`, qr_url: QR_URL(`trx-${code}`) },
     });
-    expect(new Date(r.body.data.payment.qris.expires_at).getTime()).toBeGreaterThan(Date.now());
-    const [url, init] = f.mock.calls[0];
+    expect(new Date(res.body.data.payment.qris.expires_at).getTime()).toBeGreaterThan(Date.now());
+    const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://api.sandbox.midtrans.com/v2/charge");
     expect(JSON.parse(init.body)).toMatchObject({
       payment_type: "qris",
@@ -164,19 +169,19 @@ describe("POST /orders/:code/qris", () => {
     });
     // permintaan ulang memakai QR yang sama, tidak charge lagi
     expect((await qris(code).expect(200)).body.data.payment.qris.qr_string).toBe(`00020101021226QR-${code}`);
-    expect(f).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     // GET pesanan juga membawa QR selama menunggu bayar
     const baca = () =>
-      request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${s.customerToken}`).expect(200);
+      request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${setup.customerToken}`).expect(200);
     expect((await baca()).body.data.payment.qris.qr_url).toBe(QR_URL(`trx-${code}`));
     await notif({ order_id: code, gross_amount: `${total}.00`, transaction_id: `trx-${code}` }).expect(200);
     expect(await pesanan(code)).toMatchObject({ status: "confirmed", payment_status: "paid" });
     expect((await baca()).body.data.payment).toMatchObject({ status: "paid", qris: null });
-    const [[p]] = await db.query<any[]>(
+    const [[payment]] = await db.query<any[]>(
       "SELECT p.method, p.status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?",
       [code],
     );
-    expect(p).toMatchObject({ method: "qris", status: "paid" });
+    expect(payment).toMatchObject({ method: "qris", status: "paid" });
     expect((await qris(code).expect(409)).body.error.message).toBe("Pesanan ini tidak menunggu pembayaran.");
   });
 
@@ -211,20 +216,20 @@ describe("POST /orders/:code/qris", () => {
     );
     stubCharge({ status_code: "500", status_message: "Internal error" });
     expect((await qris(code).expect(502)).body.error.message).toBe("Gagal membuat QRIS. Coba lagi.");
-    const [[n]] = await db.query<any[]>(
+    const [[row]] = await db.query<any[]>(
       "SELECT COUNT(*) AS n FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?",
       [code],
     );
-    expect(Number(n.n)).toBe(0);
+    expect(Number(row.n)).toBe(0);
   });
 
   test("pesanan tunai 409; pembeli lain 404; penjual 403", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const code = (await pesan("online").expect(201)).body.data.code;
-    const cod = await placeOrder(s.customerToken, s.menu2);
+    const cod = await placeOrder(setup.customerToken, setup.menu2);
     expect((await qris(cod).expect(409)).body.error.message).toBe("Pesanan ini tidak memakai bayar online.");
     await qris(code, await createCustomer(2)).expect(404);
-    await qris(code, s.tokenA).expect(403);
+    await qris(code, setup.tokenA).expect(403);
   });
 });
 
@@ -232,8 +237,8 @@ describe("penjual tidak bisa melunasi manual", () => {
   test("POST /merchant/orders/:code/pay → 404; konfirmasi sebelum lunas → 409", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const code = (await pesan("online").expect(201)).body.data.code;
-    const aksi = (a: string) =>
-      request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set("Authorization", `Bearer ${s.tokenA}`);
+    const aksi = (action: string) =>
+      request(app).post(`/api/v1/merchant/orders/${code}/${action}`).set("Authorization", `Bearer ${setup.tokenA}`);
     await aksi("pay").expect(404);
     expect((await aksi("confirm").expect(409)).body.error.message).toBe("Pesanan belum dibayar.");
     expect((await pesanan(code)).payment_status).toBe("unpaid");

@@ -127,11 +127,11 @@ test("merchant dengan phone yang sudah dipakai → 409 dan tidak ada baris baru"
 test("nomor sudah terdaftar → 409 tanpa menjalankan bcrypt", async () => {
   await request(app).post("/api/v1/auth/customer/register").send(customer).expect(201);
   const hash = vi.spyOn(bcrypt, "hash");
-  const r = await request(app)
+  const res = await request(app)
     .post("/api/v1/auth/customer/register")
     .send({ ...customer, email: "lain@mail.com" })
     .expect(409);
-  expect(r.body.error).toEqual({ code: "CONFLICT", message: "Data sudah terdaftar." });
+  expect(res.body.error).toEqual({ code: "CONFLICT", message: "Data sudah terdaftar." });
   expect(hash).not.toHaveBeenCalled();
   hash.mockRestore();
 });
@@ -149,10 +149,10 @@ test("pendaftaran berhasil ke-61 dari satu sumber dalam 1 jam → 429", async ()
       })
       .expect(201);
   }
-  const r = await request(app)
+  const res = await request(app)
     .post("/api/v1/auth/customer/register")
     .send({ full_name: "Budi", email: "budi99@mail.com", phone: "081399999999", password: "rahasia123" })
     .expect(429);
-  expect(r.body.error.code).toBe("RATE_LIMITED");
+  expect(res.body.error.code).toBe("RATE_LIMITED");
   registerLimiter.reset();
 });

@@ -6,7 +6,7 @@ import { PRIVATE_KEYS, freezeClock, prepareMerchants, insertMenu, makeVisible } 
 
 let idA: number, idB: number, slugA: string, slugB: string, menu: number;
 
-const get = (u: string) => request(app).get(`/api/v1${u}`);
+const get = (path: string) => request(app).get(`/api/v1${path}`);
 const KUNCI = [
   "available",
   "badge",
@@ -48,9 +48,9 @@ const KUNCI_PROFIL = [
 ];
 const slug = async (id: number) =>
   ((await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [id]))[0] as any[])[0].slug as string;
-const tolak = async (u: string, pesan = "Menu tidak ditemukan.") => {
-  const r = await get(u).expect(404);
-  expect(r.body.error.message).toBe(pesan);
+const tolak = async (path: string, pesan = "Menu tidak ditemukan.") => {
+  const res = await get(path).expect(404);
+  expect(res.body.error.message).toBe(pesan);
 };
 
 beforeEach(async () => {
@@ -77,11 +77,11 @@ beforeEach(async () => {
 });
 
 test("GET /menus/:id: bentuk D7, opsi & titik temu aktif saja, tanpa angka internal", async () => {
-  const r = await get(`/menus/${menu}`).expect(200);
-  const d = r.body.data;
-  expect(Object.keys(d).sort()).toEqual(KUNCI);
-  expect(Object.keys(d.merchant).sort()).toEqual(KUNCI_TOKO);
-  expect(d).toMatchObject({
+  const res = await get(`/menus/${menu}`).expect(200);
+  const data = res.body.data;
+  expect(Object.keys(data).sort()).toEqual(KUNCI);
+  expect(Object.keys(data.merchant).sort()).toEqual(KUNCI_TOKO);
+  expect(data).toMatchObject({
     id: menu,
     name: "Nasi Ayam",
     description: "Pedas",
@@ -94,8 +94,8 @@ test("GET /menus/:id: bentuk D7, opsi & titik temu aktif saja, tanpa angka inter
     is_favorite: false,
     category: { id: 1, name: "Nasi Box", slug: "nasi-box" },
   });
-  expect(d.options).toEqual([{ id: expect.any(Number), name: "Keju", extra_price: 3000 }]);
-  expect(d.merchant).toEqual({
+  expect(data.options).toEqual([{ id: expect.any(Number), name: "Keju", extra_price: 3000 }]);
+  expect(data.merchant).toEqual({
     id: idA,
     slug: slugA,
     business_name: "Dapur Siti",
@@ -105,8 +105,8 @@ test("GET /menus/:id: bentuk D7, opsi & titik temu aktif saja, tanpa angka inter
     close_time: "16:00",
     pickup_points: [{ id: 1, name: "Gedung Vokasi UB (Lt. 2)", description: "Lobi" }],
   });
-  const s = JSON.stringify(r.body);
-  for (const k of PRIVATE_KEYS) expect(s).not.toContain(k);
+  const json = JSON.stringify(res.body);
+  for (const key of PRIVATE_KEYS) expect(json).not.toContain(key);
 });
 
 test("D3: toko tutup (saklar atau jam) tetap 200 dengan is_open false", async () => {
@@ -138,29 +138,29 @@ test("D11: ulasan publik terbaru dulu, nama disamarkan, paginated", async () => 
   );
   const [[rahma]] = await db.query<any[]>("SELECT id FROM users WHERE phone = '081200000001'");
   const [[budi]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
-  const ulas = async (i: number, uid: number, rating: number, at: string) => {
-    const [o] = await db.query<any>(
+  const ulas = async (i: number, uid: number, rating: number, createdAt: string) => {
+    const [result] = await db.query<any>(
       `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, status, customer_name, customer_phone, subtotal, total,
         payment_method, hold_until) VALUES (?, ?, ?, 1, 'completed', 'x', 'x', 15000, 15000, 'cod', UTC_TIMESTAMP())`,
       [`KK-20260101-000${i}`, uid, idA],
     );
     await db.query(
       "INSERT INTO reviews (order_id, menu_id, customer_id, rating, comment, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [o.insertId, menu, uid, rating, `ulasan ${i}`, at],
+      [result.insertId, menu, uid, rating, `ulasan ${i}`, createdAt],
     );
   };
   await ulas(1, rahma.id, 5, "2026-01-01 01:00:00");
   await ulas(2, budi.id, 4, "2026-01-03 01:00:00");
   await ulas(3, rahma.id, 3, "2026-01-02 01:00:00");
-  const r = await get(`/menus/${menu}/reviews`).expect(200);
-  expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 3 });
-  expect(r.body.data).toEqual([
+  const res = await get(`/menus/${menu}/reviews`).expect(200);
+  expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 3 });
+  expect(res.body.data).toEqual([
     { rating: 4, comment: "ulasan 2", customer_name: "Bu***", created_at: "2026-01-03T01:00:00.000Z" },
     { rating: 3, comment: "ulasan 3", customer_name: "Ra***", created_at: "2026-01-02T01:00:00.000Z" },
     { rating: 5, comment: "ulasan 1", customer_name: "Ra***", created_at: "2026-01-01T01:00:00.000Z" },
   ]);
-  const p2 = await get(`/menus/${menu}/reviews?limit=2&page=2`).expect(200);
-  expect(p2.body.data.map((u: any) => u.comment)).toEqual(["ulasan 1"]);
+  const page2 = await get(`/menus/${menu}/reviews?limit=2&page=2`).expect(200);
+  expect(page2.body.data.map((review: any) => review.comment)).toEqual(["ulasan 1"]);
   const kosong = await insertMenu(idA, { name: "Baru" });
   expect((await get(`/menus/${kosong}/reviews`).expect(200)).body).toEqual({
     data: [],
@@ -176,9 +176,9 @@ test("D12: profil toko publik tanpa alamat/WA/status verifikasi", async () => {
     "UPDATE merchants SET description = 'Masakan rumah', rating_avg = 4.25, rating_count = 8 WHERE id = ?",
     [idA],
   );
-  const r = await get(`/merchants/${slugA}`).expect(200);
-  expect(Object.keys(r.body.data).sort()).toEqual(KUNCI_PROFIL);
-  expect(r.body.data).toEqual({
+  const res = await get(`/merchants/${slugA}`).expect(200);
+  expect(Object.keys(res.body.data).sort()).toEqual(KUNCI_PROFIL);
+  expect(res.body.data).toEqual({
     id: idA,
     slug: slugA,
     business_name: "Dapur Siti",
@@ -195,8 +195,8 @@ test("D12: profil toko publik tanpa alamat/WA/status verifikasi", async () => {
     is_favorite: false,
     vouchers: [],
   });
-  const s = JSON.stringify(r.body);
-  for (const k of [...PRIVATE_KEYS, '"verification_status"', '"user_id"']) expect(s).not.toContain(k);
+  const json = JSON.stringify(res.body);
+  for (const key of [...PRIVATE_KEYS, '"verification_status"', '"user_id"']) expect(json).not.toContain(key);
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   expect((await get(`/merchants/${slugA}`).expect(200)).body.data.is_open).toBe(false);
   await db.query("UPDATE merchants SET verification_status = 'pending' WHERE id = ?", [idB]);

@@ -6,11 +6,12 @@ import { freezeClock, photoUrl, setR2Env, prepareMerchants, insertMenu, makeVisi
 
 // Background profil toko (cover_url) + foto tambahan menu (gallery, maks 4 selain foto utama image_url)
 let tokenA: string, tokenB: string, idA: number, idB: number;
-const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
-const profil = (b: object, t = tokenA) => request(app).patch("/api/v1/merchant/profile").set(auth(t)).send(b);
-const postMenu = (b: object) => request(app).post("/api/v1/merchant/menus").set(auth(tokenA)).send(b);
-const patchMenu = (id: number, b: object) =>
-  request(app).patch(`/api/v1/merchant/menus/${id}`).set(auth(tokenA)).send(b);
+const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
+const profil = (body: object, token = tokenA) =>
+  request(app).patch("/api/v1/merchant/profile").set(auth(token)).send(body);
+const postMenu = (body: object) => request(app).post("/api/v1/merchant/menus").set(auth(tokenA)).send(body);
+const patchMenu = (id: number, body: object) =>
+  request(app).patch(`/api/v1/merchant/menus/${id}`).set(auth(tokenA)).send(body);
 const dasar = () => ({
   name: "Nasi Ayam",
   category_id: 1,
@@ -38,12 +39,12 @@ afterEach(() => {
 });
 
 test("unggah purpose cover → kunci di bawah merchants/<id>/cover/", async () => {
-  const r = await request(app)
+  const res = await request(app)
     .post("/api/v1/merchant/uploads")
     .set(auth(tokenA))
     .send({ purpose: "cover", content_type: "image/jpeg", size: 1000 })
     .expect(200);
-  expect(r.body.data.public_url).toMatch(new RegExp(`/merchants/${idA}/cover/[0-9a-f-]{36}\\.jpg$`));
+  expect(res.body.data.public_url).toMatch(new RegExp(`/merchants/${idA}/cover/[0-9a-f-]{36}\\.jpg$`));
 });
 
 test("cover_url: unggahan cover sendiri diterima & tampil di profil penjual dan publik; selain itu 400; null mengosongkan", async () => {
@@ -53,8 +54,8 @@ test("cover_url: unggahan cover sendiri diterima & tampil di profil penjual dan 
     cover,
   );
   await makeVisible(idA);
-  const [[m]] = await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [idA]);
-  expect((await request(app).get(`/api/v1/merchants/${m.slug}`).expect(200)).body.data.cover_url).toBe(cover);
+  const [[merchantRow]] = await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [idA]);
+  expect((await request(app).get(`/api/v1/merchants/${merchantRow.slug}`).expect(200)).body.data.cover_url).toBe(cover);
   for (const bad of [
     photoUrl(`merchants/${idA}/logo/`),
     photoUrl(`merchants/${idB}/cover/`),
@@ -69,24 +70,32 @@ test("cover_url: unggahan cover sendiri diterima & tampil di profil penjual dan 
 });
 
 test("gallery: POST menyimpan foto tambahan sesuai urutan; PATCH menerima foto tersimpan + unggahan baru; [] mengosongkan", async () => {
-  const [g1, g2, g3] = [1, 2, 3].map(() => photoUrl(`merchants/${idA}/menu/`, "webp"));
-  const m = (
-    await postMenu({ ...dasar(), image_url: photoUrl(`merchants/${idA}/menu/`), gallery: [g1, g2] }).expect(201)
+  const [gallery1, gallery2, gallery3] = [1, 2, 3].map(() => photoUrl(`merchants/${idA}/menu/`, "webp"));
+  const createdMenu = (
+    await postMenu({ ...dasar(), image_url: photoUrl(`merchants/${idA}/menu/`), gallery: [gallery1, gallery2] }).expect(
+      201,
+    )
   ).body.data;
-  expect(m.gallery).toEqual([g1, g2]);
+  expect(createdMenu.gallery).toEqual([gallery1, gallery2]);
   expect((await postMenu(dasar()).expect(201)).body.data.gallery).toEqual([]);
-  expect((await patchMenu(m.id, { gallery: [g2, g3, g1] }).expect(200)).body.data.gallery).toEqual([g2, g3, g1]);
-  expect((await patchMenu(m.id, { name: "Ganti nama" }).expect(200)).body.data.gallery).toEqual([g2, g3, g1]);
-  expect((await patchMenu(m.id, { gallery: [] }).expect(200)).body.data.gallery).toEqual([]);
+  expect(
+    (await patchMenu(createdMenu.id, { gallery: [gallery2, gallery3, gallery1] }).expect(200)).body.data.gallery,
+  ).toEqual([gallery2, gallery3, gallery1]);
+  expect((await patchMenu(createdMenu.id, { name: "Ganti nama" }).expect(200)).body.data.gallery).toEqual([
+    gallery2,
+    gallery3,
+    gallery1,
+  ]);
+  expect((await patchMenu(createdMenu.id, { gallery: [] }).expect(200)).body.data.gallery).toEqual([]);
 });
 
 test("gallery: maks 4, tanpa duplikat, hanya unggahan menu milik toko sendiri", async () => {
   const sendiri = () => photoUrl(`merchants/${idA}/menu/`);
-  const g = sendiri();
+  const ownPhoto = sendiri();
   const tolak = async (gallery: unknown) =>
     (await postMenu({ ...dasar(), gallery }).expect(400)).body.error.fields.gallery;
   expect(await tolak([1, 2, 3, 4, 5].map(sendiri))).toEqual(["Maksimal 4 foto tambahan."]);
-  expect(await tolak([g, g])).toEqual(["Foto tambahan tidak boleh sama."]);
+  expect(await tolak([ownPhoto, ownPhoto])).toEqual(["Foto tambahan tidak boleh sama."]);
   expect(await tolak([photoUrl(`merchants/${idB}/menu/`)])).toEqual(TIDAK_VALID);
   expect(await tolak([photoUrl(`merchants/${idA}/logo/`)])).toEqual(TIDAK_VALID);
   expect(await tolak("bukan-daftar")).toBeDefined();
@@ -94,9 +103,9 @@ test("gallery: maks 4, tanpa duplikat, hanya unggahan menu milik toko sendiri", 
 
 test("GET /menus/:id publik memuat gallery; menu tanpa foto tambahan → []", async () => {
   await makeVisible(idA);
-  const g = photoUrl(`merchants/${idA}/menu/`);
-  const id = await insertMenu(idA, { gallery: JSON.stringify([g]) });
-  expect((await request(app).get(`/api/v1/menus/${id}`).expect(200)).body.data.gallery).toEqual([g]);
+  const photo = photoUrl(`merchants/${idA}/menu/`);
+  const id = await insertMenu(idA, { gallery: JSON.stringify([photo]) });
+  expect((await request(app).get(`/api/v1/menus/${id}`).expect(200)).body.data.gallery).toEqual([photo]);
   const polos = await insertMenu(idA);
   expect((await request(app).get(`/api/v1/menus/${polos}`).expect(200)).body.data.gallery).toEqual([]);
 });

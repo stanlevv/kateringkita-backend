@@ -22,9 +22,9 @@ beforeEach(async () => {
 });
 
 const SECRET = "rahasia-internal-minimal-32-karakter-aman";
-const loginDari = (ip: string, body: object, secret: string | null = SECRET) => {
-  const r = request(app).post("/api/v1/auth/login").set("X-Client-IP", ip);
-  return (secret === null ? r : r.set("X-Internal-Secret", secret)).send(body);
+const loginDari = (clientIp: string, body: object, secret: string | null = SECRET) => {
+  const req = request(app).post("/api/v1/auth/login").set("X-Client-IP", clientIp);
+  return (secret === null ? req : req.set("X-Internal-Secret", secret)).send(body);
 };
 const salah = { identifier: "budi@mail.com", password: "salah12345", client: "web" };
 const benar = { identifier: "budi@mail.com", password: "rahasia123", client: "web" };
@@ -60,12 +60,12 @@ test("login dengan no WA berformat → 200", async () => {
 });
 
 test("password salah dan email tak dikenal → 401 identik", async () => {
-  const a = await login({ identifier: "budi@mail.com", password: "salah12345", client: "web" });
-  const b = await login({ identifier: "tidak@ada.com", password: "rahasia123", client: "web" });
-  for (const r of [a, b]) {
-    expect(r.status).toBe(401);
-    expect(r.body.error.code).toBe("UNAUTHENTICATED");
-    expect(r.body.error.message).toBe(GENERIC);
+  const wrongPassword = await login({ identifier: "budi@mail.com", password: "salah12345", client: "web" });
+  const unknownEmail = await login({ identifier: "tidak@ada.com", password: "rahasia123", client: "web" });
+  for (const res of [wrongPassword, unknownEmail]) {
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHENTICATED");
+    expect(res.body.error.message).toBe(GENERIC);
   }
 });
 
@@ -114,8 +114,8 @@ test("F01-SEC-1: email beraksen dengan password benar → 401 generik, bukan 200
 
 test.each([["\u0001"], ["\u007f"]])(
   "F01-SEC-1: karakter kontrol %j di email dengan password benar → 401",
-  async (ch) => {
-    const res = await login({ identifier: `bu${ch}di@mail.com`, password: "rahasia123", client: "web" });
+  async (controlChar) => {
+    const res = await login({ identifier: `bu${controlChar}di@mail.com`, password: "rahasia123", client: "web" });
     expect(res.status).toBe(401);
     expect(res.body.error.message).toBe(GENERIC);
   },
@@ -180,8 +180,8 @@ test("F01-SEC-2: 10 gagal dari 10 IP → IP baru 429 walau sandi benar; varian a
 });
 
 test("F01-SEC-2: 8 login salah paralel dari satu IP → tepat 5×401, sisanya 429", async () => {
-  const rs = await Promise.all(Array.from({ length: 8 }, () => login(salah)));
-  expect(rs.filter((r) => r.status === 401)).toHaveLength(5);
-  expect(rs.filter((r) => r.status === 429)).toHaveLength(3);
+  const responses = await Promise.all(Array.from({ length: 8 }, () => login(salah)));
+  expect(responses.filter((res) => res.status === 401)).toHaveLength(5);
+  expect(responses.filter((res) => res.status === 429)).toHaveLength(3);
   expect((await login(salah)).status).toBe(429);
 });

@@ -6,7 +6,7 @@ import { OrderAction, Actor, Status, transitionOrder } from "../src/services/ord
 import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F07 Task 1: mesin status & stok tepat sekali (C-15, C-16, M-04, M-08, R-03; D1–D7)
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let penjual: Actor;
 let penjualB: Actor;
 let pembeli: Actor;
@@ -16,7 +16,7 @@ const sistem: Actor = { kind: "system" };
 const BERUBAH = "Pesanan sudah berubah status.";
 const HABIS = "Batas waktu pesanan sudah habis.";
 const jalan = (code: string, aksi: OrderAction, aktor: Actor, reason?: string | null) =>
-  dalamTransaksi((c) => transitionOrder(c, code, aksi, aktor, reason));
+  dalamTransaksi((conn) => transitionOrder(conn, code, aksi, aktor, reason));
 const pesanan = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 const log = async (code: string) =>
@@ -27,24 +27,24 @@ const log = async (code: string) =>
     )
   )[0] as any[];
 const stok = async () => {
-  const m = await menuRow(s.menu);
-  return { held: m.held_today, sold: m.sold_today, total: m.sold_total };
+  const menu = await menuRow(setup.menu);
+  return { held: menu.held_today, sold: menu.sold_today, total: menu.sold_total };
 };
 // pesanan qty 2 dengan status awal disiapkan lewat SQL
-const siap = async (status: Status = "holding", o: Record<string, unknown> = {}) => {
-  const code = await placeOrder(s.customerToken, s.menu, 2);
-  await db.query("UPDATE orders SET ? WHERE code = ?", [{ status, ...o }, code]);
+const siap = async (status: Status = "holding", overrides: Record<string, unknown> = {}) => {
+  const code = await placeOrder(setup.customerToken, setup.menu, 2);
+  await db.query("UPDATE orders SET ? WHERE code = ?", [{ status, ...overrides }, code]);
   return code;
 };
 const lewat = (code: string) =>
   db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [code]);
 
 beforeAll(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
   const id = async (email: string) =>
     Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
-  penjual = { kind: "merchant", userId: await id("siti@mail.com"), merchantId: s.idA };
-  penjualB = { kind: "merchant", userId: await id("andi@mail.com"), merchantId: s.idB };
+  penjual = { kind: "merchant", userId: await id("siti@mail.com"), merchantId: setup.idA };
+  penjualB = { kind: "merchant", userId: await id("andi@mail.com"), merchantId: setup.idB };
   pembeli = { kind: "customer", userId: await id("budi@mail.com") };
   await createCustomer(1);
   pembeliB = { kind: "customer", userId: await id("pembeli1@mail.com") };
@@ -72,20 +72,21 @@ describe("tabel D1: aksi × status asal", () => {
     expire: { holding: "expired" },
   };
   const STATUS: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
-  const aktor = (a: OrderAction) => (a === "cancel" || a === "complete" ? pembeli : a === "expire" ? sistem : penjual);
+  const aktor = (action: OrderAction) =>
+    action === "cancel" || action === "complete" ? pembeli : action === "expire" ? sistem : penjual;
   const kasus = (Object.keys(SAH) as OrderAction[]).flatMap((aksi) =>
     STATUS.map((dari) => [aksi, dari, SAH[aksi]?.[dari] ?? null] as const),
   );
 
-  test.each(kasus)("%s dari %s → %s", async (aksi, dari, ke) => {
+  test.each(kasus)("%s dari %s → %s", async (aksi, dari, toStatus) => {
     const code = await siap(dari);
     if (aksi === "expire") await lewat(code);
-    const p = jalan(code, aksi, aktor(aksi), aksi === "reject" ? "Stok habis" : undefined);
-    if (ke) {
-      await expect(p).resolves.toMatchObject({ dari, ke });
-      expect((await pesanan(code)).status).toBe(ke);
+    const promise = jalan(code, aksi, aktor(aksi), aksi === "reject" ? "Stok habis" : undefined);
+    if (toStatus) {
+      await expect(promise).resolves.toMatchObject({ dari, ke: toStatus });
+      expect((await pesanan(code)).status).toBe(toStatus);
     } else {
-      await expect(p).rejects.toMatchObject({ status: 409, code: "CONFLICT", message: BERUBAH });
+      await expect(promise).rejects.toMatchObject({ status: 409, code: "CONFLICT", message: BERUBAH });
       expect((await pesanan(code)).status).toBe(dari);
     }
   });
@@ -105,8 +106,8 @@ describe("aktor & kepemilikan", () => {
     ["confirm", "system"],
   ] as const)("%s oleh %s → 409", async (aksi, jenis) => {
     const code = await siap(aksi === "cook" ? "confirmed" : "holding");
-    const a = jenis === "customer" ? pembeli : jenis === "merchant" ? penjual : sistem;
-    await expect(jalan(code, aksi, a, "x")).rejects.toMatchObject({ status: 409, message: BERUBAH });
+    const actor = jenis === "customer" ? pembeli : jenis === "merchant" ? penjual : sistem;
+    await expect(jalan(code, aksi, actor, "x")).rejects.toMatchObject({ status: 409, message: BERUBAH });
   });
 
   test("pembeli B / toko B → 404, status tetap", async () => {
@@ -157,13 +158,13 @@ describe("lewat waktu (D2)", () => {
     const code = await siap("holding");
     await lewat(code);
     await jalan(code, "expire", sistem);
-    const o = await pesanan(code);
-    expect(o).toMatchObject({
+    const order = await pesanan(code);
+    expect(order).toMatchObject({
       status: "expired",
       cancelled_by: "system",
       cancel_reason: "Tidak dikonfirmasi tepat waktu.",
     });
-    expect(o.cancelled_at).not.toBeNull();
+    expect(order.cancelled_at).not.toBeNull();
     expect(await stok()).toEqual({ held: 0, sold: 0, total: 0 });
     expect((await log(code)).at(-1)).toEqual({ from_status: "holding", to_status: "expired", actor_user_id: null });
   });
@@ -180,9 +181,9 @@ describe("kolom & log (D7)", () => {
     await db.query("UPDATE orders SET updated_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE code = ?", [code]);
     const sebelum = (await pesanan(code)).updated_at.getTime();
     await jalan(code, "confirm", penjual);
-    const o = await pesanan(code);
-    expect(o.confirmed_at).not.toBeNull();
-    expect(o.updated_at.getTime()).toBeGreaterThan(sebelum);
+    const order = await pesanan(code);
+    expect(order.confirmed_at).not.toBeNull();
+    expect(order.updated_at.getTime()).toBeGreaterThan(sebelum);
     expect(await log(code)).toEqual([
       { from_status: null, to_status: "holding", actor_user_id: (pembeli as { userId: number }).userId },
       { from_status: "holding", to_status: "confirmed", actor_user_id: (penjual as { userId: number }).userId },
@@ -209,9 +210,9 @@ describe("kolom & log (D7)", () => {
   test("complete tunai → paid, completed_at", async () => {
     const code = await siap("ready");
     await jalan(code, "complete", pembeli);
-    const o = await pesanan(code);
-    expect(o.payment_status).toBe("paid");
-    expect(o.completed_at).not.toBeNull();
+    const order = await pesanan(code);
+    expect(order.payment_status).toBe("paid");
+    expect(order.completed_at).not.toBeNull();
   });
 });
 
@@ -231,15 +232,15 @@ describe("stok (D4), qty 2", () => {
   test("reject dari confirmed → sold −2, held tetap; cook/ready/complete tidak menyentuh menu", async () => {
     const code = await siap("holding");
     await jalan(code, "confirm", penjual);
-    const a = await siap("holding"); // held 2 milik pesanan lain
+    const otherOrder = await siap("holding"); // held 2 milik pesanan lain
     await jalan(code, "reject", penjual, "Stok habis");
     expect(await stok()).toEqual({ held: 2, sold: 0, total: 0 });
 
-    await jalan(a, "confirm", penjual);
+    await jalan(otherOrder, "confirm", penjual);
     const sebelum = await stok();
-    await jalan(a, "cook", penjual);
-    await jalan(a, "ready", penjual);
-    await jalan(a, "complete", penjual);
+    await jalan(otherOrder, "cook", penjual);
+    await jalan(otherOrder, "ready", penjual);
+    await jalan(otherOrder, "complete", penjual);
     expect(await stok()).toEqual(sebelum);
   });
 
@@ -248,7 +249,7 @@ describe("stok (D4), qty 2", () => {
     await jalan(code, "confirm", penjual);
     await db.query(
       "UPDATE menus SET stock_date = DATE_ADD(stock_date, INTERVAL 1 DAY), held_today = 5, sold_today = 1 WHERE id = ?",
-      [s.menu],
+      [setup.menu],
     );
     await jalan(code, "reject", penjual, "Stok habis");
     expect(await stok()).toEqual({ held: 5, sold: 1, total: 0 });
@@ -257,7 +258,7 @@ describe("stok (D4), qty 2", () => {
   test("jepit ≥ 0: sold_today dipaksa 1 → 0", async () => {
     const code = await siap("holding");
     await jalan(code, "confirm", penjual);
-    await db.query("UPDATE menus SET sold_today = 1, sold_total = 1 WHERE id = ?", [s.menu]);
+    await db.query("UPDATE menus SET sold_today = 1, sold_total = 1 WHERE id = ?", [setup.menu]);
     await jalan(code, "cancel", pembeli);
     expect(await stok()).toEqual({ held: 0, sold: 0, total: 0 });
   });
@@ -265,7 +266,7 @@ describe("stok (D4), qty 2", () => {
   test("menu terhapus tetap dilepas mode batal", async () => {
     const code = await siap("holding");
     await jalan(code, "confirm", penjual);
-    await db.query("UPDATE menus SET deleted_at = UTC_TIMESTAMP(), is_active = FALSE WHERE id = ?", [s.menu]);
+    await db.query("UPDATE menus SET deleted_at = UTC_TIMESTAMP(), is_active = FALSE WHERE id = ?", [setup.menu]);
     await jalan(code, "reject", penjual, "Stok habis");
     expect(await stok()).toEqual({ held: 0, sold: 0, total: 0 });
   });

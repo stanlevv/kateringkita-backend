@@ -8,25 +8,26 @@ import { expireHeldOrders, startExpiryJob, SYSTEM_ACTOR } from "../src/services/
 import { freezeClock, menuRow, placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F08 Task 2: job kadaluarsa holding (R-03, X-04, C-21; D2–D7)
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let budi: number;
 let menuB: number;
 
 const pesanan = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
-const n = async (sql: string, args: unknown[] = []) => Number(((await db.query<any[]>(sql, args))[0] as any[])[0].n);
+const count = async (sql: string, args: unknown[] = []) =>
+  Number(((await db.query<any[]>(sql, args))[0] as any[])[0].n);
 const lewat = (code: string, menit = 1) =>
   db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL ? MINUTE WHERE code = ?", [menit, code]);
-const asli = (code: string) => dalamTransaksi((c) => transitionOrder(c, code, "expire", SYSTEM_ACTOR));
+const asli = (code: string) => dalamTransaksi((conn) => transitionOrder(conn, code, "expire", SYSTEM_ACTOR));
 const notifKedaluwarsa = () =>
-  n("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND title = 'Pesanan kedaluwarsa'", [budi]);
+  count("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND title = 'Pesanan kedaluwarsa'", [budi]);
 
 beforeAll(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
   budi = Number(((await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'"))[0] as any[])[0].id);
-  await makeVisible(s.idB);
-  await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [s.idB]);
-  menuB = await insertMenu(s.idB);
+  await makeVisible(setup.idB);
+  await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [setup.idB]);
+  menuB = await insertMenu(setup.idB);
 });
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -41,36 +42,36 @@ afterAll(() => {
 
 describe("expireHeldOrders (D1, D4, D5)", () => {
   test("kriteria backlog: lewat waktu → expired, stok kembali, notifikasi; panggilan kedua idempoten", async () => {
-    const [a, b, c] = [
-      await placeOrder(s.customerToken, s.menu, 2),
-      await placeOrder(s.customerToken, s.menu, 2),
-      await placeOrder(s.customerToken, s.menu, 2),
+    const [firstCode, secondCode, thirdCode] = [
+      await placeOrder(setup.customerToken, setup.menu, 2),
+      await placeOrder(setup.customerToken, setup.menu, 2),
+      await placeOrder(setup.customerToken, setup.menu, 2),
     ];
-    expect((await menuRow(s.menu)).held_today).toBe(6);
-    await lewat(a);
-    await lewat(b);
+    expect((await menuRow(setup.menu)).held_today).toBe(6);
+    await lewat(firstCode);
+    await lewat(secondCode);
     expect(await expireHeldOrders()).toBe(2);
-    for (const code of [a, b]) {
+    for (const code of [firstCode, secondCode]) {
       expect(await pesanan(code)).toMatchObject({
         status: "expired",
         cancelled_by: "system",
         cancel_reason: "Tidak dikonfirmasi tepat waktu.",
       });
     }
-    expect((await pesanan(c)).status).toBe("holding");
-    expect((await menuRow(s.menu)).held_today).toBe(2);
+    expect((await pesanan(thirdCode)).status).toBe("holding");
+    expect((await menuRow(setup.menu)).held_today).toBe(2);
     expect(await notifKedaluwarsa()).toBe(2);
 
     expect(await expireHeldOrders()).toBe(0);
-    expect((await menuRow(s.menu)).held_today).toBe(2);
+    expect((await menuRow(setup.menu)).held_today).toBe(2);
     expect(await notifKedaluwarsa()).toBe(2);
   });
 
   test("batch & urutan hold_until terlama dulu", async () => {
     const codes = [
-      await placeOrder(s.customerToken, s.menu),
-      await placeOrder(s.customerToken, s.menu),
-      await placeOrder(s.customerToken, s.menu),
+      await placeOrder(setup.customerToken, setup.menu),
+      await placeOrder(setup.customerToken, setup.menu),
+      await placeOrder(setup.customerToken, setup.menu),
     ];
     await lewat(codes[0], 1);
     await lewat(codes[1], 3);
@@ -85,9 +86,9 @@ describe("expireHeldOrders (D1, D4, D5)", () => {
 
   test("satu gagal tidak menghentikan sisanya; log tanpa data pembeli", async () => {
     const codes = [
-      await placeOrder(s.customerToken, s.menu),
-      await placeOrder(s.customerToken, s.menu),
-      await placeOrder(s.customerToken, s.menu),
+      await placeOrder(setup.customerToken, setup.menu),
+      await placeOrder(setup.customerToken, setup.menu),
+      await placeOrder(setup.customerToken, setup.menu),
     ];
     await lewat(codes[0], 3);
     await lewat(codes[1], 2);
@@ -106,7 +107,7 @@ describe("expireHeldOrders (D1, D4, D5)", () => {
   });
 
   test("AppError 409/404 dilewati tanpa log galat", async () => {
-    const code = await placeOrder(s.customerToken, s.menu);
+    const code = await placeOrder(setup.customerToken, setup.menu);
     await lewat(code);
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await expireHeldOrders(100, () => Promise.reject(new AppError(409, "CONFLICT", "x")))).toBe(0);
@@ -116,19 +117,19 @@ describe("expireHeldOrders (D1, D4, D5)", () => {
 
   test("dua sapuan paralel → tiap pesanan expired tepat sekali (D3)", async () => {
     const codes = [
-      await placeOrder(s.customerToken, s.menu, 2),
-      await placeOrder(s.customerToken, s.menu, 2),
-      await placeOrder(s.customerToken, s.menu, 2),
+      await placeOrder(setup.customerToken, setup.menu, 2),
+      await placeOrder(setup.customerToken, setup.menu, 2),
+      await placeOrder(setup.customerToken, setup.menu, 2),
     ];
-    for (const c of codes) await lewat(c);
+    for (const code of codes) await lewat(code);
     const err = vi.spyOn(console, "error");
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const [x, y] = await Promise.all([expireHeldOrders(), expireHeldOrders()]);
-    expect(x + y).toBe(3);
-    expect((await menuRow(s.menu)).held_today).toBe(0);
+    const [firstRun, secondRun] = await Promise.all([expireHeldOrders(), expireHeldOrders()]);
+    expect(firstRun + secondRun).toBe(3);
+    expect((await menuRow(setup.menu)).held_today).toBe(0);
     expect(await notifKedaluwarsa()).toBe(3);
     expect(
-      await n(
+      await count(
         "SELECT COUNT(*) n FROM order_status_logs l JOIN orders o ON o.id = l.order_id WHERE l.from_status = 'holding' AND l.to_status = 'expired' AND o.code IN (?)",
         [codes],
       ),
@@ -137,7 +138,7 @@ describe("expireHeldOrders (D1, D4, D5)", () => {
   });
 
   test("pesanan toko lain ikut tersapu", async () => {
-    const code = await placeOrder(s.customerToken, menuB);
+    const code = await placeOrder(setup.customerToken, menuB);
     await lewat(code);
     vi.spyOn(console, "log").mockImplementation(() => {});
     expect(await expireHeldOrders()).toBe(1);

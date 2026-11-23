@@ -15,8 +15,8 @@ const minta = async () => {
   await post("forgot", { email: EMAIL }).expect(200);
   return kodeTerakhir();
 };
-const salah = (r: request.Response) =>
-  expect(r.body.error.fields).toEqual({ code: ["Kode salah atau sudah kedaluwarsa."] });
+const salah = (res: request.Response) =>
+  expect(res.body.error.fields).toEqual({ code: ["Kode salah atau sudah kedaluwarsa."] });
 
 beforeAll(async () => {
   await prepareMerchants();
@@ -37,8 +37,8 @@ describe("forgot", () => {
     expect(kirim).not.toHaveBeenCalled();
     expect((await post("forgot", { email: " Budi@Mail.com " }).expect(200)).body).toEqual(pesan);
     expect(kirim).toHaveBeenCalledWith(EMAIL, "Kode reset kata sandi KateringKita", expect.stringMatching(/\b\d{6}\b/));
-    const [[r]] = await db.query<any[]>("SELECT code_hash FROM password_resets ORDER BY id DESC LIMIT 1");
-    expect(r.code_hash).not.toContain(kodeTerakhir());
+    const [[row]] = await db.query<any[]>("SELECT code_hash FROM password_resets ORDER BY id DESC LIMIT 1");
+    expect(row.code_hash).not.toContain(kodeTerakhir());
   });
 
   test("validasi email; batas 5 permintaan per email", async () => {

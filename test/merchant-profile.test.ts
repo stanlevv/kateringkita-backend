@@ -7,7 +7,7 @@ import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 import { photoUrl, setR2Env } from "./helpers/merchant";
 
-let tA: string;
+let tokenA: string;
 let idA: number, idB: number;
 
 const login = async (identifier: string) =>
@@ -27,23 +27,23 @@ const regMerchant = (name: string, phone: string, email: string) =>
     })
     .expect(201);
 const row = async (id: number) => ((await db.query<any[]>("SELECT * FROM merchants WHERE id=?", [id]))[0] as any[])[0];
-const patch = (b: object) =>
-  request(app).patch("/api/v1/merchant/profile").set("Authorization", `Bearer ${tA}`).send(b);
-const getProfile = () => request(app).get("/api/v1/merchant/profile").set("Authorization", `Bearer ${tA}`);
+const patch = (body: object) =>
+  request(app).patch("/api/v1/merchant/profile").set("Authorization", `Bearer ${tokenA}`).send(body);
+const getProfile = () => request(app).get("/api/v1/merchant/profile").set("Authorization", `Bearer ${tokenA}`);
 
 beforeEach(async () => {
   await migrate(await resetTestDatabase());
   loginLimiter.reset();
   await regMerchant("Siti", "081298765432", "siti@mail.com");
   await regMerchant("Andi", "081211112222", "andi@mail.com");
-  tA = await login("siti@mail.com");
+  tokenA = await login("siti@mail.com");
   const [rows] = await db.query<any[]>("SELECT id FROM merchants ORDER BY id");
   idA = rows[0].id;
   idB = rows[1].id;
 });
 
 test("ubah semua field valid: respons dirapikan dan sama dengan GET", async () => {
-  const r = await patch({
+  const res = await patch({
     business_name: "  Dapur Baru ",
     description: "",
     address: " Jl. Melati 2 ",
@@ -55,7 +55,7 @@ test("ubah semua field valid: respons dirapikan dan sama dengan GET", async () =
     daily_revenue_target: 500000,
     wa_template: "Halo {nama}, {kode}",
   }).expect(200);
-  expect(r.body.data).toMatchObject({
+  expect(res.body.data).toMatchObject({
     business_name: "Dapur Baru",
     description: null,
     address: "Jl. Melati 2",
@@ -67,7 +67,7 @@ test("ubah semua field valid: respons dirapikan dan sama dengan GET", async () =
     daily_revenue_target: 500000,
     wa_template: "Halo {nama}, {kode}",
   });
-  expect((await getProfile()).body.data).toEqual(r.body.data);
+  expect((await getProfile()).body.data).toEqual(res.body.data);
 });
 
 test("mass assignment & toko lain tidak tersentuh", async () => {
@@ -81,8 +81,8 @@ test("mass assignment & toko lain tidak tersentuh", async () => {
     user_id: before.user_id,
     merchant_type_id: 2,
   }).expect(200);
-  const a = await row(idA);
-  expect(a).toMatchObject({
+  const merchantRow = await row(idA);
+  expect(merchantRow).toMatchObject({
     business_name: "X",
     verification_status: "pending",
     is_open: 1,
@@ -90,9 +90,9 @@ test("mass assignment & toko lain tidak tersentuh", async () => {
     logo_url: null,
     qris_image_url: null,
   });
-  expect(a.slug).not.toBe("x");
-  expect(a.rating_avg).toBe("0.00");
-  expect(a.user_id).not.toBe(before.user_id);
+  expect(merchantRow.slug).not.toBe("x");
+  expect(merchantRow.rating_avg).toBe("0.00");
+  expect(merchantRow.user_id).not.toBe(before.user_id);
   expect(await row(idB)).toEqual(before);
 });
 
@@ -100,15 +100,15 @@ test("slug tetap saat nama diubah; body kosong/asing → 400", async () => {
   const slug = (await row(idA)).slug;
   await patch({ business_name: "Nama Lain" }).expect(200);
   expect((await row(idA)).slug).toBe(slug);
-  for (const b of [{}, { slug: "x", is_open: false }]) {
-    const r = await patch(b).expect(400);
-    expect(r.body.error.message).toBe("Tidak ada data yang diubah.");
+  for (const body of [{}, { slug: "x", is_open: false }]) {
+    const res = await patch(body).expect(400);
+    expect(res.body.error.message).toBe("Tidak ada data yang diubah.");
   }
 });
 
 test("jam: simpan apa adanya, close harus setelah open", async () => {
-  const ok = await patch({ open_time: "07:30", close_time: "15:00" }).expect(200);
-  expect(ok.body.data).toMatchObject({ open_time: "07:30", close_time: "15:00" });
+  const okRes = await patch({ open_time: "07:30", close_time: "15:00" }).expect(200);
+  expect(okRes.body.data).toMatchObject({ open_time: "07:30", close_time: "15:00" });
   const same = await patch({ open_time: "16:00", close_time: "16:00" }).expect(400);
   expect(same.body.error.fields.close_time).toEqual(["Jam tutup harus setelah jam buka."]);
   await patch({ open_time: "07:00", close_time: "16:00" }).expect(200);
@@ -118,12 +118,15 @@ test("jam: simpan apa adanya, close harus setelah open", async () => {
   expect(lone2.body.error.fields.close_time).toEqual(["Jam tutup harus setelah jam buka."]);
   const fmt = await patch({ open_time: "7:00" }).expect(400);
   expect(fmt.body.error.fields.open_time).toEqual(["Jam harus berformat JJ:MM."]);
-  expect(await getProfile().then((r) => [r.body.data.open_time, r.body.data.close_time])).toEqual(["07:00", "16:00"]);
+  expect(await getProfile().then((res) => [res.body.data.open_time, res.body.data.close_time])).toEqual([
+    "07:00",
+    "16:00",
+  ]);
 });
 
 test("validasi angka & pilihan", async () => {
-  for (const v of [0, 31, 2.5])
-    expect((await patch({ hold_minutes: v }).expect(400)).body.error.fields.hold_minutes).toBeDefined();
+  for (const value of [0, 31, 2.5])
+    expect((await patch({ hold_minutes: value }).expect(400)).body.error.fields.hold_minutes).toBeDefined();
   expect((await patch({ wa_number: "6281234567890" }).expect(400)).body.error.fields.wa_number).toEqual([
     "Nomor WA harus diawali 08 dan 10–13 digit.",
   ]);
@@ -152,9 +155,9 @@ test("templat WA", async () => {
 test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400; qris_image_url tidak diterima lagi", async () => {
   setR2Env();
   const logo = photoUrl(`merchants/${idA}/logo/`);
-  const r = await patch({ logo_url: logo }).expect(200);
-  expect(r.body.data.logo_url).toBe(logo);
-  expect(r.body.data).not.toHaveProperty("qris_image_url");
+  const res = await patch({ logo_url: logo }).expect(200);
+  expect(res.body.data.logo_url).toBe(logo);
+  expect(res.body.data).not.toHaveProperty("qris_image_url");
   await patch({ logo_url: logo }).expect(200); // sama dengan tersimpan
   const before = await row(idA);
   const uuid = "0b9a4b7e-1f3e-4c55-9d1a-2f6a0e3c9b11";
@@ -170,8 +173,8 @@ test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400
     `https://foto.test.evil/merchants/${idA}/logo/${uuid}.png`,
     123,
   ]) {
-    const x = await patch({ logo_url: bad }).expect(400);
-    expect(x.body.error.fields.logo_url).toEqual(["Foto tidak valid. Unggah ulang foto."]);
+    const badRes = await patch({ logo_url: bad }).expect(400);
+    expect(badRes.body.error.fields.logo_url).toEqual(["Foto tidak valid. Unggah ulang foto."]);
   }
   // field dibuang zod: tidak ada yang diubah
   expect((await patch({ qris_image_url: "https://evil.example/q.png" }).expect(400)).body.error.message).toBe(
@@ -182,8 +185,8 @@ test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400
 
 test('logo_url "" mengosongkan seperti null', async () => {
   await db.query("UPDATE merchants SET logo_url = '/logo/lama.png' WHERE id = ?", [idA]);
-  const r = await patch({ logo_url: "" }).expect(200);
-  expect(r.body.data).toMatchObject({ logo_url: null });
+  const res = await patch({ logo_url: "" }).expect(200);
+  expect(res.body.data).toMatchObject({ logo_url: null });
 });
 
 test("logo_url saat unggah belum tersedia: hanya null atau nilai tersimpan", async () => {

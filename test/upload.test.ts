@@ -29,7 +29,7 @@ describe("SigV4 (D11)", () => {
   });
 
   test("presignPut R2: host akun, path-style, 300 dtk, menandatangani ukuran & tipe, tanpa rahasia", () => {
-    const cfg = {
+    const config = {
       accountId: "acc",
       accessKeyId: "AKIDUJI",
       secretAccessKey: "rahasia/r2+uji",
@@ -37,25 +37,25 @@ describe("SigV4 (D11)", () => {
       publicUrl: "https://foto.test",
     };
     const key = "merchants/7/menu/0b9a4b7e-1f3e-4c55-9d1a-2f6a0e3c9b11.webp";
-    const u = new URL(
-      presignPut(cfg, { key, contentType: "image/webp", size: 1000, now: new Date("2026-11-01T00:00:00Z") }),
+    const presignedUrl = new URL(
+      presignPut(config, { key, contentType: "image/webp", size: 1000, now: new Date("2026-11-01T00:00:00Z") }),
     );
-    expect(u.host).toBe("acc.r2.cloudflarestorage.com");
-    expect(u.pathname).toBe(`/bucket/${key}`);
-    expect(u.searchParams.get("X-Amz-Expires")).toBe("300");
-    expect(u.searchParams.get("X-Amz-Credential")).toBe("AKIDUJI/20261101/auto/s3/aws4_request");
-    expect(u.search).toContain("X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost");
-    expect(u.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
-    const s = u.toString();
-    for (const bagian of ["rahasia", encodeURIComponent("rahasia/r2+uji")]) expect(s).not.toContain(bagian);
+    expect(presignedUrl.host).toBe("acc.r2.cloudflarestorage.com");
+    expect(presignedUrl.pathname).toBe(`/bucket/${key}`);
+    expect(presignedUrl.searchParams.get("X-Amz-Expires")).toBe("300");
+    expect(presignedUrl.searchParams.get("X-Amz-Credential")).toBe("AKIDUJI/20261101/auto/s3/aws4_request");
+    expect(presignedUrl.search).toContain("X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost");
+    expect(presignedUrl.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
+    const urlText = presignedUrl.toString();
+    for (const bagian of ["rahasia", encodeURIComponent("rahasia/r2+uji")]) expect(urlText).not.toContain(bagian);
   });
 });
 
 describe("endpoint unggah (D12–D14)", () => {
   let tokenA: string, tokenB: string, customerToken: string, idA: number;
-  const up = (t: string | null, b: object, u = "/merchant/uploads") => {
-    const r = request(app).post(`/api/v1${u}`).send(b);
-    return t ? r.set("Authorization", `Bearer ${t}`) : r;
+  const requestUpload = (token: string | null, body: object, path = "/merchant/uploads") => {
+    const req = request(app).post(`/api/v1${path}`).send(body);
+    return token ? req.set("Authorization", `Bearer ${token}`) : req;
   };
   const MENU = { purpose: "menu", content_type: "image/webp", size: 1000 };
 
@@ -71,12 +71,12 @@ describe("endpoint unggah (D12–D14)", () => {
   test("R2 kosong → 503 di kedua endpoint", async () => {
     setR2Env(false);
     expect(getR2Config()).toBeNull();
-    for (const [t, u, b] of [
+    for (const [token, path, body] of [
       [tokenA, "/merchant/uploads", MENU],
       [customerToken, "/me/avatar", { content_type: "image/png", size: 10 }],
     ] as const) {
-      const r = await up(t, b, u).expect(503);
-      expect(r.body.error).toEqual({
+      const res = await requestUpload(token, body, path).expect(503);
+      expect(res.body.error).toEqual({
         code: "SERVICE_UNAVAILABLE",
         message: "Unggah foto belum tersedia. Coba lagi nanti.",
       });
@@ -84,57 +84,60 @@ describe("endpoint unggah (D12–D14)", () => {
   });
 
   test("penjual: kunci dibuat server di bawah awalan toko & purpose", async () => {
-    const t0 = Date.now();
-    const r = await up(tokenA, { ...MENU, key: "x/../../evil.webp", path: "/etc" }).expect(200);
-    const { upload_url, public_url, expires_at } = r.body.data;
-    expect(Object.keys(r.body.data).sort()).toEqual(["expires_at", "public_url", "upload_url"]);
+    const startMs = Date.now();
+    const res = await requestUpload(tokenA, { ...MENU, key: "x/../../evil.webp", path: "/etc" }).expect(200);
+    const { upload_url, public_url, expires_at } = res.body.data;
+    expect(Object.keys(res.body.data).sort()).toEqual(["expires_at", "public_url", "upload_url"]);
     expect(public_url).toMatch(new RegExp(`^${TEST_R2_ENV.R2_PUBLIC_URL}/merchants/${idA}/menu/[0-9a-f-]{36}\\.webp$`));
     const key = public_url.slice(TEST_R2_ENV.R2_PUBLIC_URL.length + 1);
     expect(new URL(upload_url).pathname).toBe(`/bucket/${key}`);
     expect(upload_url).not.toContain(TEST_R2_ENV.R2_SECRET_ACCESS_KEY);
     const exp = Date.parse(expires_at);
-    expect(exp).toBeGreaterThanOrEqual(t0 + 299_000);
+    expect(exp).toBeGreaterThanOrEqual(startMs + 299_000);
     expect(exp).toBeLessThanOrEqual(Date.now() + 301_000);
-    const lagi = await up(tokenA, MENU).expect(200);
+    const lagi = await requestUpload(tokenA, MENU).expect(200);
     expect(lagi.body.data.public_url).not.toBe(public_url);
     expect(
-      (await up(tokenA, { ...MENU, purpose: "logo", content_type: "image/jpeg" }).expect(200)).body.data.public_url,
+      (await requestUpload(tokenA, { ...MENU, purpose: "logo", content_type: "image/jpeg" }).expect(200)).body.data
+        .public_url,
     ).toMatch(new RegExp(`/merchants/${idA}/logo/[0-9a-f-]{36}\\.jpg$`));
   });
 
   test("validasi tipe, ukuran, purpose", async () => {
-    const svg = await up(tokenA, { ...MENU, content_type: "image/svg+xml" }).expect(400);
+    const svg = await requestUpload(tokenA, { ...MENU, content_type: "image/svg+xml" }).expect(400);
     expect(svg.body.error.fields.content_type).toEqual(["Format foto harus JPG, PNG, atau WebP."]);
-    const besar = await up(tokenA, { ...MENU, size: 5242881 }).expect(400);
+    const besar = await requestUpload(tokenA, { ...MENU, size: 5242881 }).expect(400);
     expect(besar.body.error.fields.size).toEqual(["Ukuran foto maksimal 5 MB."]);
-    expect((await up(tokenA, { ...MENU, size: 0 }).expect(400)).body.error.fields.size).toBeDefined();
-    expect((await up(tokenA, { ...MENU, purpose: "avatar" }).expect(400)).body.error.fields.purpose).toBeDefined();
+    expect((await requestUpload(tokenA, { ...MENU, size: 0 }).expect(400)).body.error.fields.size).toBeDefined();
+    expect(
+      (await requestUpload(tokenA, { ...MENU, purpose: "avatar" }).expect(400)).body.error.fields.purpose,
+    ).toBeDefined();
     // F26: QRIS toko dihapus
-    expect((await up(tokenA, { ...MENU, purpose: "qris" }).expect(400)).body.error.fields.purpose).toEqual([
+    expect((await requestUpload(tokenA, { ...MENU, purpose: "qris" }).expect(400)).body.error.fields.purpose).toEqual([
       "Jenis foto tidak dikenal.",
     ]);
-    await up(tokenA, { ...MENU, size: 5242880 }).expect(200);
+    await requestUpload(tokenA, { ...MENU, size: 5242880 }).expect(200);
   });
 
   test("peran: tanpa token 401, pembeli ke /merchant/uploads 403, pembeli ke /me/avatar 200", async () => {
-    await up(null, MENU).expect(401);
-    await up(null, { content_type: "image/png", size: 10 }, "/me/avatar").expect(401);
-    await up(customerToken, MENU).expect(403);
-    const r = await up(customerToken, { content_type: "image/png", size: 10 }, "/me/avatar").expect(200);
-    const [[u]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
-    expect(r.body.data.public_url).toMatch(
-      new RegExp(`^${TEST_R2_ENV.R2_PUBLIC_URL}/users/${u.id}/avatar/[0-9a-f-]{36}\\.png$`),
+    await requestUpload(null, MENU).expect(401);
+    await requestUpload(null, { content_type: "image/png", size: 10 }, "/me/avatar").expect(401);
+    await requestUpload(customerToken, MENU).expect(403);
+    const res = await requestUpload(customerToken, { content_type: "image/png", size: 10 }, "/me/avatar").expect(200);
+    const [[user]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
+    expect(res.body.data.public_url).toMatch(
+      new RegExp(`^${TEST_R2_ENV.R2_PUBLIC_URL}/users/${user.id}/avatar/[0-9a-f-]{36}\\.png$`),
     );
   });
 
   test("batas 20 per pengguna per 10 menit → 429; pengguna lain tetap 200", async () => {
-    for (let i = 0; i < 20; i++) await up(tokenA, MENU).expect(200);
-    const r = await up(tokenA, MENU).expect(429);
-    expect(r.body.error).toEqual({
+    for (let i = 0; i < 20; i++) await requestUpload(tokenA, MENU).expect(200);
+    const res = await requestUpload(tokenA, MENU).expect(429);
+    expect(res.body.error).toEqual({
       code: "RATE_LIMITED",
       message: "Terlalu banyak unggahan. Coba lagi beberapa menit lagi.",
     });
-    await up(tokenA, { content_type: "image/png", size: 10 }, "/me/avatar").expect(429);
-    await up(tokenB, MENU).expect(200);
+    await requestUpload(tokenA, { content_type: "image/png", size: 10 }, "/me/avatar").expect(429);
+    await requestUpload(tokenB, MENU).expect(200);
   });
 });

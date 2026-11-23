@@ -7,51 +7,53 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { createCustomer, prepareCheckout } from "./helpers/merchant";
 
 // F06 Task 6: GET /orders/:code/whatsapp (C-13, D15)
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
-const pesan = async (o: Record<string, unknown> = {}) => {
-  const r = await request(app)
+const pesan = async (overrides: Record<string, unknown> = {}) => {
+  const res = await request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.customerToken}`)
+    .set("Authorization", `Bearer ${setup.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({
       items: [
-        { menu_id: s.menu, qty: 2, option_ids: [s.keju] },
-        { menu_id: s.menu2, qty: 1 },
+        { menu_id: setup.menu, qty: 2, option_ids: [setup.keju] },
+        { menu_id: setup.menu2, qty: 1 },
       ],
       pickup_point_id: 1,
       payment_method: "cod",
-      ...o,
+      ...overrides,
     })
     .expect(201);
-  return r.body.data.code as string;
+  return res.body.data.code as string;
 };
-const wa = (code: string, token = s.customerToken) =>
+const getWhatsapp = (code: string, token = setup.customerToken) =>
   request(app).get(`/api/v1/orders/${code}/whatsapp`).set("Authorization", `Bearer ${token}`);
 const teks = (url: string) => decodeURIComponent(url.split("text=")[1]);
 
 beforeEach(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
 });
 
 test("pesan tetap bersuara pembeli, tautan wa.me 62…", async () => {
   const code = await pesan({ note: "Pedas" });
-  const r = await wa(code).expect(200);
-  const d = r.body.data;
-  expect(Object.keys(d).sort()).toEqual(["message", "url", "wa_number"]);
-  expect(d.wa_number).toBe("081298765432");
-  expect(d.url.startsWith("https://wa.me/6281298765432?text=")).toBe(true);
-  expect(teks(d.url)).toBe(d.message);
-  expect(d.message).toBe(
+  const res = await getWhatsapp(code).expect(200);
+  const data = res.body.data;
+  expect(Object.keys(data).sort()).toEqual(["message", "url", "wa_number"]);
+  expect(data.wa_number).toBe("081298765432");
+  expect(data.url.startsWith("https://wa.me/6281298765432?text=")).toBe(true);
+  expect(teks(data.url)).toBe(data.message);
+  expect(data.message).toBe(
     `Halo Dapur Siti, saya Budi memesan lewat KateringKita.\n\nKode: ${code}\nMenu: 2x Nasi Ayam, 1x Es Teh\nTotal: Rp 41.000\n` +
       "Cara bayar: Tunai\nAmbil di: Gedung Vokasi UB (Lt. 2)\nWaktu ambil: Secepatnya\nCatatan: Pedas",
   );
 });
 
 test("tanpa catatan → tanpa baris Catatan; pickup_at 13:30 WIB → 13.30 WIB; templat toko tidak dipakai", async () => {
-  await db.query("UPDATE merchants SET wa_template = 'Halo {nama}, pesanan {kode} diterima.' WHERE id = ?", [s.idA]);
+  await db.query("UPDATE merchants SET wa_template = 'Halo {nama}, pesanan {kode} diterima.' WHERE id = ?", [
+    setup.idA,
+  ]);
   const code = await pesan({ pickup_at: `${getWibDate()}T13:30:00+07:00` });
-  const { message } = (await wa(code).expect(200)).body.data;
+  const { message } = (await getWhatsapp(code).expect(200)).body.data;
   expect(message).not.toContain("Catatan");
   expect(message).toContain("Waktu ambil: 13.30 WIB");
   expect(message.startsWith("Halo Dapur Siti, saya Budi memesan lewat KateringKita.")).toBe(true);
@@ -59,9 +61,9 @@ test("tanpa catatan → tanpa baris Catatan; pickup_at 13:30 WIB → 13.30 WIB; 
 
 test("karakter khusus di catatan ter-encode", async () => {
   const code = await pesan({ note: "A & B #1\nbaris dua" });
-  const { url, message } = (await wa(code).expect(200)).body.data;
-  const q = url.split("text=")[1];
-  expect(q).not.toMatch(/[&#\n ]/);
+  const { url, message } = (await getWhatsapp(code).expect(200)).body.data;
+  const encodedText = url.split("text=")[1];
+  expect(encodedText).not.toMatch(/[&#\n ]/);
   expect(teks(url)).toBe(message);
   expect(message).toContain("Catatan: A & B #1\nbaris dua");
 });
@@ -69,8 +71,8 @@ test("karakter khusus di catatan ter-encode", async () => {
 test("nomor WA 628… / +628… dinormalkan ke 628…", async () => {
   const code = await pesan();
   for (const nomor of ["6281298765432", "+6281298765432", "081298765432"]) {
-    await db.query("UPDATE merchants SET wa_number = ? WHERE id = ?", [nomor, s.idA]);
-    const { url } = (await wa(code).expect(200)).body.data;
+    await db.query("UPDATE merchants SET wa_number = ? WHERE id = ?", [nomor, setup.idA]);
+    const { url } = (await getWhatsapp(code).expect(200)).body.data;
     expect(url.startsWith("https://wa.me/6281298765432?text=")).toBe(true);
   }
 });
@@ -78,7 +80,7 @@ test("nomor WA 628… / +628… dinormalkan ke 628…", async () => {
 test("ambil bukan hari ini → tanggal ikut ditulis", async () => {
   const lusa = new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + 2 * 86400e3);
   const code = await pesan({ pickup_at: lusa.toISOString() });
-  const { message } = (await wa(code).expect(200)).body.data;
+  const { message } = (await getWhatsapp(code).expect(200)).body.data;
   const tgl = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" }).format(
     lusa,
   );
@@ -87,7 +89,7 @@ test("ambil bukan hari ini → tanggal ikut ditulis", async () => {
 
 test("pembeli lain 404, penjual 403", async () => {
   const code = await pesan();
-  const r = await wa(code, await createCustomer(1)).expect(404);
-  expect(r.body.error.message).toBe("Pesanan tidak ditemukan.");
-  await wa(code, s.tokenA).expect(403);
+  const res = await getWhatsapp(code, await createCustomer(1)).expect(404);
+  expect(res.body.error.message).toBe("Pesanan tidak ditemukan.");
+  await getWhatsapp(code, setup.tokenA).expect(403);
 });

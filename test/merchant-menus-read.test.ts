@@ -8,7 +8,8 @@ import { menuRow, prepareMerchants, insertMenu } from "./helpers/merchant";
 let tokenA: string, tokenB: string, idA: number, idB: number;
 let aktif: number, nonaktif: number, terhapus: number, milikB: number;
 
-const get = (u: string, t = tokenA) => request(app).get(`/api/v1/merchant${u}`).set("Authorization", `Bearer ${t}`);
+const get = (path: string, token = tokenA) =>
+  request(app).get(`/api/v1/merchant${path}`).set("Authorization", `Bearer ${token}`);
 const KUNCI = [
   "available",
   "category",
@@ -59,11 +60,11 @@ test("DELETE /api/menus/1 dengan token penjual → 404 (router lama dihapus)", a
 });
 
 test("GET /merchant/menus: milik sendiri saja, urut id DESC, bentuk D3", async () => {
-  const r = await get("/menus").expect(200);
-  expect(r.body.data.map((m: any) => m.id)).toEqual([nonaktif, aktif]);
-  const m = r.body.data[1];
-  expect(Object.keys(m).sort()).toEqual(KUNCI);
-  expect(m).toMatchObject({
+  const res = await get("/menus").expect(200);
+  expect(res.body.data.map((menu: any) => menu.id)).toEqual([nonaktif, aktif]);
+  const menu = res.body.data[1];
+  expect(Object.keys(menu).sort()).toEqual(KUNCI);
+  expect(menu).toMatchObject({
     name: "Nasi Ayam",
     category: { id: 1, name: "Nasi Box", slug: "nasi-box" },
     price: 15000,
@@ -78,14 +79,14 @@ test("GET /merchant/menus: milik sendiri saja, urut id DESC, bentuk D3", async (
     rating_avg: 4.5,
     rating_count: 2,
   });
-  expect(m.options).toEqual([{ id: expect.any(Number), name: "Keju", extra_price: 3000 }]);
-  expect(r.body.data[0]).toMatchObject({ is_active: false, options: [] });
+  expect(menu.options).toEqual([{ id: expect.any(Number), name: "Keju", extra_price: 3000 }]);
+  expect(res.body.data[0]).toMatchObject({ is_active: false, options: [] });
 });
 
 test("filter status, q (escape), kategori", async () => {
   const low = await insertMenu(idA, { name: "Sisa Dua", quota_today: 5, sold_today: 3 });
   const habis = await insertMenu(idA, { name: "Habis", quota_today: 4, sold_today: 2, held_today: 2 });
-  const ids = async (q: string) => (await get(`/menus${q}`).expect(200)).body.data.map((m: any) => m.id);
+  const ids = async (query: string) => (await get(`/menus${query}`).expect(200)).body.data.map((menu: any) => menu.id);
   expect(await ids("?status=inactive")).toEqual([nonaktif]);
   expect(await ids("?status=low")).toEqual([low]);
   expect(await ids("?status=sold_out")).toEqual([habis]);
@@ -96,16 +97,18 @@ test("filter status, q (escape), kategori", async () => {
   expect(await ids("?q=_")).toEqual([]);
   expect(await ids("?q=ayam")).toEqual([aktif]);
   await insertMenu(idA, { name: "Donat Danus", category_id: 7 });
-  expect((await get("/menus?category=danusan").expect(200)).body.data.map((m: any) => m.name)).toEqual(["Donat Danus"]);
+  expect((await get("/menus?category=danusan").expect(200)).body.data.map((menu: any) => menu.name)).toEqual([
+    "Donat Danus",
+  ]);
 });
 
 test("GET /merchant/menus/:id: milik sendiri 200; lainnya 404 seragam", async () => {
-  const r = await get(`/menus/${aktif}`).expect(200);
-  expect(Object.keys(r.body.data).sort()).toEqual(KUNCI);
-  expect(r.body.data.id).toBe(aktif);
+  const res = await get(`/menus/${aktif}`).expect(200);
+  expect(Object.keys(res.body.data).sort()).toEqual(KUNCI);
+  expect(res.body.data.id).toBe(aktif);
   for (const id of [milikB, terhapus, "abc", "0", "1.5"]) {
-    const x = await get(`/menus/${id}`).expect(404);
-    expect(x.body.error).toMatchObject({ code: "NOT_FOUND", message: "Menu tidak ditemukan." });
+    const missingRes = await get(`/menus/${id}`).expect(404);
+    expect(missingRes.body.error).toMatchObject({ code: "NOT_FOUND", message: "Menu tidak ditemukan." });
   }
   expect((await get(`/menus/${milikB}`, tokenB).expect(200)).body.data.name).toBe("Punya B");
 });
@@ -121,19 +124,19 @@ test("R-12: stock_date lama direset saat dibaca tanpa menggeser updated_at; toko
   };
   const id = await insertMenu(idA, lama);
   const idLainB = await insertMenu(idB, lama);
-  const r = await get(`/menus/${id}`).expect(200);
-  expect(r.body.data).toMatchObject({ quota_today: 20, sold_today: 0, held_today: 0, available: 20 });
-  const [[d]] = await db.query<any[]>(
+  const res = await get(`/menus/${id}`).expect(200);
+  expect(res.body.data).toMatchObject({ quota_today: 20, sold_today: 0, held_today: 0, available: 20 });
+  const [[row]] = await db.query<any[]>(
     "SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s, updated_at FROM menus WHERE id = ?",
     [id],
   );
-  expect(d.s).toBe(getWibDate());
-  expect(d.updated_at.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+  expect(row.s).toBe(getWibDate());
+  expect(row.updated_at.toISOString()).toBe("2026-01-01T00:00:00.000Z");
   expect(await menuRow(idLainB)).toMatchObject({ quota_today: 5, sold_today: 3, held_today: 1 });
 });
 
 // TiDB memakai utf8mb4_bin secara bawaan: pencarian harus tetap tak peka huruf
 test("q tak peka huruf walau kolom berkolasi biner", async () => {
   await db.query("ALTER TABLE menus MODIFY name VARCHAR(80) NOT NULL COLLATE utf8mb4_bin");
-  expect((await get("/menus?q=AYAM").expect(200)).body.data.map((m: any) => m.id)).toEqual([aktif]);
+  expect((await get("/menus?q=AYAM").expect(200)).body.data.map((menu: any) => menu.id)).toEqual([aktif]);
 });

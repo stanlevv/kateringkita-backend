@@ -8,7 +8,7 @@ import { resetTestDatabase } from "./helpers/db";
 // semua berkas migrasi, urut nama (sama dengan urutan migrate())
 const SEMUA = fs
   .readdirSync(path.join(__dirname, "../database/migrations"))
-  .filter((f) => f.endsWith(".sql"))
+  .filter((file) => file.endsWith(".sql"))
   .sort();
 
 describe("migrasi", () => {

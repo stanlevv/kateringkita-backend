@@ -14,9 +14,9 @@ let customerToken: string;
 
 const login = (identifier: string) =>
   request(app).post("/api/v1/auth/login").send({ identifier, password: "rahasia123", client: "web" });
-const me = (token?: string) => {
-  const r = request(app).get("/api/v1/me");
-  return token ? r.set("Authorization", `Bearer ${token}`) : r;
+const getMe = (token?: string) => {
+  const req = request(app).get("/api/v1/me");
+  return token ? req.set("Authorization", `Bearer ${token}`) : req;
 };
 
 beforeEach(async () => {
@@ -43,22 +43,22 @@ beforeEach(async () => {
 });
 
 test("/me tanpa header → 401 UNAUTHENTICATED", async () => {
-  const res = await me();
+  const res = await getMe();
   expect(res.status).toBe(401);
   expect(res.body.error.code).toBe("UNAUTHENTICATED");
 });
 
 test("/me token rusak → 401", async () => {
-  expect((await me("abc")).status).toBe(401);
+  expect((await getMe("abc")).status).toBe(401);
 });
 
 test("/me token ditandatangani secret lain → 401", async () => {
   const forged = jwt.sign({ sub: "1", role: "merchant" }, "x".repeat(40), { jwtid: "abc" });
-  expect((await me(forged)).status).toBe(401);
+  expect((await getMe(forged)).status).toBe(401);
 });
 
 test("/me merchant → user + merchant.slug", async () => {
-  const res = await me(merchantToken);
+  const res = await getMe(merchantToken);
   expect(res.status).toBe(200);
   expect(res.body.data.user.role).toBe("merchant");
   expect(res.body.data.user).not.toHaveProperty("password_hash");
@@ -66,7 +66,7 @@ test("/me merchant → user + merchant.slug", async () => {
 });
 
 test("/me customer → merchant null", async () => {
-  const res = await me(customerToken);
+  const res = await getMe(customerToken);
   expect(res.status).toBe(200);
   expect(res.body.data.user.role).toBe("customer");
   expect(res.body.data.merchant).toBeNull();
@@ -76,7 +76,7 @@ test("logout → 204, token sama lalu ditolak", async () => {
   const out = await request(app).post("/api/v1/auth/logout").set("Authorization", `Bearer ${customerToken}`);
   expect(out.status).toBe(204);
   expect(out.text).toBe("");
-  expect((await me(customerToken)).status).toBe(401);
+  expect((await getMe(customerToken)).status).toBe(401);
 });
 
 test("logout tanpa token → 401", async () => {
@@ -85,7 +85,7 @@ test("logout tanpa token → 401", async () => {
 
 test("akun dinonaktifkan → token hidup ditolak, login ulang ditolak generik", async () => {
   await db.query("UPDATE users SET is_active = FALSE WHERE email = 'budi@mail.com'");
-  expect((await me(customerToken)).status).toBe(401);
+  expect((await getMe(customerToken)).status).toBe(401);
   const res = await login("budi@mail.com");
   expect(res.status).toBe(401);
   expect(res.body.error.message).toBe(GENERIC);
@@ -93,7 +93,7 @@ test("akun dinonaktifkan → token hidup ditolak, login ulang ditolak generik", 
 
 test("sesi kedaluwarsa → 401", async () => {
   await db.query("UPDATE auth_sessions SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 MINUTE");
-  expect((await me(customerToken)).status).toBe(401);
+  expect((await getMe(customerToken)).status).toBe(401);
 });
 
 test("customer ke GET /api/v1/merchant/menus → 403 FORBIDDEN", async () => {
@@ -111,8 +111,8 @@ test("JWT exp lewat (sesi DB masih hidup) → 401", async () => {
       jwtid: jti,
     },
   );
-  expect((await me(expired)).status).toBe(401);
-  expect((await me(customerToken)).status).toBe(200);
+  expect((await getMe(expired)).status).toBe(401);
+  expect((await getMe(customerToken)).status).toBe(200);
 });
 
 test("merchant lolos requireRole di route menu penjual", async () => {
@@ -121,24 +121,24 @@ test("merchant lolos requireRole di route menu penjual", async () => {
 });
 
 test("/me merchant: tidak ada password_hash di mana pun dalam body", async () => {
-  const res = await me(merchantToken);
+  const res = await getMe(merchantToken);
   expect(JSON.stringify(res.body)).not.toContain("password_hash");
 });
 
 // AUD-29: login yang sudah lolos bcrypt.compare dengan sandi lama tidak boleh mendapat sesi setelah sandi diganti
 test("login yang dijeda setelah compare, lalu sandi diganti → login itu 401", async () => {
-  const asli = bcrypt.compare.bind(bcrypt) as (a: string, b: string) => Promise<boolean>;
+  const asli = bcrypt.compare.bind(bcrypt) as (plain: string, hash: string) => Promise<boolean>;
   let lepas!: () => void;
-  const gerbang = new Promise<void>((r) => (lepas = r));
+  const gerbang = new Promise<void>((resolve) => (lepas = resolve));
   let sampai!: () => void;
-  const dijeda = new Promise<void>((r) => (sampai = r));
-  vi.spyOn(bcrypt, "compare").mockImplementationOnce((async (a: string, b: string) => {
-    const ok = await asli(a, b);
+  const dijeda = new Promise<void>((resolve) => (sampai = resolve));
+  vi.spyOn(bcrypt, "compare").mockImplementationOnce((async (plain: string, hash: string) => {
+    const matches = await asli(plain, hash);
     sampai();
     await gerbang;
-    return ok;
+    return matches;
   }) as never);
-  const telat = login("budi@mail.com").then((r) => r);
+  const telat = login("budi@mail.com").then((res) => res);
   await dijeda;
   await request(app)
     .put("/api/v1/me/password")
