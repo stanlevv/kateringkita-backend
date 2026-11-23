@@ -90,6 +90,9 @@ Wajib dipakai saat memberi nama baru. Mengikuti nama tabel DB dan peran PRD.
 | pembeli (yang memesan)  | buyer             | ditahan (stok)              | held               |
 | akar (kunci galat)      | root              | paksa (opsi CLI)            | force              |
 | log server              | serverLog         | opsional                    | optional           |
+| katalog                 | catalog           | tampil (lolos syarat)       | visible            |
+| kandidat                | candidate         | sisa (porsi)                | remaining          |
+| kata kunci              | keyword           | jam (waktu sekarang)        | clock              |
 
 Istilah yang belum ada di tabel: pilih padanan Inggris yang umum, lalu tambahkan ke tabel ini pada commit yang sama.
 
