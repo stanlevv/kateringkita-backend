@@ -1,6 +1,6 @@
 // Isi file: sambungan ke database MySQL/TiDB yang dipakai bersama oleh semua service (lapisan paling bawah pada alur
-// routes → handlers → services → database). Yang diekspor adalah "pool koneksi": kumpulan sambungan database yang dibuka
-// lalu dipinjamkan bergantian ke setiap query, supaya tidak perlu membuka sambungan baru di setiap request.
+// routes → handlers → services → database). Yang diekspor adalah "pool koneksi": kumpulan sambungan database yang
+// dibuka lalu dipinjamkan bergantian ke setiap query, supaya tidak perlu membuka sambungan baru di setiap request.
 import mysql from "mysql2/promise";
 import { env } from "./env";
 

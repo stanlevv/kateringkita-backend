@@ -18,8 +18,10 @@ const snapHost = () => (isProduction() ? "https://app.midtrans.com" : "https://a
 // Memanggil satu endpoint Midtrans (POST bila ada body, GET bila tidak) dengan Server Key, paling lama 10 detik.
 // Melempar 503 bila Server Key belum diatur, dan 502 bila Midtrans tidak menjawab atau jawabannya bukan JSON.
 async function callMidtrans(url: string, body?: unknown): Promise<Record<string, any>> {
+  // 1. Tanpa Server Key, pembayaran online dianggap belum diaktifkan.
   const serverKey = env.MIDTRANS_SERVER_KEY;
   if (!serverKey) throw new AppError(503, "SERVICE_UNAVAILABLE", "Pembayaran online belum diaktifkan.");
+  // 2. Kirim permintaan dengan Server Key sebagai kata sandi (Basic auth); gagal tersambung dianggap tidak menjawab.
   const res = await fetch(url, {
     method: body ? "POST" : "GET",
     headers: {
@@ -30,6 +32,7 @@ async function callMidtrans(url: string, body?: unknown): Promise<Record<string,
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);
+  // 3. Jawaban harus berupa JSON.
   const json = res ? await res.json().catch(() => null) : null;
   if (!json) throw new AppError(502, "BAD_GATEWAY", "Layanan pembayaran tidak menjawab. Coba lagi.");
   return json;
@@ -128,12 +131,14 @@ export async function createMidtransQris(code: string, amount: number, minutes: 
  * @throws 503 Midtrans belum diaktifkan, 502 Midtrans tidak menjawab atau gagal membuka halaman bayar
  */
 export async function createSnapPayment(code: string, amount: number, minutes: number, finishUrl?: string) {
+  // 1. Minta Midtrans membuat halaman bayar; `callbacks.finish` hanya dikirim bila ada halaman tujuan setelah bayar.
   const response = await callMidtrans(`${snapHost()}/snap/v1/transactions`, {
     transaction_details: { order_id: code, gross_amount: amount },
     expiry: { unit: "minute", duration: minutes },
     ...(finishUrl ? { callbacks: { finish: finishUrl } } : {}),
     enabled_payments: ["other_qris", "gopay", "shopeepay", "bca_va", "bni_va", "bri_va"],
   });
+  // 2. Pastikan jawaban berisi alamat halaman bayar; kalau tidak, catat alasannya di log dan laporkan gagal.
   if (!response.token || !response.redirect_url) {
     console.error(`Midtrans Snap ${code} gagal: ${JSON.stringify(response.error_messages ?? response).slice(0, 300)}`);
     throw new AppError(502, "BAD_GATEWAY", "Gagal membuka halaman pembayaran. Coba lagi.");
@@ -151,15 +156,17 @@ export async function createSnapPayment(code: string, amount: number, minutes: n
  * @returns `true` bila tanda tangannya cocok; `false` bila tidak cocok, tidak ada, atau kunci belum diatur
  */
 export function isValidNotification(notification: Record<string, unknown>): boolean {
+  // 1. Tanpa kunci atau tanpa tanda tangan, notifikasi langsung dianggap tidak sah.
   const signatureKey = env.MIDTRANS_SIGNATURE_KEY ?? env.MIDTRANS_SERVER_KEY;
   if (!signatureKey || typeof notification.signature_key !== "string") return false;
+  // 2. Hitung tanda tangan yang seharusnya dari isi notifikasi dan kunci rahasia kita.
   const expectedSignature = Buffer.from(
     createHash("sha512")
       .update(`${notification.order_id}${notification.status_code}${notification.gross_amount}${signatureKey}`)
       .digest("hex"),
   );
   const receivedSignature = Buffer.from(notification.signature_key);
-  // timingSafeEqual membandingkan dengan waktu yang sama panjang, supaya penyerang tidak bisa menebak isi dari lamanya
-  // perbandingan.
+  // 3. Bandingkan dengan tanda tangan yang dikirim. timingSafeEqual butuh waktu yang sama untuk isi apa pun, supaya
+  //    penyerang tidak bisa menebak isinya dari lamanya perbandingan.
   return expectedSignature.length === receivedSignature.length && timingSafeEqual(expectedSignature, receivedSignature);
 }

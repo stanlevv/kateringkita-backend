@@ -76,7 +76,8 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
 
 /**
  * Middleware login opsional untuk halaman publik (katalog): bila ada sesi sah, `req.auth` diisi; bila tidak, request
- * tetap lanjut sebagai tamu dan tidak pernah dijawab 401. Galat database saat membaca sesi juga diperlakukan sebagai tamu.
+ * tetap lanjut sebagai tamu dan tidak pernah dijawab 401. Galat database saat membaca sesi juga diperlakukan sebagai
+ * tamu.
  */
 export const optionalAuth: RequestHandler = async (req, _res, next) => {
   const auth = await getSession(req).catch((error) => {

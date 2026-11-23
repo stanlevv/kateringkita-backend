@@ -1,6 +1,7 @@
 // Isi file: skrip pengisi data demo untuk database lokal (`npm run seed:demo`): empat penjual contoh dengan status
-// verifikasi berbeda (menunggu, perlu perbaikan, terverifikasi, ditangguhkan) beserta titik temu, menu, dan log aktivitas
-// admin, supaya panel admin bisa dicoba tanpa mengisi data satu per satu. Sandi semua akun demo diambil dari DEMO_PASSWORD.
+// verifikasi berbeda (menunggu, perlu perbaikan, terverifikasi, ditangguhkan) beserta titik temu, menu, dan log
+// aktivitas admin, supaya panel admin bisa dicoba tanpa mengisi data satu per satu. Sandi semua akun demo diambil dari
+// DEMO_PASSWORD.
 import "dotenv/config"; // harus pertama: env.ts (lewat db.ts) membaca process.env saat diimpor
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
@@ -81,11 +82,11 @@ export function isLocalHost(url: string): boolean {
 // Membuat satu penjual demo (akun, toko, titik temu, menu) dalam satu transaksi. Mengembalikan false bila nomor HP-nya
 // sudah terdaftar (sudah pernah dibuat), jadi skrip aman dijalankan berulang.
 async function createDemoMerchant(demo: DemoMerchant, password: string): Promise<boolean> {
-  // 1. Lewati bila akun dengan nomor ini sudah ada.
+  // Lewati bila akun dengan nomor ini sudah ada; sisanya dibuat dalam satu transaksi.
   const [existing] = await db.query<RowDataPacket[]>("SELECT id FROM users WHERE phone = ?", [demo.phone]);
   if (existing.length) return false;
   await dalamTransaksi(async (conn) => {
-    // 2. Buat akun penjual dan tokonya; tanggal verifikasi/penangguhan diisi sesuai status.
+    // 1. Buat akun penjual dan tokonya; tanggal verifikasi/penangguhan diisi sesuai status.
     const user = await insertUser(conn, "merchant", { full_name: demo.owner, phone: demo.phone, password });
     const slug = `demo-${demo.phone.slice(-2)}`;
     const [merchantResult] = await conn.query<ResultSetHeader>(
@@ -104,7 +105,7 @@ async function createDemoMerchant(demo: DemoMerchant, password: string): Promise
         demo.reason ?? null,
       ],
     );
-    // 3. Hubungkan titik temu dan tambahkan menu (tanpa foto, stok harian 20).
+    // 2. Hubungkan titik temu dan tambahkan menu (tanpa foto, stok harian 20).
     for (const pickupPointId of demo.points)
       await conn.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, ?)", [
         merchantResult.insertId,
@@ -130,7 +131,7 @@ async function createDemoAuditLogs(): Promise<"ok" | "no-admin"> {
     "SELECT COUNT(*) AS n FROM admin_audit_logs WHERE reason = 'Data demo'",
   );
   if (Number(existingLogs[0].n) > 0) return "ok";
-  // 2. Ambil penjual demo beserta statusnya, lalu catat satu aksi admin untuk setiap status selain "pending".
+  // 2. Ambil penjual demo beserta statusnya.
   const [demoMerchants] = await db.query<RowDataPacket[]>(
     "SELECT m.id, m.verification_status AS s FROM merchants m JOIN users u ON u.id = m.user_id WHERE u.phone IN (?)",
     [DEMO_MERCHANTS.map((demo) => demo.phone)],
@@ -141,6 +142,7 @@ async function createDemoAuditLogs(): Promise<"ok" | "no-admin"> {
     suspended: "merchant.suspend",
   };
   await dalamTransaksi(async (conn) => {
+    // 3. Satu log per penjual, dicatat seolah admin mengubah status dari "pending" ke status demo.
     for (const merchant of demoMerchants) {
       if (!actionByStatus[merchant.s]) continue;
       await catat(conn, {
@@ -158,8 +160,8 @@ async function createDemoAuditLogs(): Promise<"ok" | "no-admin"> {
 }
 
 /**
- * Menjalankan skrip data demo. Ditolak di production, dan hanya boleh ke database lokal atau database uji (nama berakhiran
- * `_test`) kecuali diberi opsi `--paksa`. Sandi hanya dari env dan tidak pernah dicetak.
+ * Menjalankan skrip data demo. Ditolak di production, dan hanya boleh ke database lokal atau database uji (nama
+ * berakhiran `_test`) kecuali diberi opsi `--paksa`. Sandi hanya dari env dan tidak pernah dicetak.
  * @param env  variabel lingkungan; dibaca NODE_ENV, DATABASE_URL, dan DEMO_PASSWORD
  * @param args argumen baris perintah, contoh `["--paksa"]`
  * @returns kode keluar proses: 0 berhasil, 1 gagal (pesannya sudah dicetak)

@@ -1,6 +1,6 @@
 // Isi file: mengenkripsi rahasia yang harus disimpan di database, yaitu API key penyedia AI yang diisi admin.
-// Dipakai ai.service. Enkripsi memakai AES-256-GCM: teks diacak dengan sebuah kunci, dan hanya kunci yang sama yang bisa
-// membukanya; GCM juga menambah "tag" sehingga isi yang diubah orang lain ketahuan saat dibuka.
+// Dipakai ai.service. Enkripsi memakai AES-256-GCM: teks diacak dengan sebuah kunci, dan hanya kunci yang sama yang
+// bisa membukanya; GCM juga menambah "tag" sehingga isi yang diubah orang lain ketahuan saat dibuka.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { env } from "../config/env";
 

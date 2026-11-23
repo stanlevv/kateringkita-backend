@@ -44,9 +44,11 @@ export const requestLogger: RequestHandler = (req, res, next) => {
 export const recordServerLog: RequestHandler = (req, res, next) => {
   const startedAt = Date.now();
   res.on("finish", () => {
+    // 1. Lewati request yang berhasil dan cukup cepat, juga 503 karena mode pemeliharaan.
     const durationMs = Date.now() - startedAt;
     if (res.statusCode < 500 && durationMs <= LAMBAT_MS) return;
     if (res.locals.maintenance) return;
+    // 2. Simpan tanpa ditunggu; kegagalan menyimpan diabaikan.
     catatLog({
       requestId: String(res.getHeader("X-Request-Id") ?? "") || null,
       level: res.statusCode >= 500 ? "error" : "slow",

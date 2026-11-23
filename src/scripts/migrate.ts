@@ -1,7 +1,7 @@
-// Isi file: skrip migrasi database (`npm run migrate`). Migrasi = file SQL bernomor di database/migrations yang mengubah
-// struktur database selangkah demi selangkah. Nama file yang sudah dijalankan dicatat di tabel schema_migrations,
-// sehingga setiap file hanya dijalankan sekali. Nama file dan fungsi `migrate` juga dipakai test end-to-end repo web,
-// jadi jangan diganti.
+// Isi file: skrip migrasi database (`npm run migrate`). Migrasi = file SQL bernomor di database/migrations yang
+// mengubah struktur database selangkah demi selangkah. Nama file yang sudah dijalankan dicatat di tabel
+// schema_migrations, sehingga setiap file hanya dijalankan sekali. Nama file dan fungsi `migrate` juga dipakai test
+// end-to-end repo web, jadi jangan diganti.
 import "dotenv/config"; // harus pertama: env.ts (lewat db.ts) membaca process.env saat diimpor
 import fs from "node:fs";
 import path from "node:path";
@@ -42,8 +42,8 @@ export async function migrate(databaseUrl: string, dir = MIGRATIONS_DIR): Promis
       try {
         await conn.query(fs.readFileSync(path.join(dir, name), "utf8"));
       } catch (error) {
-        // Perintah pengubah struktur (DDL) di MySQL langsung tersimpan sendiri-sendiri, jadi perintah sebelum yang gagal
-        // tetap tersimpan dan harus dibersihkan manual.
+        // Perintah pengubah struktur (DDL) di MySQL langsung tersimpan sendiri-sendiri, jadi perintah sebelum yang
+        // gagal tetap tersimpan dan harus dibersihkan manual.
         throw new Error(
           `Migrasi ${name} gagal: ${(error as Error).message}. Hapus manual objek yang sempat dibuat file ini, lalu jalankan ulang.`,
         );

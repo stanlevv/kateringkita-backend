@@ -17,13 +17,15 @@ export const mailer = {
    * @throws 503 SERVICE_UNAVAILABLE bila SMTP belum diatur di production; galat SMTP diteruskan apa adanya
    */
   async send(recipient: string, subject: string, text: string): Promise<void> {
+    // 1. SMTP belum diatur: tolak di production, selain itu tulis isi email ke log.
     if (!env.SMTP_HOST) {
       if (env.NODE_ENV === "production")
         throw new AppError(503, "SERVICE_UNAVAILABLE", "Pengiriman email belum diaktifkan.");
       console.info(`[surel] ke ${recipient} — ${subject}\n${text}`);
       return;
     }
-    // Port 465 memakai TLS sejak awal sambungan; port lain (biasanya 587) menaikkan ke TLS setelah tersambung.
+    // 2. Kirim lewat SMTP. Port 465 memakai TLS sejak awal sambungan; port lain (biasanya 587) menaikkan ke TLS
+    //    setelah tersambung.
     await nodemailer
       .createTransport({
         host: env.SMTP_HOST,

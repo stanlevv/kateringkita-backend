@@ -1,7 +1,7 @@
 // Isi file: pembuat presigned URL untuk Cloudflare R2 (penyimpanan file foto). Presigned URL = alamat unggah sekali
 // pakai yang sudah ditandatangani server dengan kunci rahasia R2, sehingga aplikasi bisa mengunggah foto langsung ke R2
-// tanpa pernah memegang kunci rahasianya. Dipakai upload.service. Tanda tangannya memakai cara AWS "Signature Version 4"
-// (SigV4), yang juga dipahami R2.
+// tanpa pernah memegang kunci rahasianya. Dipakai upload.service. Tanda tangannya memakai cara AWS "Signature Version
+// 4" (SigV4), yang juga dipahami R2.
 import { createHash, createHmac } from "node:crypto";
 import { env } from "../config/env";
 
@@ -96,7 +96,8 @@ export function presignSigV4Url(request: {
     scope,
     createHash("sha256").update(canonicalRequest).digest("hex"),
   ].join("\n");
-  // 5. Turunkan kunci tanda tangan dari kunci rahasia secara bertingkat (tanggal → region → layanan), lalu tandatangani.
+  // 5. Turunkan kunci tanda tangan dari kunci rahasia secara bertingkat (tanggal → region → layanan), lalu
+  //    tandatangani.
   const signingKey = [request.region, request.service, "aws4_request"].reduce<Buffer>(
     (previousKey, part) => hmacSha256(previousKey, part),
     hmacSha256(`AWS4${request.secretAccessKey}`, day),
@@ -109,7 +110,8 @@ export const PRESIGN_SECONDS = 300;
 
 /**
  * Membuat presigned URL `PUT` untuk mengunggah satu file ke bucket R2 (alamat bergaya path: `/<bucket>/<key>`).
- * Ukuran dan tipe file ikut ditandatangani, sehingga R2 menolak file yang ukuran atau tipenya berbeda dari yang diminta.
+ * Ukuran dan tipe file ikut ditandatangani, sehingga R2 menolak file yang ukuran atau tipenya berbeda dari yang
+ * diminta.
  * @param config pengaturan R2 dari {@link getR2Config}
  * @param file   `key` lokasi file di bucket, `contentType` tipe file (contoh `image/webp`), `size` ukuran dalam byte,
  *               `now` waktu sekarang (boleh kosong; diisi test supaya hasilnya tetap)

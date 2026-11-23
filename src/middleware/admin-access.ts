@@ -1,5 +1,5 @@
-// Isi file: pembatas akses panel admin menurut tingkat admin (super, ops, support). Middleware ini dijalankan untuk setiap
-// request ke /api/v1/admin, sesudah requireAuth dan requireRole("admin") dan sebelum routes admin:
+// Isi file: pembatas akses panel admin menurut tingkat admin (super, ops, support). Middleware ini dijalankan untuk
+// setiap request ke /api/v1/admin, sesudah requireAuth dan requireRole("admin") dan sebelum routes admin:
 // request masuk → middleware (… → adminAccess) → routes/admin.ts → handlers → services → database.
 import { RequestHandler } from "express";
 import { AuthedRequest } from "./auth";

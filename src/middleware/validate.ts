@@ -1,6 +1,7 @@
-// Isi file: pemeriksa isi request dengan skema zod (zod = pustaka untuk menulis aturan bentuk data). `validate` dipasang
-// di routes sebelum handler: request masuk → middleware → routes (… → validate(schema)) → handlers → services → database.
-// `parse` dan `fieldsFromIssues` dipakai langsung di handler/service untuk data yang diperiksa di tempat lain.
+// Isi file: pemeriksa isi request dengan skema zod (zod = pustaka untuk menulis aturan bentuk data). `validate`
+// dipasang di routes sebelum handler: request masuk → middleware → routes (… → validate(schema)) → handlers → services
+// → database. `parse` dan `fieldsFromIssues` dipakai langsung di handler/service untuk data yang diperiksa di tempat
+// lain.
 import { RequestHandler } from "express";
 import { z } from "zod";
 import { AppError } from "../utils/errors";

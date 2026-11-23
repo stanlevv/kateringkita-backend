@@ -1,6 +1,6 @@
 // Isi file: skrip baris perintah untuk membuat admin super pertama (`npm run admin:create -- --phone … --name …`).
-// Sandi diambil dari variabel env ADMIN_INITIAL_PASSWORD supaya tidak tertulis di riwayat terminal. Nama file dan fungsi
-// `createAdmin` juga dipakai test end-to-end repo web, jadi jangan diganti.
+// Sandi diambil dari variabel env ADMIN_INITIAL_PASSWORD supaya tidak tertulis di riwayat terminal. Nama file dan
+// fungsi `createAdmin` juga dipakai test end-to-end repo web, jadi jangan diganti.
 import "dotenv/config"; // harus pertama: env.ts (lewat db.ts) membaca process.env saat diimpor
 import { z } from "zod";
 import db from "../config/db";
@@ -11,8 +11,8 @@ import { simpanAdmin } from "../services/admin-akun.service";
 const adminSchema = z.object({ fullName, phone, password });
 
 /**
- * Membuat akun admin super. Sandinya dipilih sendiri oleh operator lewat env, jadi tidak wajib diganti saat login pertama.
- * Sandi disimpan sebagai hash (hasil acakan satu arah; sandi asli tidak bisa dibaca kembali dari hash).
+ * Membuat akun admin super. Sandinya dipilih sendiri oleh operator lewat env, jadi tidak wajib diganti saat login
+ * pertama. Sandi disimpan sebagai hash (hasil acakan satu arah; sandi asli tidak bisa dibaca kembali dari hash).
  * @param input nomor HP, nama lengkap, dan sandi admin
  * @returns id akun admin baru
  * @throws Error berisi pesan kesalahan pertama bila data tidak valid; galat database (contoh nomor sudah terdaftar)

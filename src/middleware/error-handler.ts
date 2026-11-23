@@ -1,6 +1,6 @@
 // Isi file: dua middleware penutup yang dipasang paling akhir di app.ts. notFoundHandler menjawab path yang tidak cocok
-// dengan route mana pun; errorHandler menangkap semua galat yang dilempar di middleware, routes, handlers, atau services
-// lalu mengubahnya menjadi respons JSON `{ error: { code, message, fields } }`.
+// dengan route mana pun; errorHandler menangkap semua galat yang dilempar di middleware, routes, handlers, atau
+// services lalu mengubahnya menjadi respons JSON `{ error: { code, message, fields } }`.
 import { NextFunction, Request, Response } from "express";
 import { AppError } from "../utils/errors";
 

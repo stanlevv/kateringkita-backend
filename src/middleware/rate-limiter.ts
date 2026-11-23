@@ -131,7 +131,8 @@ export const passwordLimiter: RequestHandler & { reset: () => void } = Object.as
       return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak percobaan. Coba lagi sebentar lagi."));
     }
     addHit(passwordByUser, key, now);
-    // 2. validate berjalan lebih dulu, jadi 400 di sini hanya berarti kata sandi lama salah; selain itu jatah dikembalikan.
+    // 2. validate berjalan lebih dulu, jadi 400 di sini hanya berarti kata sandi lama salah; selain itu jatah
+    //    dikembalikan.
     res.on("finish", () => {
       if (res.statusCode !== 400) removeHit(passwordByUser, key);
     });
@@ -172,8 +173,8 @@ const otpByIp = createBucket(30, 15 * 60_000);
 export const otpLimiter: RequestHandler & { reset: () => void } = Object.assign(
   ((req, _res, next) => {
     const now = Date.now();
-    // 1. Kunci email memakai pola rute (req.route.path), bukan path yang diketik, supaya /AUTH/… atau garis miring akhir
-    //    tidak membuat penghitung baru. validate berjalan lebih dulu, jadi email sudah huruf kecil.
+    // 1. Kunci email memakai pola rute (req.route.path), bukan path yang diketik, supaya /AUTH/… atau garis miring
+    //    akhir tidak membuat penghitung baru. validate berjalan lebih dulu, jadi email sudah huruf kecil.
     const emailKey = `${req.route?.path ?? req.path.toLowerCase()}:${String(req.body.email)}`;
     const ipKey = String(getClientIp(req));
     // 2. Tolak bila salah satu batas sudah tercapai; bila belum, catat permintaan ini di kedua penghitung.

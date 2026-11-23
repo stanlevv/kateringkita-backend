@@ -18,8 +18,8 @@ const ALLOWED_ROUTES = new Set([
 ]);
 
 /**
- * Middleware mode pemeliharaan. Bila aktif, menandai `res.locals.maintenance` (supaya 503 ini tidak dicatat sebagai galat
- * server) dan meminta klien mencoba lagi 5 menit kemudian lewat header Retry-After.
+ * Middleware mode pemeliharaan. Bila aktif, menandai `res.locals.maintenance` (supaya 503 ini tidak dicatat sebagai
+ * galat server) dan meminta klien mencoba lagi 5 menit kemudian lewat header Retry-After.
  * @throws 503 MAINTENANCE berisi pesan pemeliharaan dari admin, atau pesan bawaan bila admin tidak mengisinya
  */
 export const maintenanceGuard: RequestHandler = async (req, res, next) => {

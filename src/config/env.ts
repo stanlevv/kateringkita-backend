@@ -51,9 +51,11 @@ const envSchema = z
     GEMINI_MODEL: z.preprocess((value) => (value === "" ? undefined : value), z.string().default("gemini-2.5-flash")),
     // Kunci Midtrans (penyedia pembayaran online: Virtual Account, QRIS, e-wallet). Kosong = pembayaran online mati.
     MIDTRANS_SERVER_KEY: optional(z.string()),
-    // Sejak 28 Okt 2026 notifikasi Midtrans ditandatangani Signature Secret Key, bukan Server Key; kosong = pakai Server Key (akun lama)
+    // Sejak 28 Okt 2026 notifikasi Midtrans ditandatangani Signature Secret Key, bukan Server Key; kosong = pakai
+    // Server Key (akun lama)
     MIDTRANS_SIGNATURE_KEY: optional(z.string()),
-    // "true" = transaksi sungguhan (api.midtrans.com); bawaan sandbox agar key production yang salah pasang tidak menarik uang
+    // "true" = transaksi sungguhan (api.midtrans.com); bawaan sandbox agar key production yang salah pasang tidak
+    // menarik uang
     MIDTRANS_IS_PRODUCTION: z.preprocess(
       (value) => (value === "" ? undefined : value),
       z.enum(["true", "false"]).default("false"),
