@@ -1,3 +1,6 @@
+// Isi file: banner di beranda aplikasi mobile. Pembeli melihat banner yang sedang tayang; penjual mengajukan banner
+// tokonya; admin membuat banner platform dan meninjau (menyetujui, menolak, menonaktifkan) banner penjual. Alurnya
+// routes/catalog.ts, routes/merchant.ts, atau routes/admin.ts → handlers/banner.handler.ts → file ini → database.
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
@@ -19,9 +22,13 @@ import { getMerchantId } from "./merchant-menu.service";
 import { validateImageUrl } from "./upload.service";
 import { VoucherCard, getAvailableVoucher } from "./voucher.service";
 
-// Banner beranda mobile (rancangan voucher 2026-11-16 §5.4). Penjual mengajukan (1 banner aktif per toko, tampil setelah
-// disetujui admin); admin membuat banner platform (langsung tayang), menyetujui / menolak / menonaktifkan. Publik maks 8.
+// Aturan banner: setiap banner punya masa tayang (`starts_at` sampai `ends_at`) dan status. Banner penjual mulai dari
+// `menunggu` dan baru tayang setelah admin mengubahnya menjadi `disetujui` (bisa juga `ditolak` atau `nonaktif`);
+// satu toko hanya boleh punya satu banner aktif. Banner platform buatan admin langsung `disetujui`. Tujuan banner
+// (`target`): halaman toko, sebuah voucher (`promo`), atau tidak ke mana-mana (`none`, hanya banner platform).
+/** Paling banyak 8 banner yang tayang di beranda. */
 export const MAX_PUBLIC_BANNERS = 8;
+// Folder gambar di penyimpanan R2: banner platform di platform/banner/, banner toko di merchants/<id toko>/banner/.
 const PLATFORM_PREFIX = "platform/banner/";
 const merchantPrefix = (merchantId: number) => `merchants/${merchantId}/banner/`;
 
@@ -30,6 +37,7 @@ const BANNER_COLUMNS = `b.id, b.merchant_id, b.title, b.image_url, b.target, b.p
 const BANNER_FROM_SQL =
   "banners b LEFT JOIN promos p ON p.id = b.promo_id LEFT JOIN merchants m ON m.id = b.merchant_id";
 
+// Satu baris banner dalam bentuk JSON untuk penjual dan admin. `catatan` = alasan penolakan dari admin.
 const mapBanner = (row: RowDataPacket) => ({
   id: row.id as number,
   title: row.title as string,
@@ -52,12 +60,22 @@ const bannerNotFound = () => new AppError(404, "NOT_FOUND", "Banner tidak ditemu
 const invalidFields = (fields: Record<string, string[]>) =>
   new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
 
-/** zod + cek gambar sekaligus, agar semua galat kolom keluar dalam satu respons. */
+/**
+ * Memeriksa isi permintaan dengan skema zod sekaligus memeriksa URL gambar, supaya semua galat kolom keluar dalam
+ * satu jawaban. Gambar harus hasil unggahan ke folder `prefix` (lihat validateImageUrl). Dipakai juga popup.service.
+ * @param schema skema zod untuk isi permintaan
+ * @param body   isi permintaan mentah
+ * @param prefix folder gambar yang diizinkan, contoh `platform/banner/`
+ * @returns isi permintaan yang sudah lolos skema
+ * @throws 400 VALIDATION_ERROR berisi semua galat kolom (skema dan gambar)
+ */
 export function parseBodyWithImage<S extends z.ZodType>(schema: S, body: unknown, prefix: string): z.infer<S> {
+  // 1. Kumpulkan galat skema per kolom.
   const parsed = schema.safeParse(body);
   const fields: Record<string, string[]> = {};
   if (!parsed.success)
     for (const issue of parsed.error.issues) (fields[issue.path.join(".") || "body"] ??= []).push(issue.message);
+  // 2. Periksa URL gambar bila dikirim; galatnya ditambahkan ke kumpulan yang sama.
   const url = (body as { image_url?: unknown } | null)?.image_url;
   if (typeof url === "string" && url.trim()) {
     try {
@@ -67,10 +85,12 @@ export function parseBodyWithImage<S extends z.ZodType>(schema: S, body: unknown
       else throw error;
     }
   }
+  // 3. Ada galat apa pun → 400 dengan semua galat.
   if (Object.keys(fields).length || !parsed.success) throw invalidFields(fields);
   return parsed.data;
 }
 
+// Membaca satu banner (sudah pasti ada) dalam bentuk JSON.
 const loadBanner = async (id: number) => {
   const [[row]] = await db.query<RowDataPacket[]>(`SELECT ${BANNER_COLUMNS} FROM ${BANNER_FROM_SQL} WHERE b.id = ?`, [
     id,
@@ -79,6 +99,7 @@ const loadBanner = async (id: number) => {
 };
 
 // ---------------- publik ----------------
+/** Bentuk banner yang dikirim ke aplikasi pembeli (nama kunci = kontrak JSON). */
 export type PublicBanner = {
   id: number;
   title: string;
@@ -88,8 +109,15 @@ export type PublicBanner = {
   merchant: { id: number; slug: string; business_name: string } | null;
 };
 
-/** Maks 8 banner disetujui dalam periode: admin dulu (sort_order), lalu penjual (terbaru disetujui). */
+/**
+ * Banner yang sedang tayang di beranda: disetujui, dalam masa tayang, dan tokonya (bila banner toko) tampil di
+ * katalog. Banner platform didahulukan (urut `sort_order`), lalu banner penjual (yang paling baru disetujui dulu).
+ * Banner bertujuan voucher hanya tayang bila vouchernya masih tersedia.
+ * @param userId id pembeli yang login (untuk tanda `claimed` voucher), atau null untuk tamu
+ * @returns paling banyak 8 banner
+ */
 export async function listPublicBanners(userId: number | null): Promise<PublicBanner[]> {
+  // 1. Ambil calon banner (paling banyak 40) yang memenuhi syarat tayang.
   const nowMs = clock.now();
   const now = new Date(nowMs);
   const [rows] = await db.query<RowDataPacket[]>(
@@ -99,12 +127,12 @@ export async function listPublicBanners(userId: number | null): Promise<PublicBa
      ORDER BY b.merchant_id IS NULL DESC, b.sort_order, b.reviewed_at DESC, b.id LIMIT 40`,
     [now, now],
   );
+  // 2. Saring satu per satu sampai terkumpul 8; banner yang vouchernya mati, kedaluwarsa, atau disembunyikan dilewati.
   const banners: PublicBanner[] = [];
   for (const row of rows) {
     if (banners.length >= MAX_PUBLIC_BANNERS) break;
     let promo: VoucherCard | null = null;
     if (row.target === "promo") {
-      // promo target mati / kedaluwarsa / disembunyikan → banner tidak tayang
       if (!row.promo_id || !(promo = await getAvailableVoucher(row.promo_id, userId, nowMs))) continue;
     }
     const mapped = mapBanner(row);
@@ -121,6 +149,12 @@ export async function listPublicBanners(userId: number | null): Promise<PublicBa
 }
 
 // ---------------- penjual ----------------
+/**
+ * Semua banner milik toko penjual yang login (status apa pun), yang terbaru di atas.
+ * @param userId id pengguna penjual dari token login
+ * @returns daftar banner
+ * @throws 404 bila pengguna ini tidak punya toko
+ */
 export async function listMerchantBanners(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${BANNER_COLUMNS} FROM ${BANNER_FROM_SQL} WHERE b.merchant_id = ? ORDER BY b.id DESC`,
@@ -129,6 +163,8 @@ export async function listMerchantBanners(userId: number) {
   return rows.map(mapBanner);
 }
 
+// Banner toko bertujuan voucher wajib menunjuk voucher milik toko itu sendiri. Mengembalikan id voucher, atau null bila
+// tujuannya bukan voucher.
 async function validateMerchantPromo(
   merchantId: number,
   target: string | undefined,
@@ -142,6 +178,8 @@ async function validateMerchantPromo(
   return promoId as number;
 }
 
+// Satu toko hanya boleh punya satu banner aktif (menunggu atau disetujui, belum berakhir). `excludeId` = banner yang
+// sedang diubah, supaya tidak dihitung melawan dirinya sendiri.
 async function ensureSingleActive(merchantId: number, excludeId: number | null) {
   const [[countRow]] = await db.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS n FROM banners WHERE merchant_id = ? AND status IN ('menunggu', 'disetujui') AND ends_at > UTC_TIMESTAMP() AND id <> ?`,
@@ -150,11 +188,21 @@ async function ensureSingleActive(merchantId: number, excludeId: number | null) 
   if (Number(countRow.n) > 0) throw new AppError(409, "CONFLICT", "Toko ini sudah punya banner aktif.");
 }
 
+/**
+ * Penjual mengajukan banner baru untuk tokonya. Banner disimpan dengan status `menunggu` persetujuan admin.
+ * @param userId id pengguna penjual dari token login
+ * @param body   isi permintaan mentah (diperiksa merchantBannerSchema dan aturan gambar)
+ * @returns banner yang baru disimpan
+ * @throws 400 isian tidak valid atau voucher bukan milik toko, 404 pengguna tidak punya toko, 409 toko sudah punya
+ *         banner aktif
+ */
 export async function createMerchantBanner(userId: number, body: unknown) {
+  // 1. Periksa isian, voucher tujuan, dan batas satu banner aktif.
   const merchantId = await getMerchantId(userId);
   const input: MerchantBannerInput = parseBodyWithImage(merchantBannerSchema, body, merchantPrefix(merchantId));
   const promoId = await validateMerchantPromo(merchantId, input.target, input.promo_id);
   await ensureSingleActive(merchantId, null);
+  // 2. Simpan sebagai `menunggu`.
   const [result] = await db.query<ResultSetHeader>(
     `INSERT INTO banners (merchant_id, title, image_url, target, promo_id, status, starts_at, ends_at, created_by)
      VALUES (?, ?, ?, ?, ?, 'menunggu', ?, ?, ?)`,
@@ -172,8 +220,18 @@ export async function createMerchantBanner(userId: number, body: unknown) {
   return loadBanner(result.insertId);
 }
 
-/** Setiap perubahan oleh penjual mengembalikan banner ke antrean persetujuan admin. */
+/**
+ * Penjual mengubah banner tokonya. Setiap perubahan mengembalikan banner ke status `menunggu` dan menghapus hasil
+ * tinjauan sebelumnya, jadi harus disetujui admin lagi. Kolom yang tidak dikirim memakai nilai tersimpan.
+ * @param userId id pengguna penjual dari token login
+ * @param idRaw  id banner dari alamat URL (belum tentu angka)
+ * @param body   isi permintaan mentah (diperiksa updateMerchantBannerSchema dan aturan gambar)
+ * @returns banner setelah diubah
+ * @throws 400 isian tidak valid, 404 banner tidak ada atau milik toko lain, 409 banner yang ditolak / nonaktif
+ *         diajukan ulang padahal toko sudah punya banner aktif lain
+ */
 export async function updateMerchantBanner(userId: number, idRaw: unknown, body: unknown) {
+  // 1. Ambil banner milik toko ini.
   const merchantId = await getMerchantId(userId);
   const id = Number(idRaw);
   const [[banner]] =
@@ -181,6 +239,7 @@ export async function updateMerchantBanner(userId: number, idRaw: unknown, body:
       ? await db.query<RowDataPacket[]>("SELECT * FROM banners WHERE id = ? AND merchant_id = ?", [id, merchantId])
       : [[]];
   if (!banner) throw bannerNotFound();
+  // 2. Periksa isian dan voucher tujuan (memakai nilai tersimpan bila tidak dikirim).
   const input: UpdateMerchantBannerInput = parseBodyWithImage(
     updateMerchantBannerSchema,
     body,
@@ -192,7 +251,9 @@ export async function updateMerchantBanner(userId: number, idRaw: unknown, body:
     target,
     input.promo_id === undefined ? banner.promo_id : input.promo_id,
   );
+  // 3. Banner yang ditolak atau nonaktif akan aktif lagi, jadi batas satu banner aktif diperiksa ulang.
   if (banner.status === "ditolak" || banner.status === "nonaktif") await ensureSingleActive(merchantId, banner.id);
+  // 4. Simpan dan kembalikan ke antrean persetujuan.
   await db.query(
     `UPDATE banners SET title = ?, image_url = ?, target = ?, promo_id = ?, starts_at = ?, ends_at = ?, status = 'menunggu', catatan = NULL,
        reviewed_by = NULL, reviewed_at = NULL WHERE id = ?`,
@@ -209,6 +270,13 @@ export async function updateMerchantBanner(userId: number, idRaw: unknown, body:
   return loadBanner(banner.id);
 }
 
+/**
+ * Penjual menghapus banner tokonya (status apa pun).
+ * @param userId id pengguna penjual dari token login
+ * @param idRaw  id banner dari alamat URL
+ * @returns `{ id }` banner yang dihapus
+ * @throws 404 banner tidak ada atau milik toko lain
+ */
 export async function deleteMerchantBanner(userId: number, idRaw: unknown) {
   const merchantId = await getMerchantId(userId);
   const id = Number(idRaw);
@@ -221,6 +289,11 @@ export async function deleteMerchantBanner(userId: number, idRaw: unknown) {
 }
 
 // ---------------- admin ----------------
+/**
+ * Semua banner untuk admin: yang menunggu tinjauan di atas, lalu banner platform (urut `sort_order`), lalu sisanya.
+ * @param status saringan status (`menunggu`, `disetujui`, `ditolak`, `nonaktif`), atau kosong untuk semua
+ * @returns daftar banner
+ */
 export async function listAdminBanners(status?: string) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${BANNER_COLUMNS} FROM ${BANNER_FROM_SQL} ${status ? "WHERE b.status = ?" : ""}
@@ -230,7 +303,16 @@ export async function listAdminBanners(status?: string) {
   return rows.map(mapBanner);
 }
 
+/**
+ * Admin membuat banner platform. Banner langsung berstatus `disetujui` (tayang sesuai masa tayang) dan dicatat di log
+ * audit admin. Tujuannya boleh voucher mana pun atau tanpa tujuan.
+ * @param adminId id admin yang membuat
+ * @param body    isi permintaan mentah (diperiksa adminBannerSchema dan aturan gambar)
+ * @returns banner yang baru disimpan
+ * @throws 400 isian tidak valid atau voucher tujuan tidak ada
+ */
 export async function createAdminBanner(adminId: number, body: unknown) {
+  // 1. Periksa isian dan voucher tujuan.
   const input: AdminBannerInput = parseBodyWithImage(adminBannerSchema, body, PLATFORM_PREFIX);
   if (input.target === "promo") {
     const [[promo]] = input.promo_id
@@ -239,6 +321,7 @@ export async function createAdminBanner(adminId: number, body: unknown) {
     if (!promo) throw invalidFields({ promo_id: ["Pilih voucher."] });
   }
   return dalamTransaksi(async (conn) => {
+    // 2. Simpan sebagai banner platform yang sudah disetujui.
     const [result] = await conn.query<ResultSetHeader>(
       `INSERT INTO banners (merchant_id, title, image_url, target, promo_id, status, starts_at, ends_at, sort_order, created_by, reviewed_by, reviewed_at)
        VALUES (NULL, ?, ?, ?, ?, 'disetujui', ?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
@@ -254,6 +337,7 @@ export async function createAdminBanner(adminId: number, body: unknown) {
         adminId,
       ],
     );
+    // 3. Catat di log audit admin.
     await catat(conn, {
       adminId,
       action: "banner.create",
@@ -265,16 +349,27 @@ export async function createAdminBanner(adminId: number, body: unknown) {
   }).then(loadBanner);
 }
 
+// Nama tindakan di log audit untuk tiap status hasil tinjauan.
 const AUDIT_ACTIONS: Record<string, string> = {
   disetujui: "banner.approve",
   ditolak: "banner.reject",
   nonaktif: "banner.deactivate",
 };
-// masa berlaku presign + 1 menit toleransi selisih jam
+// Jeda sebelum banner penjual boleh disetujui: masa berlaku URL unggah + 1 menit toleransi selisih jam.
 const APPROVE_DELAY_SECONDS = PRESIGN_SECONDS + 60;
 
-/** Status (setujui / tolak + alasan / nonaktifkan) & urutan untuk semua banner; isi hanya untuk banner platform. */
+/**
+ * Admin meninjau banner: mengubah status (setujui, tolak dengan alasan, nonaktifkan) dan urutan untuk semua banner.
+ * Judul, gambar, dan masa tayang hanya bisa diubah untuk banner platform. Perubahan dicatat di log audit.
+ * @param adminId id admin yang meninjau
+ * @param idRaw   id banner dari alamat URL
+ * @param body    isi permintaan mentah (diperiksa reviewBannerSchema)
+ * @returns banner setelah ditinjau
+ * @throws 400 isian tidak valid, 404 banner tidak ada, 409 banner penjual disetujui terlalu cepat setelah gambarnya
+ *         diunggah
+ */
 export async function reviewBanner(adminId: number, idRaw: unknown, body: unknown) {
+  // 1. Periksa isian.
   const parsed = reviewBannerSchema.safeParse(body);
   if (!parsed.success) {
     const fields: Record<string, string[]> = {};
@@ -283,9 +378,11 @@ export async function reviewBanner(adminId: number, idRaw: unknown, body: unknow
   }
   const input: ReviewBannerInput = parsed.data;
   const id = await dalamTransaksi(async (conn) => {
+    // 2. Kunci banner. URL unggah gambar (presigned URL: alamat unggah sementara yang sudah ditandatangani) bisa
+    //    dipakai ulang selama masih berlaku, jadi penjual bisa mengganti isi gambar setelah diajukan. Karena itu
+    //    banner penjual baru boleh disetujui setelah URL itu kedaluwarsa, dihitung dari updated_at (ikut berubah
+    //    setiap kali penjual mengajukan atau mengubah banner).
     const banner = await kunci(conn, "banners", idRaw, { notFound: "Banner tidak ditemukan." });
-    // AUD-36: URL unggah (presign PUT) bisa dipakai ulang selama berlaku, jadi isi gambar pengajuan penjual baru pasti
-    // setelah URL itu kedaluwarsa; pengajuan/ubahan penjual memperbarui updated_at
     if (input.status === "disetujui" && banner.merchant_id !== null && banner.status === "menunggu") {
       const [[ageRow]] = await conn.query<RowDataPacket[]>(
         "SELECT TIMESTAMPDIFF(SECOND, updated_at, CURRENT_TIMESTAMP) AS umur FROM banners WHERE id = ?",
@@ -299,6 +396,7 @@ export async function reviewBanner(adminId: number, idRaw: unknown, body: unknow
         );
       }
     }
+    // 3. Susun kolom yang berubah: isi (khusus banner platform), urutan, dan hasil tinjauan.
     const contentFields =
       banner.merchant_id === null
         ? {
@@ -319,6 +417,7 @@ export async function reviewBanner(adminId: number, idRaw: unknown, body: unknow
         catatan: input.status === "ditolak" ? input.catatan : (input.catatan ?? null),
         reviewed_by: adminId,
       });
+    // 4. Simpan bila ada perubahan, lalu catat di log audit.
     const columns = Object.keys(changes);
     if (columns.length) {
       await conn.query(
