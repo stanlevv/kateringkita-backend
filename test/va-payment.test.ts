@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { kirimNotif } from "./helpers/midtrans";
-import { menuRow, pesanDulu, siapCheckout } from "./helpers/toko";
+import { menuRow, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F10: VA Midtrans — checkout VA, POST /orders/:code/va (Midtrans di-stub), notifikasi POST /payments/midtrans
 let s: Awaited<ReturnType<typeof siapCheckout>>;

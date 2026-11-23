@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
 import { simpanHasil } from "../src/services/hasil-ai.service";
-import { login, siapkanToko } from "./helpers/toko";
+import { login, siapkanToko } from "./helpers/merchant";
 
 // Rubrik AI: hasil AI tersimpan tampil di panel admin web dan diverifikasi manual (setujui / tolak + catatan), diaudit.
 let s: Awaited<ReturnType<typeof siapkanToko>>;

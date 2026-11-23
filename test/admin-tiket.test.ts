@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ticketLimiter } from "../src/middleware/rate-limiter";
-import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
+import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // Tiket bantuan (CS) sisi admin: /admin/tickets (kontrak tiket-kontrak.md); semua tingkat admin boleh baca & balas
 let s: Awaited<ReturnType<typeof siapCheckout>>;

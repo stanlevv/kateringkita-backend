@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
-import { fotoUrl, isiR2 } from "./helpers/toko";
+import { fotoUrl, isiR2 } from "./helpers/merchant";
 
 let tA: string;
 let idA: number, idB: number;

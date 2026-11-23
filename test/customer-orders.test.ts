@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
+import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F07 Task 2: GET /me/orders 3 tab, POST /orders/:code/cancel & /complete (C-14, C-15, C-16, R-10, R-11; D2, D8–D11, D13)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

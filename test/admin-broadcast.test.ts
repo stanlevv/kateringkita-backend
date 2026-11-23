@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, pembeliBaru, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
+import { login, pembeliBaru, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
 
 // Broadcast pengumuman admin, notifikasi promo toko ke pemfavorit, dan kontak CS
 let s: Awaited<ReturnType<typeof siapkanToko>>;

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
+import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/merchant";
 
 // F07 Task 3: GET /merchant/orders & /merchant/orders/:code (M-04, R-10, R-11; D9, D11–D13)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

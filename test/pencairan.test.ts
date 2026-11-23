@@ -6,7 +6,7 @@ import { env } from "../src/config/env";
 import { passwordLimiter } from "../src/middleware/rate-limiter";
 import { createAdmin } from "../src/scripts/create-admin";
 import { kirimNotif } from "./helpers/midtrans";
-import { login, pesanDulu, siapCheckout } from "./helpers/toko";
+import { login, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F26: rekening pencairan penjual, saldo & pencatatan pencairan oleh admin super, daftar pengembalian dana Midtrans.
 // Test berurutan dan berbagi data: saldo test 2 dicairkan di test 3.

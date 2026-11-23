@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { R2_UJI, fotoUrl, isiR2, login, siapkanToko, tampilkan } from "./helpers/toko";
+import { R2_UJI, fotoUrl, isiR2, login, siapkanToko, tampilkan } from "./helpers/merchant";
 
 // Banner beranda (rancangan voucher 2026-11-16 §5.4): penjual mengajukan (1 aktif per toko), admin menyetujui / menolak /
 // membuat banner platform; publik maks 8 banner tayang, admin dulu; banner ke promo mati / toko tersembunyi disembunyikan.

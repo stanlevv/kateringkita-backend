@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, siapCheckout, tampilkan } from "./helpers/toko";
+import { login, siapCheckout, tampilkan } from "./helpers/merchant";
 
 // Voucher: tampil di halaman toko, klaim ke Voucher Saya, voucher platform publik, penanda bisa dipakai + alasannya
 let s: Awaited<ReturnType<typeof siapCheckout>>;

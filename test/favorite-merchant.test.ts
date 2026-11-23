@@ -3,7 +3,7 @@ import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { BOCOR, bekukanJam, login, pembeliBaru, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
+import { BOCOR, bekukanJam, login, pembeliBaru, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
 
 // F05 favorit toko ("Dapur Favorit"): GET/PUT/DELETE /me/favorite-merchants + is_favorite di GET /merchants/:slug (D13, D14)
 let tA: string, tCust: string, idA: number, idB: number, slugA: string, slugB: string;

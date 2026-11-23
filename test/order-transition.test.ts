@@ -3,7 +3,7 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
-import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
+import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F07 Task 1: mesin status & stok tepat sekali (C-15, C-16, M-04, M-08, R-03; D1–D7)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

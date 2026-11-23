@@ -5,7 +5,7 @@ import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { AppError } from "../src/utils/errors";
 import { transitionOrder } from "../src/services/order-status.service";
 import { expireHeldOrders, startExpiryJob, SYSTEM_ACTOR } from "../src/services/order-expiry.service";
-import { bekukanJam, menuRow, pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
+import { bekukanJam, menuRow, pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/merchant";
 
 // F08 Task 2: job kadaluarsa holding (R-03, X-04, C-21; D2–D7)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

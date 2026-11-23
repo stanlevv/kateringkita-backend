@@ -3,7 +3,7 @@ import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, menuRow, siapkanToko, sisipMenu } from "./helpers/toko";
+import { login, menuRow, siapkanToko, sisipMenu } from "./helpers/merchant";
 
 let tA: string, tB: string, idA: number;
 

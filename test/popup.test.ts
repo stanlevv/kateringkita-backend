@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { R2_UJI, fotoUrl, isiR2, login, siapkanToko } from "./helpers/toko";
+import { R2_UJI, fotoUrl, isiR2, login, siapkanToko } from "./helpers/merchant";
 
 // Pop-up promo mobile (rancangan voucher 2026-11-16 §5.5): admin saja; GET /popup = pop-up aktif terbaru dalam periode.
 let s: Awaited<ReturnType<typeof siapkanToko>>;

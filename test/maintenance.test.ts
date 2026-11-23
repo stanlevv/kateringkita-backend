@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, siapkanToko } from "./helpers/toko";
+import { login, siapkanToko } from "./helpers/merchant";
 
 // F27: mode pemeliharaan — admin super menyalakan; penjual & pembeli dapat 503, admin/login/webhook tetap jalan.
 let tAdmin: string, tOps: string, tA: string, tCust: string;

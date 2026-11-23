@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { codeGenerator } from "../src/services/order.service";
-import { menuRow, pembeliBaru, siapCheckout, tampilkan } from "./helpers/toko";
+import { menuRow, pembeliBaru, siapCheckout, tampilkan } from "./helpers/merchant";
 
 // F06 Task 3: POST /orders tunai + GET /orders/:code (C-09, C-11, R-02, R-05, R-06, D3–D9, D11, D12, D16)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

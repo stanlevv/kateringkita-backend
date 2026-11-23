@@ -8,7 +8,7 @@ import { recordServerLog, requestId } from "../src/middleware/request-logger";
 import { createAdmin } from "../src/scripts/create-admin";
 import { bersihkanLog } from "../src/services/log-server.service";
 import { AppError } from "../src/utils/errors";
-import { login, siapkanToko } from "./helpers/toko";
+import { login, siapkanToko } from "./helpers/merchant";
 
 // F23 log server: 5xx & request lambat tercatat (fire-and-forget), dashboard admin, pembersihan > 30 hari
 let s: Awaited<ReturnType<typeof siapkanToko>>;

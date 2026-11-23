@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { tableOrderLimiter } from "../src/middleware/rate-limiter";
 import { kirimNotif } from "./helpers/midtrans";
-import { menuRow, siapCheckout, sisipMenu } from "./helpers/toko";
+import { menuRow, siapCheckout, sisipMenu } from "./helpers/merchant";
 
 // F21 pesan dari meja: penjual kelola meja, tamu tanpa login lihat menu → pesan → bayar Snap (di-stub) → notifikasi → status
 let s: Awaited<ReturnType<typeof siapCheckout>>;

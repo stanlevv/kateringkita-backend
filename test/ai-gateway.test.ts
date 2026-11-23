@@ -8,7 +8,7 @@ import { ai } from "../src/services/ai.service";
 import { bersihkanLog } from "../src/services/log-server.service";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { decrypt } from "../src/utils/crypto";
-import { login, siapkanToko } from "./helpers/toko";
+import { login, siapkanToko } from "./helpers/merchant";
 
 // F22 AI gateway: penyedia dikelola admin, key terenkripsi & tak pernah keluar, fallback berurutan dengan istirahat
 let s: Awaited<ReturnType<typeof siapkanToko>>;

@@ -3,7 +3,7 @@ import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { menuRow, siapkanToko, sisipMenu } from "./helpers/toko";
+import { menuRow, siapkanToko, sisipMenu } from "./helpers/merchant";
 
 let tA: string, tB: string, idA: number, idB: number;
 let aktif: number, nonaktif: number, terhapus: number, milikB: number;

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, menuRow, pesanDulu, siapCheckout } from "./helpers/toko";
+import { login, menuRow, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F19: moderasi ulasan & menu oleh admin
 let s: Awaited<ReturnType<typeof siapCheckout>>;

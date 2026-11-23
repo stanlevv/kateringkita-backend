@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { bekukanJam, fotoUrl, isiR2, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
+import { bekukanJam, fotoUrl, isiR2, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
 
 // Background profil toko (cover_url) + foto tambahan menu (gallery, maks 4 selain foto utama image_url)
 let tA: string, tB: string, idA: number, idB: number;

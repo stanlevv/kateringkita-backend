@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { fotoUrl, isiR2, menuRow, siapkanToko, sisipMenu } from "./helpers/toko";
+import { fotoUrl, isiR2, menuRow, siapkanToko, sisipMenu } from "./helpers/merchant";
 
 let tA: string, tB: string, idA: number, idB: number;
 

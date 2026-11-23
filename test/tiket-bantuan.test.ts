@@ -9,7 +9,7 @@ import { createAdmin } from "../src/scripts/create-admin";
 import { ticketLimiter } from "../src/middleware/rate-limiter";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { kodeTiket } from "../src/services/tiket.service";
-import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
+import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // Tiket bantuan (CS) sisi pembeli: /me/tickets (kontrak tiket-kontrak.md, migrasi 012)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

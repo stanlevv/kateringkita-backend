@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { uploadLimiter } from "../src/middleware/rate-limiter";
 import { presignPut, getR2Config, presignSigV4Url } from "../src/utils/r2";
-import { R2_UJI, isiR2, siapkanToko } from "./helpers/toko";
+import { R2_UJI, isiR2, siapkanToko } from "./helpers/merchant";
 
 describe("SigV4 (D11)", () => {
   test("vektor resmi AWS: GET test.txt presigned 86400 detik", () => {

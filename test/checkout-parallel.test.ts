@@ -3,7 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { menuRow, pembeliBaru, siapCheckout } from "./helpers/toko";
+import { menuRow, pembeliBaru, siapCheckout } from "./helpers/merchant";
 
 // F06 Task 4: idempotensi & checkout paralel tanpa oversell (R-02, BE-03, D4, D6, D11)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

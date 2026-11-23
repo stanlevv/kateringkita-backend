@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { menuRow, pembeliBaru, siapCheckout, sisipMenu } from "./helpers/toko";
+import { menuRow, pembeliBaru, siapCheckout, sisipMenu } from "./helpers/merchant";
 
 // F13: POST /orders/:code/reviews + GET /merchant/reviews + rating menu/toko + can_review
 let s: Awaited<ReturnType<typeof siapCheckout>>;

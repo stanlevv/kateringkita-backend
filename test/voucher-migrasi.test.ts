@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, test } from "vitest";
 import db from "../src/config/db";
-import { pesanDulu, siapCheckout } from "./helpers/toko";
+import { pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // Migrasi 014: kolom & tabel voucher, dan backfill potongan pesanan lama (promo_id tunggal) ke slot toko / platform
 const SQL = readFileSync(join(__dirname, "../database/migrations/014_voucher.sql"), "utf8");

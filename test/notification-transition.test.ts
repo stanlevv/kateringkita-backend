@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
-import { pesanDulu, siapCheckout } from "./helpers/toko";
+import { pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F08 Task 1: notifikasi status pesanan di dalam transaksi transisi (C-21, R-10; D8, D10–D12)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

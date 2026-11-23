@@ -6,7 +6,7 @@ import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
 import { extractKeywords } from "../src/services/recommendation.service";
 import { AppError } from "../src/utils/errors";
-import { BOCOR, bekukanJam, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
+import { BOCOR, bekukanJam, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
 
 // F24: POST /assistant/recommendations — kandidat dari DB, AI memilih, backend memvalidasi ulang
 let s: Awaited<ReturnType<typeof siapkanToko>>;

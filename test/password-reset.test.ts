@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { loginLimiter, otpLimiter } from "../src/middleware/rate-limiter";
 import { mailer } from "../src/utils/mail";
-import { login, siapkanToko } from "./helpers/toko";
+import { login, siapkanToko } from "./helpers/merchant";
 
 // F11: POST /auth/password/{forgot,verify,reset} — OTP email
 const EMAIL = "budi@mail.com";

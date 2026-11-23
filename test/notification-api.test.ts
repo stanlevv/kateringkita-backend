@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { loginLimiter } from "../src/middleware/rate-limiter";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { transitionOrder } from "../src/services/order-status.service";
-import { pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
+import { pembeliBaru, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F08 Task 3: GET /me/notifications & POST /me/notifications/read (C-21, R-10; D13, D14)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

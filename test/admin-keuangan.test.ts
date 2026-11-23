@@ -6,7 +6,7 @@ import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, pesanDulu, siapCheckout } from "./helpers/toko";
+import { login, pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F20: GET /admin/finance — rekap pesanan completed per toko, diskon dipisah toko vs platform
 let s: Awaited<ReturnType<typeof siapCheckout>>;

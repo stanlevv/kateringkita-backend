@@ -5,7 +5,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { DEFAULT_WA_TEMPLATE } from "../src/services/merchant-order.service";
-import { pesanDulu, siapCheckout } from "./helpers/toko";
+import { pesanDulu, siapCheckout } from "./helpers/merchant";
 
 // F07 Task 5: GET /merchant/orders/:code/whatsapp memakai templat toko (M-04, M-11; D17)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

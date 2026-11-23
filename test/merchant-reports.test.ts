@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { rentangUtc } from "../src/services/merchant-laporan.service";
-import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
+import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/merchant";
 
 // F09: /merchant/reports/* (M-09, R-10; D1–D9)
 let s: Awaited<ReturnType<typeof siapCheckout>>;

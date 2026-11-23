@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
-import { bekukanJam, pesanDulu, siapCheckout, sisipMenu } from "./helpers/toko";
+import { bekukanJam, pesanDulu, siapCheckout, sisipMenu } from "./helpers/merchant";
 
 // F17: POST /merchant/assistant (Gemini) — konteks hanya data toko sendiri.
 // Rubrik AI: prompt memuat Role, Constraint, Output Schema; keluaran JSON divalidasi & disimpan; injeksi ditolak; data pribadi disamarkan.

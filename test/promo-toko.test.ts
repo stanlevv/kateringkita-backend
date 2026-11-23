@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { pembeliBaru, siapCheckout } from "./helpers/toko";
+import { pembeliBaru, siapCheckout } from "./helpers/merchant";
 
 // F12: CRUD /merchant/promos + kode promo di quote & checkout
 let s: Awaited<ReturnType<typeof siapCheckout>>;

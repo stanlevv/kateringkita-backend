@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { BOCOR, bekukanJam, login, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
+import { BOCOR, bekukanJam, login, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
 
 let tA: string, tCust: string, idA: number, idB: number, a1: number, a2: number, b1: number;
 

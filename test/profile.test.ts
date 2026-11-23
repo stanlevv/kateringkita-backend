@@ -6,7 +6,7 @@ import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
 import { loginLimiter, passwordLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
-import { fotoUrl, isiR2 } from "./helpers/toko";
+import { fotoUrl, isiR2 } from "./helpers/merchant";
 
 let customerToken: string;
 let merchantToken: string;

@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { bekukanJam, siapCheckout } from "./helpers/toko";
+import { bekukanJam, siapCheckout } from "./helpers/merchant";
 
 // Voucher: satu voucher toko + satu voucher platform per pesanan; kuota berkurang saat pesanan dibuat, kembali saat batal.
 let s: Awaited<ReturnType<typeof siapCheckout>>;

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import db from "../src/config/db";
 import { getWibDate, refreshDailyQuota } from "../src/services/merchant-quota.service";
-import { menuRow, siapkanToko, sisipMenu } from "./helpers/toko";
+import { menuRow, siapkanToko, sisipMenu } from "./helpers/merchant";
 
 test("hariIniWib: tanggal di zona Asia/Jakarta (UTC+7)", () => {
   expect(getWibDate(new Date("2026-10-31T17:30:00Z"))).toBe("2026-11-01");
