@@ -86,8 +86,8 @@ const menuFields = {
 };
 
 /**
- * Body POST /merchant/menus (menu baru). Semua kolom wajib kecuali deskripsi, foto tambahan (bawaan kosong), dan opsi
- * (bawaan kosong). Kolom asing seperti `merchant_id` atau `sold_today` dibuang zod, jadi tidak bisa diisi klien.
+ * Body POST /merchant/menus (menu baru). Semua kolom wajib kecuali deskripsi, foto utama `image_url` (boleh kosong),
+ * foto tambahan (bawaan kosong), dan opsi (bawaan kosong). Kolom asing seperti `merchant_id` atau `sold_today` dibuang zod, jadi tidak bisa diisi klien.
  */
 export const menuSchema = z.object({
   ...menuFields,

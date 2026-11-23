@@ -156,8 +156,9 @@ export async function createQris(userId: number, code: string) {
         [order.id, qris.transaction_id, qris.qr_string, qris.qr_url, order.total, minutesLeft],
       );
     } catch (error) {
-      // Dua permintaan kembar yang sama-sama lolos ke Midtrans mendapat transaksi Midtrans yang sama, jadi
-      // provider_ref-nya kembar dan simpanan kedua ditolak database. Itu aman diabaikan: QRIS-nya sudah tersimpan.
+      // Penjaga cadangan: provider_ref unik, jadi bila transaksi Midtrans yang sama sudah tersimpan, simpanan kedua
+      // ditolak database dan aman diabaikan. Permintaan kembar biasanya tidak sampai sini: Midtrans menjawab 406 untuk
+      // kode pesanan yang sudah dipakai, lalu createMidtransQris melempar 409.
       if ((error as { code?: string }).code !== "ER_DUP_ENTRY") throw error;
     }
     await db.query("UPDATE orders SET payment_status = 'pending' WHERE id = ? AND payment_status = 'unpaid'", [
