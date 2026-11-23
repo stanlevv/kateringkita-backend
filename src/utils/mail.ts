@@ -1,9 +1,21 @@
+// Isi file: pengirim email teks lewat server email (SMTP). Dipakai lupa-sandi.service untuk mengirim kode OTP.
 import nodemailer from "nodemailer";
 import { env } from "../config/env";
 import { AppError } from "./errors";
 
-// F11: kirim email teks lewat SMTP (env dibaca saat dipanggil, seperti R2). Objek agar test bisa memata-matai `kirim`.
+/**
+ * Pengirim email. Dibuat sebagai objek (bukan fungsi lepas) supaya test bisa memata-matai `mailer.send` dan
+ * tidak benar-benar mengirim email. Pengaturan SMTP dibaca setiap kali dipanggil, bukan saat file dimuat.
+ */
 export const mailer = {
+  /**
+   * Mengirim satu email teks biasa. Bila SMTP belum diatur: di production dilempar 503, di luar production isi email
+   * hanya ditulis ke log supaya pengembang bisa melihat kodenya.
+   * @param recipient alamat email tujuan
+   * @param subject   judul email
+   * @param text      isi email
+   * @throws 503 SERVICE_UNAVAILABLE bila SMTP belum diatur di production; galat SMTP diteruskan apa adanya
+   */
   async send(recipient: string, subject: string, text: string): Promise<void> {
     if (!env.SMTP_HOST) {
       if (env.NODE_ENV === "production")
@@ -11,6 +23,7 @@ export const mailer = {
       console.info(`[surel] ke ${recipient} — ${subject}\n${text}`);
       return;
     }
+    // Port 465 memakai TLS sejak awal sambungan; port lain (biasanya 587) menaikkan ke TLS setelah tersambung.
     await nodemailer
       .createTransport({
         host: env.SMTP_HOST,
