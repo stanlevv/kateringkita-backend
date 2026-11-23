@@ -4,10 +4,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { bekukanJam, siapCheckout } from "./helpers/merchant";
+import { freezeClock, prepareCheckout } from "./helpers/merchant";
 
 // Voucher: satu voucher toko + satu voucher platform per pesanan; kuota berkurang saat pesanan dibuat, kembali saat batal.
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 type P = {
   merchant_id?: number | null;
   code: string;
@@ -43,11 +43,11 @@ const body = (extra: Record<string, unknown>) => ({
   ...extra,
 }); // subtotal 30.000
 const quote = (extra: Record<string, unknown>) =>
-  request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${s.tCust}`).send(body(extra));
+  request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${s.customerToken}`).send(body(extra));
 const pesan = (extra: Record<string, unknown>, payment_method = "va") =>
   request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Authorization", `Bearer ${s.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send(body({ payment_method, ...extra }));
 const promoRow = async (id: number) =>
@@ -57,14 +57,14 @@ const order = async (code: string) =>
 
 let toko10: number, hemat3k: number;
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   toko10 = await promo({ merchant_id: s.idA, code: "TOKO10", type: "percent", value: 10, max_discount: 5000 });
   hemat3k = await promo({ code: "HEMAT3K", type: "fixed", value: 3000 });
   await promo({ merchant_id: s.idA, code: "TOKO5", type: "fixed", value: 500 });
   await promo({ merchant_id: s.idB, code: "LAINB", type: "fixed", value: 1000 });
 });
 beforeEach(() => {
-  bekukanJam();
+  freezeClock();
   env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
 });
 afterEach(async () => {
@@ -163,7 +163,7 @@ describe("pesanan dua voucher", () => {
     const code = (await pesan({ promo_codes: ["SEKALITOKO", "SEKALIPLAT"] }).expect(201)).body.data.code;
     await request(app)
       .post(`/api/v1/orders/${code}/cancel`)
-      .set("Authorization", `Bearer ${s.tCust}`)
+      .set("Authorization", `Bearer ${s.customerToken}`)
       .send({})
       .expect(200);
     expect([(await promoRow(t1)).used_count, (await promoRow(p1)).used_count]).toEqual([0, 0]);
@@ -213,10 +213,10 @@ describe("pesanan dua voucher", () => {
     const code = (await pesan({ promo_codes: ["HAPUSAKU"] }).expect(201)).body.data.code;
     await request(app)
       .post(`/api/v1/orders/${code}/cancel`)
-      .set("Authorization", `Bearer ${s.tCust}`)
+      .set("Authorization", `Bearer ${s.customerToken}`)
       .send({})
       .expect(200);
-    await request(app).delete(`/api/v1/merchant/promos/${id}`).set("Authorization", `Bearer ${s.tA}`).expect(200);
+    await request(app).delete(`/api/v1/merchant/promos/${id}`).set("Authorization", `Bearer ${s.tokenA}`).expect(200);
     expect(await order(code)).toMatchObject({ merchant_promo_id: null, merchant_discount: 1000, status: "cancelled" });
   });
 

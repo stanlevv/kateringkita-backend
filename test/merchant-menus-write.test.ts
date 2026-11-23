@@ -2,13 +2,13 @@ import request from "supertest";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { fotoUrl, isiR2, menuRow, siapkanToko, sisipMenu } from "./helpers/merchant";
+import { photoUrl, setR2Env, menuRow, prepareMerchants, insertMenu } from "./helpers/merchant";
 
-let tA: string, tB: string, idA: number, idB: number;
+let tokenA: string, tokenB: string, idA: number, idB: number;
 
-const post = (b: object, t = tA) =>
+const post = (b: object, t = tokenA) =>
   request(app).post("/api/v1/merchant/menus").set("Authorization", `Bearer ${t}`).send(b);
-const patch = (id: number, b: object, t = tA) =>
+const patch = (id: number, b: object, t = tokenA) =>
   request(app).patch(`/api/v1/merchant/menus/${id}`).set("Authorization", `Bearer ${t}`).send(b);
 const field = async (b: object, f: string) => (await post({ ...dasar(), ...b }).expect(400)).body.error.fields[f];
 const dasar = () => ({
@@ -28,15 +28,15 @@ const dasar = () => ({
 });
 
 beforeEach(async () => {
-  ({ tA, tB, idA, idB } = await siapkanToko());
-  isiR2();
+  ({ tokenA, tokenB, idA, idB } = await prepareMerchants());
+  setR2Env();
 });
 afterEach(() => {
-  isiR2(false);
+  setR2Env(false);
 });
 
 test("POST valid lengkap → 201 bentuk D3, kuota hari ini = harian, teks dirapikan", async () => {
-  const foto = fotoUrl(`merchants/${idA}/menu/`, "webp");
+  const foto = photoUrl(`merchants/${idA}/menu/`, "webp");
   const r = await post({
     ...dasar(),
     name: "  Nasi Ayam Bakar ",
@@ -116,8 +116,8 @@ test("POST validasi: pesan sama dengan web", async () => {
   expect(await field({ image_url: "https://evil.example/x.png" }, "image_url")).toEqual([
     "Foto tidak valid. Unggah ulang foto.",
   ]);
-  expect(await field({ image_url: fotoUrl(`merchants/${idB}/menu/`) }, "image_url")).toBeDefined();
-  expect(await field({ image_url: fotoUrl(`merchants/${idA}/logo/`) }, "image_url")).toBeDefined();
+  expect(await field({ image_url: photoUrl(`merchants/${idB}/menu/`) }, "image_url")).toBeDefined();
+  expect(await field({ image_url: photoUrl(`merchants/${idA}/logo/`) }, "image_url")).toBeDefined();
   expect((await db.query<any[]>("SELECT COUNT(*) AS n FROM menus"))[0][0].n).toBe(0);
 });
 
@@ -145,7 +145,7 @@ test("POST mass assignment: kolom sistem & toko lain dibuang", async () => {
 });
 
 test("PATCH sebagian: antar-field dibanding nilai tersimpan; kuota harian tidak mengubah kuota hari ini", async () => {
-  const id = await sisipMenu(idA, { price: 20000, hpp: 19000, daily_quota: 20, quota_today: 7 });
+  const id = await insertMenu(idA, { price: 20000, hpp: 19000, daily_quota: 20, quota_today: 7 });
   await patch(id, { price: 20000 }).expect(200);
   expect((await patch(id, { price: 19500 }).expect(200)).body.data.margin).toBe(500);
   const bad = await patch(id, { hpp: 25000 }).expect(400);
@@ -183,7 +183,7 @@ test("PATCH sebagian: antar-field dibanding nilai tersimpan; kuota harian tidak 
 });
 
 test("opsi D8: sinkron berdasarkan nama, id dipertahankan, yang hilang dinonaktifkan", async () => {
-  const id = await sisipMenu(idA);
+  const id = await insertMenu(idA);
   await db.query("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Keju', 1000), (?, 'Sambal', 0)", [
     id,
     id,
@@ -213,7 +213,7 @@ test("opsi D8: sinkron berdasarkan nama, id dipertahankan, yang hilang dinonakti
 });
 
 test("data lama: foto bukan R2 & kategori nonaktif yang sama dengan tersimpan diterima", async () => {
-  const id = await sisipMenu(idA, { image_url: "/menu/1.png", category_id: 3 });
+  const id = await insertMenu(idA, { image_url: "/menu/1.png", category_id: 3 });
   await db.query("UPDATE categories SET is_active = FALSE WHERE id = 3");
   const r = await patch(id, { ...dasar(), category_id: 3, image_url: "/menu/1.png", description: "Lama" }).expect(200);
   expect(r.body.data).toMatchObject({ image_url: "/menu/1.png", category: { id: 3 } });
@@ -225,23 +225,23 @@ test("data lama: foto bukan R2 & kategori nonaktif yang sama dengan tersimpan di
 });
 
 test("BE-01: penjual B PATCH menu A → 404, menu A utuh; id aneh → 404", async () => {
-  const id = await sisipMenu(idA);
+  const id = await insertMenu(idA);
   const before = await menuRow(id);
-  const r = await patch(id, { name: "Dibajak", price: 50000 }, tB).expect(404);
+  const r = await patch(id, { name: "Dibajak", price: 50000 }, tokenB).expect(404);
   expect(r.body.error).toMatchObject({ code: "NOT_FOUND", message: "Menu tidak ditemukan." });
   expect(await menuRow(id)).toEqual(before);
   await request(app)
     .patch("/api/v1/merchant/menus/abc")
-    .set("Authorization", `Bearer ${tA}`)
+    .set("Authorization", `Bearer ${tokenA}`)
     .send({ name: "x" })
     .expect(404);
 });
 
 test("ubah menu menggeser updated_at (checklist F18)", async () => {
-  const id = await sisipMenu(idA, { updated_at: "2026-01-01 00:00:00" });
+  const id = await insertMenu(idA, { updated_at: "2026-01-01 00:00:00" });
   await patch(id, { name: "Ganti" }).expect(200);
   expect((await menuRow(id)).updated_at.toISOString()).not.toBe("2026-01-01T00:00:00.000Z");
-  const id2 = await sisipMenu(idA, { updated_at: "2026-01-01 00:00:00" });
+  const id2 = await insertMenu(idA, { updated_at: "2026-01-01 00:00:00" });
   await patch(id2, { options: [{ name: "Keju", extra_price: 0 }] }).expect(200);
   expect((await menuRow(id2)).updated_at.toISOString()).not.toBe("2026-01-01T00:00:00.000Z");
 });

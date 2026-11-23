@@ -5,10 +5,10 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
-import { pesanDulu, siapCheckout } from "./helpers/merchant";
+import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F08 Task 1: notifikasi status pesanan di dalam transaksi transisi (C-21, R-10; D8, D10–D12)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let penjual: Actor;
 let penjualB: Actor;
 let pembeli: Actor;
@@ -22,17 +22,17 @@ const jalan = (code: string, aksi: OrderAction, aktor: Actor, reason?: string | 
 const notif = async (userId = budi) =>
   (await db.query<any[]>("SELECT * FROM notifications WHERE user_id = ? ORDER BY id", [userId]))[0] as any[];
 const siap = async (status: Status = "holding") => {
-  const code = await pesanDulu(s.tCust, s.menu, 2);
+  const code = await placeOrder(s.customerToken, s.menu, 2);
   await db.query("UPDATE orders SET status = ? WHERE code = ?", [status, code]);
   return code;
 };
 const lewat = (code: string) =>
   db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [code]);
 const aksiToko = (code: string, aksi: string, body: object = {}) =>
-  request(app).post(`/api/v1/merchant/orders/${code}/${aksi}`).set("Authorization", `Bearer ${s.tA}`).send(body);
+  request(app).post(`/api/v1/merchant/orders/${code}/${aksi}`).set("Authorization", `Bearer ${s.tokenA}`).send(body);
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   const id = async (email: string) =>
     Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
   budi = await id("budi@mail.com");
@@ -97,7 +97,7 @@ describe("notifikasi untuk pembeli (D8, D12)", () => {
     const code = await siap();
     await request(app)
       .post(`/api/v1/orders/${code}/cancel`)
-      .set("Authorization", `Bearer ${s.tCust}`)
+      .set("Authorization", `Bearer ${s.customerToken}`)
       .send({})
       .expect(200);
     const code2 = await siap("ready");
@@ -136,7 +136,7 @@ describe("balapan tanpa deadlock (D11)", () => {
         aksiToko(code, "reject", { reason: "Habis" }),
         request(app)
           .post("/api/v1/orders")
-          .set("Authorization", `Bearer ${s.tCust}`)
+          .set("Authorization", `Bearer ${s.customerToken}`)
           .set("Idempotency-Key", crypto.randomUUID())
           .send({ items: [{ menu_id: s.menu2, qty: 1 }], pickup_point_id: 1, payment_method: "cod" }),
       ]);
@@ -156,7 +156,7 @@ describe("balapan tanpa deadlock (D11)", () => {
       const baru = await siap();
       const [e, c] = await Promise.allSettled([
         jalan(tua, "expire", sistem),
-        request(app).post(`/api/v1/orders/${baru}/cancel`).set("Authorization", `Bearer ${s.tCust}`).send({}),
+        request(app).post(`/api/v1/orders/${baru}/cancel`).set("Authorization", `Bearer ${s.customerToken}`).send({}),
       ]);
       expect(e.status).toBe("fulfilled");
       expect(c.status === "fulfilled" && c.value.status).toBe(200);

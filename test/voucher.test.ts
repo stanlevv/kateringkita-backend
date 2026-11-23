@@ -3,10 +3,10 @@ import { beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, siapCheckout, tampilkan } from "./helpers/merchant";
+import { login, prepareCheckout, makeVisible } from "./helpers/merchant";
 
 // Voucher: tampil di halaman toko, klaim ke Voucher Saya, voucher platform publik, penanda bisa dipakai + alasannya
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let slugA: string, tAdmin: string;
 const ids: Record<string, number> = {};
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
@@ -45,17 +45,17 @@ const promo = async (code: string, p: P = {}) => {
   ids[code] = r.insertId;
   return r.insertId as number;
 };
-const klaim = (code: string, t = s.tCust) =>
+const klaim = (code: string, t = s.customerToken) =>
   request(app)
     .post(`/api/v1/me/vouchers/${ids[code] ?? code}/claim`)
     .set(H(t))
     .send();
-const saya = (q = "") => request(app).get(`/api/v1/me/vouchers${q}`).set(H(s.tCust));
+const saya = (q = "") => request(app).get(`/api/v1/me/vouchers${q}`).set(H(s.customerToken));
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   vi.restoreAllMocks(); // jam aplikasi = jam nyata, sama dengan UTC_TIMESTAMP() pada tanggal promo uji
-  await tampilkan(s.idB);
+  await makeVisible(s.idB);
   [[{ slug: slugA }]] = (await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [s.idA])) as any;
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   tAdmin = await login("081300000009");
@@ -99,7 +99,8 @@ describe("klaim", () => {
     await klaim("PUBLIKA").expect(200);
     const [[n]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM promo_claims WHERE promo_id = ?", [ids.PUBLIKA]);
     expect(Number(n.n)).toBe(1);
-    const v = (await request(app).get(`/api/v1/merchants/${slugA}`).set(H(s.tCust)).expect(200)).body.data.vouchers;
+    const v = (await request(app).get(`/api/v1/merchants/${slugA}`).set(H(s.customerToken)).expect(200)).body.data
+      .vouchers;
     expect(v.find((x: any) => x.code === "PUBLIKA").claimed).toBe(true);
   });
 
@@ -110,7 +111,7 @@ describe("klaim", () => {
     expect((await klaim("HABIS").expect(409)).body.error.message).toBe("Kuota voucher sudah habis.");
     expect((await klaim("999999").expect(404)).body.error.message).toBe("Voucher tidak ditemukan.");
     await klaim("abc").expect(404);
-    await klaim("PUBLIKB", s.tA).expect(403);
+    await klaim("PUBLIKB", s.tokenA).expect(403);
   });
 });
 
@@ -160,7 +161,7 @@ describe("pengaturan promo", () => {
     );
     const p = await request(app)
       .patch(`/api/v1/merchant/promos/${r.insertId}`)
-      .set(H(s.tA))
+      .set(H(s.tokenA))
       .send({ type: "free_service_fee", is_public: false, ends_at: "2099-01-01T00:00:00Z" })
       .expect(200);
     expect(p.body.data).toMatchObject({ type: "free_service_fee", is_public: false });
@@ -177,24 +178,24 @@ describe("pengaturan promo", () => {
     };
     const r = await request(app)
       .post("/api/v1/merchant/promos")
-      .set(H(s.tA))
+      .set(H(s.tokenA))
       .send({ ...isi, code: "GRATISTOKO", type: "free_service_fee" })
       .expect(400);
     expect(r.body.error.fields.type).toEqual(["Promo toko hanya potongan persen atau nominal."]);
     const ok = await request(app)
       .post("/api/v1/merchant/promos")
-      .set(H(s.tA))
+      .set(H(s.tokenA))
       .send({ ...isi, code: "TOKOBARU" })
       .expect(201);
     expect(ok.body.data.is_public).toBe(true);
     await request(app)
       .patch(`/api/v1/merchant/promos/${ok.body.data.id}`)
-      .set(H(s.tA))
+      .set(H(s.tokenA))
       .send({ type: "free_service_fee" })
       .expect(400);
     const p = await request(app)
       .patch(`/api/v1/merchant/promos/${ok.body.data.id}`)
-      .set(H(s.tA))
+      .set(H(s.tokenA))
       .send({ is_public: false })
       .expect(200);
     expect(p.body.data.is_public).toBe(false);

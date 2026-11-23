@@ -3,16 +3,16 @@ import { beforeAll, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, siapkanToko } from "./helpers/merchant";
+import { login, prepareMerchants } from "./helpers/merchant";
 
 // F27: mode pemeliharaan — admin super menyalakan; penjual & pembeli dapat 503, admin/login/webhook tetap jalan.
-let tAdmin: string, tOps: string, tA: string, tCust: string;
+let tAdmin: string, tOps: string, tokenA: string, customerToken: string;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
 const nyalakan = (body: object, t = tAdmin) =>
   request(app).put("/api/v1/admin/settings/maintenance").set(H(t)).send(body);
 
 beforeAll(async () => {
-  ({ tA, tCust } = await siapkanToko());
+  ({ tokenA, customerToken } = await prepareMerchants());
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   await createAdmin({ phone: "081300000008", fullName: "Admin Ops", password: "rahasia123" });
   await db.query("UPDATE users SET admin_level = 'ops' WHERE phone = '081300000008'");
@@ -30,7 +30,7 @@ describe("mati (bawaan)", () => {
       { aktif: false, pesan: null },
     );
     await request(app).get("/api/v1/menus").expect(200);
-    await request(app).get("/api/v1/merchant/profile").set(H(tA)).expect(200);
+    await request(app).get("/api/v1/merchant/profile").set(H(tokenA)).expect(200);
   });
 });
 
@@ -62,10 +62,10 @@ describe("saat nyala", () => {
       expect(r.body.error).toMatchObject({ code: "MAINTENANCE", message: "Pembaruan sistem sampai 14.00 WIB." });
       expect(r.headers["retry-after"]).toBe("300");
     };
-    await cek(await request(app).get("/api/v1/merchant/profile").set(H(tA)));
-    await cek(await request(app).get("/api/v1/Merchant/Profile/").set(H(tA)));
-    await cek(await request(app).get("/api/v1/me/orders").set(H(tCust)));
-    await cek(await request(app).post("/api/v1/orders").set(H(tCust)).send({}));
+    await cek(await request(app).get("/api/v1/merchant/profile").set(H(tokenA)));
+    await cek(await request(app).get("/api/v1/Merchant/Profile/").set(H(tokenA)));
+    await cek(await request(app).get("/api/v1/me/orders").set(H(customerToken)));
+    await cek(await request(app).post("/api/v1/orders").set(H(customerToken)).send({}));
     await cek(await request(app).get("/api/v1/menus"));
     await cek(await request(app).get("/api/v1/tables/abc"));
     await cek(await request(app).post("/api/v1/auth/customer/register").send({}));
@@ -84,19 +84,19 @@ describe("saat nyala", () => {
           .send({ identifier: "081300000009", password: "rahasia123", client: "web" })
       ).status,
     ).toBe(200);
-    await request(app).get("/api/v1/me").set(H(tA)).expect(200);
-    expect((await request(app).put("/api/v1/me/password").set(H(tA)).send({})).status).toBe(400);
+    await request(app).get("/api/v1/me").set(H(tokenA)).expect(200);
+    expect((await request(app).put("/api/v1/me/password").set(H(tokenA)).send({})).status).toBe(400);
     await request(app).get("/api/v1/meta/settings").expect(200);
     expect((await request(app).post("/api/v1/payments/midtrans").send({ order_id: "KK-X" })).status).not.toBe(503);
   });
 
   test("bukan admin tidak bisa lolos lewat path admin", async () => {
-    await request(app).get("/api/v1/admin/summary").set(H(tA)).expect(403);
+    await request(app).get("/api/v1/admin/summary").set(H(tokenA)).expect(403);
   });
 
   test("dimatikan → semua normal, pesan kosong = pesan bawaan saat nyala lagi", async () => {
     await nyalakan({ aktif: false }).expect(200);
-    await request(app).get("/api/v1/merchant/profile").set(H(tA)).expect(200);
+    await request(app).get("/api/v1/merchant/profile").set(H(tokenA)).expect(200);
     await nyalakan({ aktif: true, pesan: "" }).expect(200);
     const r = await request(app).get("/api/v1/menus").expect(503);
     expect(r.body.error.message).toBe("KateringKita sedang dalam pemeliharaan. Silakan coba lagi nanti.");

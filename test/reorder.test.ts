@@ -3,19 +3,19 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { pembeliBaru, siapCheckout } from "./helpers/merchant";
+import { createCustomer, prepareCheckout } from "./helpers/merchant";
 
 // F14: POST /orders/:code/reorder
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let kode: string;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-const lagi = (code = kode, t = s.tCust) => request(app).post(`/api/v1/orders/${code}/reorder`).set(H(t));
+const lagi = (code = kode, t = s.customerToken) => request(app).post(`/api/v1/orders/${code}/reorder`).set(H(t));
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   const r = await request(app)
     .post("/api/v1/orders")
-    .set(H(s.tCust))
+    .set(H(s.customerToken))
     .set("Idempotency-Key", randomUUID())
     .send({
       items: [
@@ -28,7 +28,7 @@ beforeAll(async () => {
     })
     .expect(201);
   kode = r.body.data.code;
-  await request(app).post(`/api/v1/orders/${kode}/cancel`).set(H(s.tCust)).expect(200);
+  await request(app).post(`/api/v1/orders/${kode}/cancel`).set(H(s.customerToken)).expect(200);
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -55,7 +55,7 @@ describe("pesan lagi", () => {
     expect(r.body.data.quote).toMatchObject({ subtotal: 43000, total: 43000, warnings: [] });
     const baru = await request(app)
       .post("/api/v1/orders")
-      .set(H(s.tCust))
+      .set(H(s.customerToken))
       .set("Idempotency-Key", randomUUID())
       .send({ ...r.body.data.request, payment_method: "cod" })
       .expect(201);
@@ -63,7 +63,7 @@ describe("pesan lagi", () => {
   });
 
   test("pesanan orang lain 404; menu sudah nonaktif → 400 per baris", async () => {
-    await lagi(kode, await pembeliBaru(1)).expect(404);
+    await lagi(kode, await createCustomer(1)).expect(404);
     await db.query("UPDATE menus SET is_active = FALSE WHERE id = ?", [s.menu2]);
     expect((await lagi().expect(400)).body.error.fields).toEqual({ "items.1.menu_id": ["Menu tidak tersedia."] });
   });

@@ -6,45 +6,45 @@ import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
 import { extractKeywords } from "../src/services/recommendation.service";
 import { AppError } from "../src/utils/errors";
-import { BOCOR, bekukanJam, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
+import { PRIVATE_KEYS, freezeClock, prepareMerchants, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F24: POST /assistant/recommendations — kandidat dari DB, AI memilih, backend memvalidasi ulang
-let s: Awaited<ReturnType<typeof siapkanToko>>;
+let s: Awaited<ReturnType<typeof prepareMerchants>>;
 let spesial: number, geprek: number, esTeh: number, kampung: number, habis: number, mati: number, minimal: number;
-const minta = (body: Record<string, unknown>, t: string | null = s.tCust) => {
+const minta = (body: Record<string, unknown>, t: string | null = s.customerToken) => {
   const r = request(app).post("/api/v1/assistant/recommendations");
   return (t ? r.set("Authorization", `Bearer ${t}`) : r).send(body);
 };
 const jawab = (teks: string) => vi.spyOn(ai, "tanya").mockResolvedValue(teks);
 
 beforeAll(async () => {
-  bekukanJam();
-  s = await siapkanToko();
-  await tampilkan(s.idA);
-  await tampilkan(s.idB);
-  spesial = await sisipMenu(s.idA, {
+  freezeClock();
+  s = await prepareMerchants();
+  await makeVisible(s.idA);
+  await makeVisible(s.idB);
+  spesial = await insertMenu(s.idA, {
     name: "Nasi Goreng Spesial",
     description: "Nasi goreng telur mata sapi",
     sold_total: 10,
   });
-  geprek = await sisipMenu(s.idA, {
+  geprek = await insertMenu(s.idA, {
     name: "Ayam Geprek",
     category_id: 2,
     price: 18000,
     description: "Sambal level pedas",
     sold_total: 50,
   });
-  esTeh = await sisipMenu(s.idA, { name: "Es Teh", category_id: 5, price: 5000, hpp: 2000, sold_total: 30 });
-  kampung = await sisipMenu(s.idB, {
+  esTeh = await insertMenu(s.idA, { name: "Es Teh", category_id: 5, price: 5000, hpp: 2000, sold_total: 30 });
+  kampung = await insertMenu(s.idB, {
     name: "Nasi Goreng Kampung",
     price: 12000,
     quota_today: 3,
     daily_quota: 3,
     sold_total: 1,
   });
-  habis = await sisipMenu(s.idA, { name: "Soto Habis", quota_today: 5, sold_today: 5 });
-  mati = await sisipMenu(s.idA, { name: "Menu Nonaktif", is_active: false });
-  minimal = await sisipMenu(s.idB, {
+  habis = await insertMenu(s.idA, { name: "Soto Habis", quota_today: 5, sold_today: 5 });
+  mati = await insertMenu(s.idA, { name: "Menu Nonaktif", is_active: false });
+  minimal = await insertMenu(s.idB, {
     name: "Tumpeng Mini",
     category_id: 6,
     price: 20000,
@@ -53,7 +53,7 @@ beforeAll(async () => {
   });
 });
 beforeEach(() => {
-  bekukanJam();
+  freezeClock();
   assistantLimiter.reset();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -118,7 +118,7 @@ describe("rekomendasi AI pembeli", () => {
     expect(pesan).toContain("PORSI: 4");
     expect(pesan).toContain("Makan siang 4 orang, tidak pedas");
     const semua = JSON.stringify(r.body) + pesan;
-    for (const kunci of BOCOR) expect(semua).not.toContain(kunci);
+    for (const kunci of PRIVATE_KEYS) expect(semua).not.toContain(kunci);
   });
 
   test("anggaran: kandidat di atas anggaran tidak dikirim, qty dipotong agar total ≤ anggaran", async () => {
@@ -183,11 +183,11 @@ describe("rekomendasi AI pembeli", () => {
   });
 
   test("toko tutup tidak jadi kandidat", async () => {
-    await tampilkan(s.idB, { buka: false });
+    await makeVisible(s.idB, { open: false });
     const spy = jawab('{"summary":"x","items":[]}');
     await minta({ question: "nasi goreng" }).expect(200);
     expect(spy.mock.calls[0][1]).not.toContain("Nasi Goreng Kampung");
-    await tampilkan(s.idB);
+    await makeVisible(s.idB);
   });
 
   test("hasil AI disimpan (input tersamarkan, item tervalidasi); cadangan tidak disimpan", async () => {
@@ -244,7 +244,7 @@ describe("rekomendasi AI pembeli", () => {
 
   test("akses & validasi", async () => {
     await minta({ question: "nasi goreng" }, null).expect(401);
-    await minta({ question: "nasi goreng" }, s.tA).expect(403);
+    await minta({ question: "nasi goreng" }, s.tokenA).expect(403);
     expect((await minta({ question: "ab" }).expect(400)).body.error.fields.question).toBeDefined();
     expect((await minta({ question: "nasi", budget: "50000" }).expect(400)).body.error.fields.budget).toBeDefined();
     expect((await minta({ question: "nasi", portions: 0 }).expect(400)).body.error.fields.portions).toBeDefined();

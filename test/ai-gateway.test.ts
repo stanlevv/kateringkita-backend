@@ -8,10 +8,10 @@ import { ai } from "../src/services/ai.service";
 import { bersihkanLog } from "../src/services/log-server.service";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { decrypt } from "../src/utils/crypto";
-import { login, siapkanToko } from "./helpers/merchant";
+import { login, prepareMerchants } from "./helpers/merchant";
 
 // F22 AI gateway: penyedia dikelola admin, key terenkripsi & tak pernah keluar, fallback berurutan dengan istirahat
-let s: Awaited<ReturnType<typeof siapkanToko>>;
+let s: Awaited<ReturnType<typeof prepareMerchants>>;
 let tAdmin = "";
 const URL_GROQ = "https://api.groq.com/openai/v1/chat/completions";
 const URL_OR = "https://openrouter.ai/api/v1/chat/completions";
@@ -53,7 +53,7 @@ const baris = async (id: number) =>
   )[0];
 
 beforeAll(async () => {
-  s = await siapkanToko();
+  s = await prepareMerchants();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   tAdmin = await login("081300000009");
 });
@@ -86,7 +86,7 @@ describe("admin mengelola penyedia AI", () => {
     expect(JSON.stringify(log.after_json)).not.toContain("rahasia");
     const v = await api().post({ provider: "openai", label: "", model: "a b", api_key: "pendek" }).expect(400);
     expect(Object.keys(v.body.error.fields).sort()).toEqual(["api_key", "label", "model", "provider"]);
-    await api("", s.tA).get().expect(403);
+    await api("", s.tokenA).get().expect(403);
     expect((await api().get().expect(200)).body.data).toMatchObject({
       providers: [{ key_hint: "ABCD" }],
       env_gemini: null,
@@ -158,7 +158,7 @@ describe("gateway & fallback", () => {
       (
         await request(app)
           .post("/api/v1/merchant/assistant")
-          .set("Authorization", `Bearer ${s.tA}`)
+          .set("Authorization", `Bearer ${s.tokenA}`)
           .send({ question: "halo" })
           .expect(200)
       ).body.data.answer,
@@ -290,7 +290,7 @@ describe("pemakaian AI (F25)", () => {
     ]);
     expect((await pakai("?days=abc").expect(200)).body.data.per_hari).toHaveLength(7);
     expect((await pakai("?days=30").expect(200)).body.data.per_hari).toHaveLength(30);
-    await pakai("", s.tA).expect(403);
+    await pakai("", s.tokenA).expect(403);
   });
 
   test("Gemini: token dari usageMetadata", async () => {

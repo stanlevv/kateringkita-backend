@@ -2,14 +2,15 @@ import request from "supertest";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { bekukanJam, fotoUrl, isiR2, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
+import { freezeClock, photoUrl, setR2Env, prepareMerchants, insertMenu, makeVisible } from "./helpers/merchant";
 
 // Background profil toko (cover_url) + foto tambahan menu (gallery, maks 4 selain foto utama image_url)
-let tA: string, tB: string, idA: number, idB: number;
+let tokenA: string, tokenB: string, idA: number, idB: number;
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
-const profil = (b: object, t = tA) => request(app).patch("/api/v1/merchant/profile").set(auth(t)).send(b);
-const postMenu = (b: object) => request(app).post("/api/v1/merchant/menus").set(auth(tA)).send(b);
-const patchMenu = (id: number, b: object) => request(app).patch(`/api/v1/merchant/menus/${id}`).set(auth(tA)).send(b);
+const profil = (b: object, t = tokenA) => request(app).patch("/api/v1/merchant/profile").set(auth(t)).send(b);
+const postMenu = (b: object) => request(app).post("/api/v1/merchant/menus").set(auth(tokenA)).send(b);
+const patchMenu = (id: number, b: object) =>
+  request(app).patch(`/api/v1/merchant/menus/${id}`).set(auth(tokenA)).send(b);
 const dasar = () => ({
   name: "Nasi Ayam",
   category_id: 1,
@@ -28,49 +29,49 @@ const dasar = () => ({
 const TIDAK_VALID = ["Foto tidak valid. Unggah ulang foto."];
 
 beforeEach(async () => {
-  bekukanJam();
-  ({ tA, tB, idA, idB } = await siapkanToko());
-  isiR2();
+  freezeClock();
+  ({ tokenA, tokenB, idA, idB } = await prepareMerchants());
+  setR2Env();
 });
 afterEach(() => {
-  isiR2(false);
+  setR2Env(false);
 });
 
 test("unggah purpose cover → kunci di bawah merchants/<id>/cover/", async () => {
   const r = await request(app)
     .post("/api/v1/merchant/uploads")
-    .set(auth(tA))
+    .set(auth(tokenA))
     .send({ purpose: "cover", content_type: "image/jpeg", size: 1000 })
     .expect(200);
   expect(r.body.data.public_url).toMatch(new RegExp(`/merchants/${idA}/cover/[0-9a-f-]{36}\\.jpg$`));
 });
 
 test("cover_url: unggahan cover sendiri diterima & tampil di profil penjual dan publik; selain itu 400; null mengosongkan", async () => {
-  const cover = fotoUrl(`merchants/${idA}/cover/`, "jpg");
+  const cover = photoUrl(`merchants/${idA}/cover/`, "jpg");
   expect((await profil({ cover_url: cover }).expect(200)).body.data.cover_url).toBe(cover);
-  expect((await request(app).get("/api/v1/merchant/profile").set(auth(tA)).expect(200)).body.data.cover_url).toBe(
+  expect((await request(app).get("/api/v1/merchant/profile").set(auth(tokenA)).expect(200)).body.data.cover_url).toBe(
     cover,
   );
-  await tampilkan(idA);
+  await makeVisible(idA);
   const [[m]] = await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [idA]);
   expect((await request(app).get(`/api/v1/merchants/${m.slug}`).expect(200)).body.data.cover_url).toBe(cover);
   for (const bad of [
-    fotoUrl(`merchants/${idA}/logo/`),
-    fotoUrl(`merchants/${idB}/cover/`),
+    photoUrl(`merchants/${idA}/logo/`),
+    photoUrl(`merchants/${idB}/cover/`),
     "https://evil.example/x.jpg",
   ]) {
     expect((await profil({ cover_url: bad }).expect(400)).body.error.fields.cover_url).toEqual(TIDAK_VALID);
   }
   expect((await profil({ cover_url: null }).expect(200)).body.data.cover_url).toBeNull();
   expect(
-    (await profil({ cover_url: fotoUrl(`merchants/${idB}/cover/`) }, tB).expect(200)).body.data.cover_url,
+    (await profil({ cover_url: photoUrl(`merchants/${idB}/cover/`) }, tokenB).expect(200)).body.data.cover_url,
   ).toContain(`/${idB}/cover/`);
 });
 
 test("gallery: POST menyimpan foto tambahan sesuai urutan; PATCH menerima foto tersimpan + unggahan baru; [] mengosongkan", async () => {
-  const [g1, g2, g3] = [1, 2, 3].map(() => fotoUrl(`merchants/${idA}/menu/`, "webp"));
+  const [g1, g2, g3] = [1, 2, 3].map(() => photoUrl(`merchants/${idA}/menu/`, "webp"));
   const m = (
-    await postMenu({ ...dasar(), image_url: fotoUrl(`merchants/${idA}/menu/`), gallery: [g1, g2] }).expect(201)
+    await postMenu({ ...dasar(), image_url: photoUrl(`merchants/${idA}/menu/`), gallery: [g1, g2] }).expect(201)
   ).body.data;
   expect(m.gallery).toEqual([g1, g2]);
   expect((await postMenu(dasar()).expect(201)).body.data.gallery).toEqual([]);
@@ -80,22 +81,22 @@ test("gallery: POST menyimpan foto tambahan sesuai urutan; PATCH menerima foto t
 });
 
 test("gallery: maks 4, tanpa duplikat, hanya unggahan menu milik toko sendiri", async () => {
-  const sendiri = () => fotoUrl(`merchants/${idA}/menu/`);
+  const sendiri = () => photoUrl(`merchants/${idA}/menu/`);
   const g = sendiri();
   const tolak = async (gallery: unknown) =>
     (await postMenu({ ...dasar(), gallery }).expect(400)).body.error.fields.gallery;
   expect(await tolak([1, 2, 3, 4, 5].map(sendiri))).toEqual(["Maksimal 4 foto tambahan."]);
   expect(await tolak([g, g])).toEqual(["Foto tambahan tidak boleh sama."]);
-  expect(await tolak([fotoUrl(`merchants/${idB}/menu/`)])).toEqual(TIDAK_VALID);
-  expect(await tolak([fotoUrl(`merchants/${idA}/logo/`)])).toEqual(TIDAK_VALID);
+  expect(await tolak([photoUrl(`merchants/${idB}/menu/`)])).toEqual(TIDAK_VALID);
+  expect(await tolak([photoUrl(`merchants/${idA}/logo/`)])).toEqual(TIDAK_VALID);
   expect(await tolak("bukan-daftar")).toBeDefined();
 });
 
 test("GET /menus/:id publik memuat gallery; menu tanpa foto tambahan → []", async () => {
-  await tampilkan(idA);
-  const g = fotoUrl(`merchants/${idA}/menu/`);
-  const id = await sisipMenu(idA, { gallery: JSON.stringify([g]) });
+  await makeVisible(idA);
+  const g = photoUrl(`merchants/${idA}/menu/`);
+  const id = await insertMenu(idA, { gallery: JSON.stringify([g]) });
   expect((await request(app).get(`/api/v1/menus/${id}`).expect(200)).body.data.gallery).toEqual([g]);
-  const polos = await sisipMenu(idA);
+  const polos = await insertMenu(idA);
   expect((await request(app).get(`/api/v1/menus/${polos}`).expect(200)).body.data.gallery).toEqual([]);
 });

@@ -6,23 +6,23 @@ import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, pesanDulu, siapCheckout } from "./helpers/merchant";
+import { login, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F20: GET /admin/finance — rekap pesanan completed per toko, diskon dipisah toko vs platform
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let tAdmin: string;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
 const hariIni = getWibDate();
 const selesai = async (code: string) => {
   for (const a of ["confirm", "cook", "ready", "complete"])
-    await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set(H(s.tA)).expect(200);
+    await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set(H(s.tokenA)).expect(200);
 };
 // voucher platform hanya untuk non-tunai (C1): pesanan VA ditandai lunas lewat SQL sebelum diproses penjual
 const pesanPromo = async (promo_code: string, payment_method = "cod") => {
   const code = (
     await request(app)
       .post("/api/v1/orders")
-      .set(H(s.tCust))
+      .set(H(s.customerToken))
       .set("Idempotency-Key", randomUUID())
       .send({ items: [{ menu_id: s.menu, qty: 1 }], pickup_point_id: 1, payment_method, promo_code })
       .expect(201)
@@ -32,13 +32,13 @@ const pesanPromo = async (promo_code: string, payment_method = "cod") => {
 };
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   tAdmin = await login("081300000009");
   await db.query("UPDATE app_settings SET setting_value = '1000' WHERE setting_key = 'service_fee'");
   await request(app)
     .post("/api/v1/merchant/promos")
-    .set(H(s.tA))
+    .set(H(s.tokenA))
     .send({
       code: "TOKO2K",
       type: "fixed",
@@ -55,7 +55,7 @@ beforeAll(async () => {
   env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
   await selesai(await pesanPromo("GRATIS", "va"));
   env.MIDTRANS_SERVER_KEY = undefined;
-  await pesanDulu(s.tCust, s.menu); // holding: tidak dihitung
+  await placeOrder(s.customerToken, s.menu); // holding: tidak dihitung
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -99,6 +99,6 @@ describe("rekap keuangan", () => {
       (await request(app).get("/api/v1/admin/finance?from=2026-01-01&to=2026-12-31").set(H(tAdmin)).expect(400)).body
         .error.fields.to,
     ).toEqual(["Rentang maksimal 92 hari."]);
-    await request(app).get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`).set(H(s.tA)).expect(403);
+    await request(app).get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`).set(H(s.tokenA)).expect(403);
   });
 });

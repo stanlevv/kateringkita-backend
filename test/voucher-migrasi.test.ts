@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, test } from "vitest";
 import db from "../src/config/db";
-import { pesanDulu, siapCheckout } from "./helpers/merchant";
+import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // Migrasi 014: kolom & tabel voucher, dan backfill potongan pesanan lama (promo_id tunggal) ke slot toko / platform
 const SQL = readFileSync(join(__dirname, "../database/migrations/014_voucher.sql"), "utf8");
 const BACKFILL = /-- backfill[^\n]*\n([\s\S]*?;)/.exec(SQL)?.[1] ?? "";
 
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 const promo = async (merchantId: number | null, code: string) => {
   const [r] = await db.query<any>(
     `INSERT INTO promos (merchant_id, code, type, value, min_subtotal, starts_at, ends_at)
@@ -21,7 +21,7 @@ const pesanan = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
 });
 
 describe("migrasi 014 voucher", () => {
@@ -29,7 +29,7 @@ describe("migrasi 014 voucher", () => {
     const id = await promo(s.idA, "BARU1");
     const [[p]] = await db.query<any[]>("SELECT is_public FROM promos WHERE id = ?", [id]);
     expect(Boolean(p.is_public)).toBe(true);
-    const code = await pesanDulu(s.tCust, s.menu);
+    const code = await placeOrder(s.customerToken, s.menu);
     expect(await pesanan(code)).toMatchObject({
       merchant_promo_id: null,
       merchant_discount: 0,
@@ -59,8 +59,8 @@ describe("migrasi 014 voucher", () => {
     expect(BACKFILL).toMatch(/^UPDATE orders/);
     const toko = await promo(s.idA, "LAMATOKO");
     const platform = await promo(null, "LAMAPLAT");
-    const a = await pesanDulu(s.tCust, s.menu);
-    const b = await pesanDulu(s.tCust, s.menu2);
+    const a = await placeOrder(s.customerToken, s.menu);
+    const b = await placeOrder(s.customerToken, s.menu2);
     await db.query("UPDATE orders SET promo_id = ?, discount = 3000 WHERE code = ?", [toko, a]);
     await db.query("UPDATE orders SET promo_id = ?, discount = 2500 WHERE code = ?", [platform, b]);
     await db.query(BACKFILL);

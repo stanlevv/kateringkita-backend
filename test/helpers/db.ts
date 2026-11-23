@@ -7,9 +7,9 @@ export async function resetTestDatabase(): Promise<string> {
   const name = url.pathname.slice(1);
   if (!name.endsWith("_test")) throw new Error(`Menolak mengosongkan DB "${name}": nama DB uji harus berakhiran _test`);
   url.pathname = "/";
-  const conn = await mysql.createConnection(url.toString()).catch((e: Error) => {
+  const conn = await mysql.createConnection(url.toString()).catch((error: Error) => {
     throw new Error(
-      `DB uji tidak bisa dihubungi (${url.host}). Jalankan MySQL lokal atau isi TEST_DATABASE_URL. ${e.message}`,
+      `DB uji tidak bisa dihubungi (${url.host}). Jalankan MySQL lokal atau isi TEST_DATABASE_URL. ${error.message}`,
     );
   });
   await conn.query(`DROP DATABASE IF EXISTS \`${name}\``);

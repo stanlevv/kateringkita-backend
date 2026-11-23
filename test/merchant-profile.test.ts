@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
-import { fotoUrl, isiR2 } from "./helpers/merchant";
+import { photoUrl, setR2Env } from "./helpers/merchant";
 
 let tA: string;
 let idA: number, idB: number;
@@ -150,8 +150,8 @@ test("templat WA", async () => {
 
 // F04 D10/D15: logo hanya dari unggahan milik toko sendiri (dulu diabaikan, F03 D4 dicabut). F26: QRIS toko dihapus.
 test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400; qris_image_url tidak diterima lagi", async () => {
-  isiR2();
-  const logo = fotoUrl(`merchants/${idA}/logo/`);
+  setR2Env();
+  const logo = photoUrl(`merchants/${idA}/logo/`);
   const r = await patch({ logo_url: logo }).expect(200);
   expect(r.body.data.logo_url).toBe(logo);
   expect(r.body.data).not.toHaveProperty("qris_image_url");
@@ -160,8 +160,8 @@ test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400
   const uuid = "0b9a4b7e-1f3e-4c55-9d1a-2f6a0e3c9b11";
   for (const bad of [
     "https://evil.example/x.png",
-    fotoUrl(`merchants/${idB}/logo/`),
-    fotoUrl(`merchants/${idA}/menu/`),
+    photoUrl(`merchants/${idB}/logo/`),
+    photoUrl(`merchants/${idA}/menu/`),
     `https://foto.test/merchants/${idA}/logo/../${idB}/logo/${uuid}.png`,
     `https://foto.test/merchants/${idA}/logo/${uuid}.png?x=1`,
     `https://foto.test/merchants/${idA}/logo/${uuid}.svg`,
@@ -196,5 +196,5 @@ test("logo_url saat unggah belum tersedia: hanya null atau nilai tersimpan", asy
 });
 
 afterEach(() => {
-  isiR2(false);
+  setR2Env(false);
 });

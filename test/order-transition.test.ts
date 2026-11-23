@@ -3,10 +3,10 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
-import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/merchant";
+import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F07 Task 1: mesin status & stok tepat sekali (C-15, C-16, M-04, M-08, R-03; D1–D7)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let penjual: Actor;
 let penjualB: Actor;
 let pembeli: Actor;
@@ -32,7 +32,7 @@ const stok = async () => {
 };
 // pesanan qty 2 dengan status awal disiapkan lewat SQL
 const siap = async (status: Status = "holding", o: Record<string, unknown> = {}) => {
-  const code = await pesanDulu(s.tCust, s.menu, 2);
+  const code = await placeOrder(s.customerToken, s.menu, 2);
   await db.query("UPDATE orders SET ? WHERE code = ?", [{ status, ...o }, code]);
   return code;
 };
@@ -40,13 +40,13 @@ const lewat = (code: string) =>
   db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [code]);
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   const id = async (email: string) =>
     Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
   penjual = { kind: "merchant", userId: await id("siti@mail.com"), merchantId: s.idA };
   penjualB = { kind: "merchant", userId: await id("andi@mail.com"), merchantId: s.idB };
   pembeli = { kind: "customer", userId: await id("budi@mail.com") };
-  await pembeliBaru(1);
+  await createCustomer(1);
   pembeliB = { kind: "customer", userId: await id("pembeli1@mail.com") };
 });
 // batas 3 holding per pembeli & stok menu dikembalikan agar tiap test mulai bersih

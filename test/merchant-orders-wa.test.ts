@@ -5,19 +5,19 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { DEFAULT_WA_TEMPLATE } from "../src/services/merchant-order.service";
-import { pesanDulu, siapCheckout } from "./helpers/merchant";
+import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F07 Task 5: GET /merchant/orders/:code/whatsapp memakai templat toko (M-04, M-11; D17)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let code: string;
 
-const wa = (c = code, token = s.tA) =>
+const wa = (c = code, token = s.tokenA) =>
   request(app).get(`/api/v1/merchant/orders/${c}/whatsapp`).set("Authorization", `Bearer ${token}`);
 const teks = (url: string) => decodeURIComponent(url.split("?text=")[1]);
 
 beforeAll(async () => {
-  s = await siapCheckout();
-  code = await pesanDulu(s.tCust, s.menu, 2);
+  s = await prepareCheckout();
+  code = await placeOrder(s.customerToken, s.menu, 2);
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -56,6 +56,6 @@ test("TEMPLAT_BAWAAN sama persis dengan fe/lib/wa-template.ts", () => {
 });
 
 test("toko lain → 404; pembeli → 403", async () => {
-  expect((await wa(code, s.tB).expect(404)).body.error.message).toBe("Pesanan tidak ditemukan.");
-  await wa(code, s.tCust).expect(403);
+  expect((await wa(code, s.tokenB).expect(404)).body.error.message).toBe("Pesanan tidak ditemukan.");
+  await wa(code, s.customerToken).expect(403);
 });

@@ -4,17 +4,17 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { tableOrderLimiter } from "../src/middleware/rate-limiter";
-import { kirimNotif } from "./helpers/midtrans";
-import { menuRow, siapCheckout, sisipMenu } from "./helpers/merchant";
+import { sendNotification } from "./helpers/midtrans";
+import { menuRow, prepareCheckout, insertMenu } from "./helpers/merchant";
 
 // F21 pesan dari meja: penjual kelola meja, tamu tanpa login lihat menu → pesan → bayar Snap (di-stub) → notifikasi → status
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let token = "";
 const KEY = "SB-Mid-server-uji";
 const SNAP = "https://app.sandbox.midtrans.com/snap/v4/redirection/uji";
 const KEMBALI = "http://localhost:3000/meja/pesanan/x";
 
-const toko = (path: string, t = s.tA) => ({
+const toko = (path: string, t = s.tokenA) => ({
   get: () => request(app).get(`/api/v1/merchant${path}`).set("Authorization", `Bearer ${t}`),
   post: (b: unknown) =>
     request(app)
@@ -36,7 +36,7 @@ const status = (code: string, tamu: string) =>
 const bayar = (code: string, tamu: string, kembali = KEMBALI) =>
   request(app).post(`/api/v1/guest/orders/${code}/pay`).set("X-Guest-Token", tamu).send({ kembali });
 const notif = (o: Record<string, string>) =>
-  kirimNotif(
+  sendNotification(
     { status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: "trx-meja", ...o },
     KEY,
   );
@@ -44,7 +44,7 @@ const pesanan = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   env.MIDTRANS_SERVER_KEY = undefined;
   env.MIDTRANS_IS_PRODUCTION = "false";
   await toko("/profile").patch({ dine_in_enabled: true }).expect(200);
@@ -75,7 +75,7 @@ describe("penjual mengelola meja", () => {
     expect(baru).not.toBe(lama);
     await request(app).get(`/api/v1/tables/${lama}`).expect(404);
     await request(app).get(`/api/v1/tables/${baru}`).expect(200);
-    await toko(`/tables/${r.body.data.id}`, s.tB).patch({ is_active: false }).expect(404);
+    await toko(`/tables/${r.body.data.id}`, s.tokenB).patch({ is_active: false }).expect(404);
     expect((await toko("/tables").get().expect(200)).body.data.map((m: { label: string }) => m.label)).toEqual([
       "1",
       "2",
@@ -85,7 +85,7 @@ describe("penjual mengelola meja", () => {
 
 describe("menu meja (tanpa login)", () => {
   test("menu toko + opsi aktif, tanpa pre-order; meja nonaktif / dine-in mati / token asal → 404", async () => {
-    const po = await sisipMenu(s.idA, { name: "Tumpeng", is_preorder: true, preorder_days: 2 });
+    const po = await insertMenu(s.idA, { name: "Tumpeng", is_preorder: true, preorder_days: 2 });
     const r = await request(app).get(`/api/v1/tables/${token}`).expect(200);
     expect(r.body.data.table).toEqual({ label: "1" });
     expect(r.body.data.merchant).toMatchObject({ business_name: "Dapur Siti", is_open: true });
@@ -170,7 +170,7 @@ describe("pesanan tamu", () => {
 
   // AUD-32: tamu anonim tanpa bayar dulu tidak boleh menahan seluruh sisa stok lewat satu meja
   test("maksimal 30 porsi menunggu per meja", async () => {
-    const besar = await sisipMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
+    const besar = await insertMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
     await pesan({ items: [{ menu_id: besar, qty: 25 }] }).expect(201);
     expect((await pesan({ items: [{ menu_id: besar, qty: 6 }] }).expect(409)).body.error.message).toBe(
       "Maksimal 30 porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.",

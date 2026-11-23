@@ -3,16 +3,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { R2_UJI, fotoUrl, isiR2, login, siapkanToko } from "./helpers/merchant";
+import { TEST_R2_ENV, photoUrl, setR2Env, login, prepareMerchants } from "./helpers/merchant";
 
 // Pop-up promo mobile (rancangan voucher 2026-11-16 §5.5): admin saja; GET /popup = pop-up aktif terbaru dalam periode.
-let s: Awaited<ReturnType<typeof siapkanToko>>;
+let s: Awaited<ReturnType<typeof prepareMerchants>>;
 let tAdmin: string, tSupport: string, promoPlat: number, promoToko: number;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
 const jam = (h: number) => new Date(Date.now() + h * 3600e3).toISOString();
 const isi = (o: Record<string, unknown> = {}) => ({
   title: "Promo akhir pekan",
-  image_url: fotoUrl("platform/popup/"),
+  image_url: photoUrl("platform/popup/"),
   starts_at: jam(-1),
   ends_at: jam(24),
   ...o,
@@ -30,7 +30,7 @@ const promo = async (merchantId: number | null, code: string) =>
   )[0].insertId as number;
 
 beforeAll(async () => {
-  s = await siapkanToko();
+  s = await prepareMerchants();
   vi.restoreAllMocks();
   await createAdmin({ phone: "081300000009", fullName: "Admin Super", password: "rahasia123" });
   await createAdmin({ phone: "081300000011", fullName: "Admin Support", password: "rahasia123" });
@@ -38,14 +38,14 @@ beforeAll(async () => {
   [tAdmin, tSupport] = [await login("081300000009"), await login("081300000011")];
   promoPlat = await promo(null, "POPUPPLAT");
   promoToko = await promo(s.idA, "POPUPTOKO");
-  isiR2();
+  setR2Env();
 });
 beforeEach(async () => {
   await db.query("DELETE FROM popups");
   await db.query("DELETE FROM admin_audit_logs");
 });
 afterAll(() => {
-  isiR2(false);
+  setR2Env(false);
 });
 
 describe("GET /popup", () => {
@@ -59,8 +59,8 @@ describe("GET /popup", () => {
       image_url: expect.any(String),
       promo: expect.objectContaining({ id: promoPlat, code: "POPUPPLAT", claimed: false }),
     });
-    await request(app).post(`/api/v1/me/vouchers/${promoPlat}/claim`).set(H(s.tCust)).expect(200);
-    expect((await publik(s.tCust)).body.data.promo.claimed).toBe(true);
+    await request(app).post(`/api/v1/me/vouchers/${promoPlat}/claim`).set(H(s.customerToken)).expect(200);
+    expect((await publik(s.customerToken)).body.data.promo.claimed).toBe(true);
   });
 
   test("di luar periode, nonaktif, atau voucher tidak tersedia → tidak tampil", async () => {
@@ -78,7 +78,7 @@ describe("admin pop-up", () => {
   test("validasi: judul, gambar folder platform, periode, voucher platform saja", async () => {
     const r = await buat({
       title: "ab",
-      image_url: `${R2_UJI.R2_PUBLIC_URL}/merchants/1/logo/x.png`,
+      image_url: `${TEST_R2_ENV.R2_PUBLIC_URL}/merchants/1/logo/x.png`,
       ends_at: jam(-3),
     }).expect(400);
     expect(Object.keys(r.body.error.fields).sort()).toEqual(["ends_at", "image_url", "title"]);

@@ -4,22 +4,24 @@ import { vi } from "vitest";
 import app from "../../src/app";
 
 // Notifikasi Midtrans bertanda tangan sama dengan Midtrans: SHA512(order_id + status_code + gross_amount + key).
-// AUD-23: server memeriksa ulang lewat Get Status. `jujur` = Get Status menjawab isi notifikasi yang sama;
+// AUD-23: server memeriksa ulang lewat Get Status. `honest` = Get Status menjawab isi notifikasi yang sama;
 // panggilan fetch lain diteruskan ke stub sebelumnya.
-export function kirimNotif(n: Record<string, string>, key: string, jujur = true) {
-  if (jujur) {
-    const sebelum = globalThis.fetch;
+export function sendNotification(notification: Record<string, string>, key: string, honest = true) {
+  if (honest) {
+    const previousFetch = globalThis.fetch;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) =>
-        url.endsWith(`/v2/${n.order_id}/status`) ? new Response(JSON.stringify(n)) : sebelum(url, init),
+        url.endsWith(`/v2/${notification.order_id}/status`)
+          ? new Response(JSON.stringify(notification))
+          : previousFetch(url, init),
       ),
     );
   }
   const signature_key = createHash("sha512")
-    .update(`${n.order_id}${n.status_code}${n.gross_amount}${key}`)
+    .update(`${notification.order_id}${notification.status_code}${notification.gross_amount}${key}`)
     .digest("hex");
   return request(app)
     .post("/api/v1/payments/midtrans")
-    .send({ ...n, signature_key });
+    .send({ ...notification, signature_key });
 }

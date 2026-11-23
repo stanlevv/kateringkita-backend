@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { BOCOR, bekukanJam, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
+import { PRIVATE_KEYS, freezeClock, prepareMerchants, insertMenu, makeVisible } from "./helpers/merchant";
 
 let idA: number, idB: number, slugA: string;
 let ayam: number, esTeh: number;
@@ -25,14 +25,14 @@ const KUNCI = [
 ];
 
 beforeEach(async () => {
-  bekukanJam();
-  ({ idA, idB } = await siapkanToko());
-  await tampilkan(idA);
-  await tampilkan(idB);
+  freezeClock();
+  ({ idA, idB } = await prepareMerchants());
+  await makeVisible(idA);
+  await makeVisible(idB);
   slugA = ((await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [idA]))[0] as any[])[0].slug;
-  ayam = await sisipMenu(idA, { name: "Nasi Ayam", quota_today: 20, sold_today: 3, held_today: 2, sold_total: 5 });
+  ayam = await insertMenu(idA, { name: "Nasi Ayam", quota_today: 20, sold_today: 3, held_today: 2, sold_total: 5 });
   await db.query("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Keju', 3000)", [ayam]);
-  esTeh = await sisipMenu(idB, { name: "Es Teh", category_id: 5, price: 5000, hpp: 2000, sold_total: 1 });
+  esTeh = await insertMenu(idB, { name: "Es Teh", category_id: 5, price: 5000, hpp: 2000, sold_total: 1 });
 });
 
 test("GET /menus tanpa token: kartu D6, tanpa angka internal (R-11, BE-02)", async () => {
@@ -56,7 +56,7 @@ test("GET /menus tanpa token: kartu D6, tanpa angka internal (R-11, BE-02)", asy
     is_favorite: false,
   });
   const s = JSON.stringify(r.body);
-  for (const kunci of BOCOR) expect(s).not.toContain(kunci);
+  for (const kunci of PRIVATE_KEYS) expect(s).not.toContain(kunci);
 });
 
 test("R-14: toko belum terverifikasi, pemilik nonaktif, menu nonaktif/terhapus tidak tampil", async () => {
@@ -68,15 +68,15 @@ test("R-14: toko belum terverifikasi, pemilik nonaktif, menu nonaktif/terhapus t
   await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [idA]);
   expect(await ids()).toEqual([esTeh]);
   await db.query("UPDATE users SET is_active = TRUE");
-  await sisipMenu(idA, { name: "Mati", is_active: false });
-  await sisipMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
+  await insertMenu(idA, { name: "Mati", is_active: false });
+  await insertMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
   expect(await ids()).toEqual([ayam, esTeh]);
 });
 
 test("D2: toko tutup (saklar atau jam) tidak tampil; rentang lewat tengah malam dihormati", async () => {
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   expect(await ids()).toEqual([esTeh]);
-  await tampilkan(idA, { buka: false });
+  await makeVisible(idA, { open: false });
   expect(await ids()).toEqual([esTeh]);
   await db.query("UPDATE merchants SET open_time = '22:00:00', close_time = '11:00:00' WHERE id = ?", [idA]);
   expect(await ids()).toEqual([ayam, esTeh]);
@@ -86,7 +86,7 @@ test("D2: toko tutup (saklar atau jam) tidak tampil; rentang lewat tengah malam 
 });
 
 test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko tutup tetap berisi menu)", async () => {
-  const habis = await sisipMenu(idA, { name: "Habis", quota_today: 5, sold_today: 5, sold_total: 999 });
+  const habis = await insertMenu(idA, { name: "Habis", quota_today: 5, sold_today: 5, sold_total: 999 });
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   const r = (await get(`/menus?merchant=${slugA}`).expect(200)).body;
   expect(r.data.map((m: any) => [m.id, m.merchant.is_open])).toEqual([
@@ -94,7 +94,7 @@ test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko t
     [habis, false],
   ]);
   expect(r.meta.total).toBe(2);
-  await tampilkan(idA, { buka: false });
+  await makeVisible(idA, { open: false });
   expect(await ids(`?merchant=${slugA}`)).toEqual([ayam, habis]);
   expect(await ids()).toEqual([esTeh]);
   await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [idA]);
@@ -102,22 +102,22 @@ test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko t
 });
 
 test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async () => {
-  const habis = await sisipMenu(idA, {
+  const habis = await insertMenu(idA, {
     name: "Habis",
     daily_quota: 10,
     quota_today: 10,
     sold_today: 10,
     sold_total: 999,
   });
-  const sedikit = await sisipMenu(idA, { name: "Sedikit", quota_today: 7 });
-  const po = await sisipMenu(idA, { name: "PO", is_preorder: true, preorder_days: 2 });
+  const sedikit = await insertMenu(idA, { name: "Sedikit", quota_today: 7 });
+  const po = await insertMenu(idA, { name: "PO", is_preorder: true, preorder_days: 2 });
   // TiDB tidak menegakkan CHECK: tiru data rusak (ditahan melebihi sisa) dengan mematikan CHECK di MySQL uji
   const [[chk]] = await db.query<any[]>(
     "SELECT CONSTRAINT_NAME AS n FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND CHECK_CLAUSE LIKE '%held_today%'",
   );
   if (chk) await db.query(`ALTER TABLE menus ALTER CHECK \`${chk.n}\` NOT ENFORCED`);
-  const rusak = await sisipMenu(idA, { name: "Rusak", quota_today: 5, sold_today: 3, held_today: 4 });
-  const basi = await sisipMenu(idA, {
+  const rusak = await insertMenu(idA, { name: "Rusak", quota_today: 5, sold_today: 3, held_today: 4 });
+  const basi = await insertMenu(idA, {
     name: "Basi",
     stock_date: "2000-01-01",
     daily_quota: 20,
@@ -167,7 +167,7 @@ test("D8: q nama menu/toko dengan escape, kategori, toko, titik temu", async () 
 });
 
 test("D9: urutan", async () => {
-  const murah = await sisipMenu(idA, {
+  const murah = await insertMenu(idA, {
     name: "Murah",
     price: 2000,
     hpp: 1000,
@@ -175,7 +175,7 @@ test("D9: urutan", async () => {
     rating_count: 9,
     sold_total: 3,
   });
-  const mahal = await sisipMenu(idA, {
+  const mahal = await insertMenu(idA, {
     name: "Mahal",
     price: 90000,
     hpp: 1000,
@@ -198,7 +198,7 @@ test("D9: urutan", async () => {
 test("D10: pagination", async () => {
   await db.query("DELETE FROM menu_options");
   await db.query("DELETE FROM menus");
-  for (let i = 0; i < 25; i++) await sisipMenu(idA, { name: `Menu ${i}` });
+  for (let i = 0; i < 25; i++) await insertMenu(idA, { name: `Menu ${i}` });
   const r = await get("/menus?limit=10&page=3").expect(200);
   expect(r.body.data).toHaveLength(5);
   expect(r.body.meta).toEqual({ page: 3, limit: 10, total: 25 });

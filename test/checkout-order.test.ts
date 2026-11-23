@@ -5,10 +5,10 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { codeGenerator } from "../src/services/order.service";
-import { menuRow, pembeliBaru, siapCheckout, tampilkan } from "./helpers/merchant";
+import { menuRow, createCustomer, prepareCheckout, makeVisible } from "./helpers/merchant";
 
 // F06 Task 3: POST /orders tunai + GET /orders/:code (C-09, C-11, R-02, R-05, R-06, D3–D9, D11, D12, D16)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const KUNCI_ORDER = [
   "can_cancel",
@@ -35,7 +35,7 @@ const KUNCI_ORDER = [
   "total",
   "updated_at",
 ];
-const pesan = (body: unknown, key: string | null = randomUUID(), token = s.tCust) => {
+const pesan = (body: unknown, key: string | null = randomUUID(), token = s.customerToken) => {
   const r = request(app).post("/api/v1/orders").set("Authorization", `Bearer ${token}`);
   return (key === null ? r : r.set("Idempotency-Key", key)).send(body as object);
 };
@@ -45,13 +45,13 @@ const isi = (o: Record<string, unknown> = {}, item: Record<string, unknown> = {}
   payment_method: "cod",
   ...o,
 });
-const baca = (code: string, token = s.tCust) =>
+const baca = (code: string, token = s.customerToken) =>
   request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${token}`);
 const hitung = async (tabel: string) =>
   Number(((await db.query<any[]>(`SELECT COUNT(*) n FROM ${tabel}`))[0] as any[])[0].n);
 
 beforeEach(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -220,7 +220,7 @@ describe("validasi", () => {
   test("R-14 / tutup lewat POST /orders → 409, tanpa baris tertinggal", async () => {
     await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [s.idA]);
     expect((await pesan(isi()).expect(409)).body.error.code).toBe("MERCHANT_UNAVAILABLE");
-    await tampilkan(s.idA, { buka: false });
+    await makeVisible(s.idA, { open: false });
     expect((await pesan(isi()).expect(409)).body.error.code).toBe("MERCHANT_CLOSED");
     expect(await hitung("orders")).toBe(0);
     expect(await hitung("order_idempotency")).toBe(0);
@@ -296,11 +296,11 @@ describe("GET /orders/:code", () => {
     const g = await baca(code).expect(200);
     expect(Object.keys(g.body.data).sort()).toEqual(KUNCI_ORDER);
     expect({ ...g.body.data, seconds_left: 0 }).toEqual({ ...r.body.data, seconds_left: 0 });
-    const lain = await pembeliBaru(1);
+    const lain = await createCustomer(1);
     const x = await baca(code, lain).expect(404);
     expect(x.body.error).toMatchObject({ code: "NOT_FOUND", message: "Pesanan tidak ditemukan." });
     await baca("KK-00000000-ZZZZ").expect(404);
-    await baca(code, s.tA).expect(403);
+    await baca(code, s.tokenA).expect(403);
     await request(app).get(`/api/v1/orders/${code}`).expect(401);
   });
 });

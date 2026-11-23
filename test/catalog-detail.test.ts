@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { BOCOR, bekukanJam, siapkanToko, sisipMenu, tampilkan } from "./helpers/merchant";
+import { PRIVATE_KEYS, freezeClock, prepareMerchants, insertMenu, makeVisible } from "./helpers/merchant";
 
 let idA: number, idB: number, slugA: string, slugB: string, menu: number;
 
@@ -54,12 +54,12 @@ const tolak = async (u: string, pesan = "Menu tidak ditemukan.") => {
 };
 
 beforeEach(async () => {
-  bekukanJam();
-  ({ idA, idB } = await siapkanToko());
-  await tampilkan(idA);
-  await tampilkan(idB);
+  freezeClock();
+  ({ idA, idB } = await prepareMerchants());
+  await makeVisible(idA);
+  await makeVisible(idB);
   [slugA, slugB] = [await slug(idA), await slug(idB)];
-  menu = await sisipMenu(idA, {
+  menu = await insertMenu(idA, {
     name: "Nasi Ayam",
     description: "Pedas",
     quota_today: 20,
@@ -106,19 +106,19 @@ test("GET /menus/:id: bentuk D7, opsi & titik temu aktif saja, tanpa angka inter
     pickup_points: [{ id: 1, name: "Gedung Vokasi UB (Lt. 2)", description: "Lobi" }],
   });
   const s = JSON.stringify(r.body);
-  for (const k of BOCOR) expect(s).not.toContain(k);
+  for (const k of PRIVATE_KEYS) expect(s).not.toContain(k);
 });
 
 test("D3: toko tutup (saklar atau jam) tetap 200 dengan is_open false", async () => {
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   expect((await get(`/menus/${menu}`).expect(200)).body.data.merchant.is_open).toBe(false);
-  await tampilkan(idA, { buka: false });
+  await makeVisible(idA, { open: false });
   expect((await get(`/menus/${menu}`).expect(200)).body.data.merchant.is_open).toBe(false);
 });
 
 test("D1/BE-11: menu tersembunyi atau id tidak valid → 404", async () => {
-  const mati = await sisipMenu(idA, { name: "Mati", is_active: false });
-  const hapus = await sisipMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
+  const mati = await insertMenu(idA, { name: "Mati", is_active: false });
+  const hapus = await insertMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
   for (const id of [mati, hapus, "abc", "0", "99999"]) await tolak(`/menus/${id}`);
   await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [idA]);
   await tolak(`/menus/${menu}`);
@@ -128,7 +128,7 @@ test("D1/BE-11: menu tersembunyi atau id tidak valid → 404", async () => {
 });
 
 test("D5: stock_date lama → available = daily_quota", async () => {
-  const basi = await sisipMenu(idA, { stock_date: "2000-01-01", daily_quota: 30, quota_today: 5, sold_today: 5 });
+  const basi = await insertMenu(idA, { stock_date: "2000-01-01", daily_quota: 30, quota_today: 5, sold_today: 5 });
   expect((await get(`/menus/${basi}`).expect(200)).body.data).toMatchObject({ available: 30, badge: "available" });
 });
 
@@ -161,7 +161,7 @@ test("D11: ulasan publik terbaru dulu, nama disamarkan, paginated", async () => 
   ]);
   const p2 = await get(`/menus/${menu}/reviews?limit=2&page=2`).expect(200);
   expect(p2.body.data.map((u: any) => u.comment)).toEqual(["ulasan 1"]);
-  const kosong = await sisipMenu(idA, { name: "Baru" });
+  const kosong = await insertMenu(idA, { name: "Baru" });
   expect((await get(`/menus/${kosong}/reviews`).expect(200)).body).toEqual({
     data: [],
     meta: { page: 1, limit: 20, total: 0 },
@@ -196,7 +196,7 @@ test("D12: profil toko publik tanpa alamat/WA/status verifikasi", async () => {
     vouchers: [],
   });
   const s = JSON.stringify(r.body);
-  for (const k of [...BOCOR, '"verification_status"', '"user_id"']) expect(s).not.toContain(k);
+  for (const k of [...PRIVATE_KEYS, '"verification_status"', '"user_id"']) expect(s).not.toContain(k);
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   expect((await get(`/merchants/${slugA}`).expect(200)).body.data.is_open).toBe(false);
   await db.query("UPDATE merchants SET verification_status = 'pending' WHERE id = ?", [idB]);

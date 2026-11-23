@@ -4,24 +4,24 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vite
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { kirimNotif } from "./helpers/midtrans";
-import { menuRow, pesanDulu, siapCheckout } from "./helpers/merchant";
+import { sendNotification } from "./helpers/midtrans";
+import { menuRow, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F10: VA Midtrans — checkout VA, POST /orders/:code/va (Midtrans di-stub), notifikasi POST /payments/midtrans
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 const KEY = "SB-Mid-server-uji";
 const VA = "8127000012345";
 
 const pesanVa = () =>
   request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Authorization", `Bearer ${s.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({ items: [{ menu_id: s.menu, qty: 2 }], pickup_point_id: 1, payment_method: "va" });
 const mintaVa = (code: string, bank: unknown = "bca") =>
-  request(app).post(`/api/v1/orders/${code}/va`).set("Authorization", `Bearer ${s.tCust}`).send({ bank });
+  request(app).post(`/api/v1/orders/${code}/va`).set("Authorization", `Bearer ${s.customerToken}`).send({ bank });
 const notif = (o: Record<string, string>, key = KEY, jujur = true) =>
-  kirimNotif(
+  sendNotification(
     {
       status_code: "200",
       gross_amount: "30000.00",
@@ -63,7 +63,7 @@ const siapVa = async () => {
 };
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   // abaikan nilai dari .env lokal: tanpa key di awal, selalu sandbox
   env.MIDTRANS_SERVER_KEY = undefined;
   env.MIDTRANS_IS_PRODUCTION = "false";
@@ -123,7 +123,7 @@ describe("membuat VA", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(await bayar(code)).toHaveLength(1);
     // pesanan tunai tidak bisa minta VA
-    await mintaVa(await pesanDulu(s.tCust, s.menu)).expect(409);
+    await mintaVa(await placeOrder(s.customerToken, s.menu)).expect(409);
   });
 });
 

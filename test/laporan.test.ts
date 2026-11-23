@@ -4,27 +4,30 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { pesanDulu, siapCheckout } from "./helpers/merchant";
+import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F09: GET /merchant/reports/{summary,hourly,transactions} (LP-N1..N4, LP-E1)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let kode: string;
 const hariIni = getWibDate();
-const get = (path: string, token = s.tA) =>
+const get = (path: string, token = s.tokenA) =>
   request(app).get(`/api/v1/merchant/reports/${path}`).set("Authorization", `Bearer ${token}`);
 const selesaikan = async (code: string) => {
   for (const a of ["confirm", "cook", "ready", "complete"]) {
-    await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set("Authorization", `Bearer ${s.tA}`).expect(200);
+    await request(app)
+      .post(`/api/v1/merchant/orders/${code}/${a}`)
+      .set("Authorization", `Bearer ${s.tokenA}`)
+      .expect(200);
   }
 };
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   await db.query("UPDATE merchants SET daily_revenue_target = 50000 WHERE id = ?", [s.idA]);
   // pesanan 1: dua menu (Nasi Ayam ×2 = 30000, hpp 18000; Es Teh ×1 = 5000, hpp 2000)
   const r = await request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Authorization", `Bearer ${s.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({
       items: [
@@ -38,8 +41,8 @@ beforeAll(async () => {
   kode = r.body.data.code;
   await selesaikan(kode);
   // pesanan 2: Es Teh ×1 selesai; pesanan 3 masih holding (tidak dihitung)
-  await selesaikan(await pesanDulu(s.tCust, s.menu2));
-  await pesanDulu(s.tCust, s.menu);
+  await selesaikan(await placeOrder(s.customerToken, s.menu2));
+  await placeOrder(s.customerToken, s.menu);
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -61,7 +64,7 @@ describe("summary", () => {
   });
 
   test("toko lain nol; target 0 → capaian 0", async () => {
-    expect((await get(`summary?from=${hariIni}&to=${hariIni}`, s.tB)).body.data).toEqual({
+    expect((await get(`summary?from=${hariIni}&to=${hariIni}`, s.tokenB)).body.data).toEqual({
       target: 0,
       revenue: 0,
       hpp_total: 0,
@@ -80,7 +83,7 @@ describe("summary", () => {
     expect((await get("summary?from=kemarin&to=2026-01-01").expect(400)).body.error.fields.from).toEqual([
       "Tanggal tidak valid.",
     ]);
-    await get(`summary?from=${hariIni}&to=${hariIni}`, s.tCust).expect(403);
+    await get(`summary?from=${hariIni}&to=${hariIni}`, s.customerToken).expect(403);
   });
 });
 

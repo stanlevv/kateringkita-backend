@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import db from "../src/config/db";
 import { getWibDate, refreshDailyQuota } from "../src/services/merchant-quota.service";
-import { menuRow, siapkanToko, sisipMenu } from "./helpers/merchant";
+import { menuRow, prepareMerchants, insertMenu } from "./helpers/merchant";
 
 test("hariIniWib: tanggal di zona Asia/Jakarta (UTC+7)", () => {
   expect(getWibDate(new Date("2026-10-31T17:30:00Z"))).toBe("2026-11-01");
@@ -9,8 +9,8 @@ test("hariIniWib: tanggal di zona Asia/Jakarta (UTC+7)", () => {
 });
 
 test("tengah malam: permintaan yang masih membawa tanggal kemarin tidak me-reset mundur", async () => {
-  const { idA } = await siapkanToko();
-  const id = await sisipMenu(idA, {
+  const { idA } = await prepareMerchants();
+  const id = await insertMenu(idA, {
     stock_date: "2026-11-02",
     daily_quota: 20,
     quota_today: 10,

@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { loginLimiter, otpLimiter } from "../src/middleware/rate-limiter";
 import { mailer } from "../src/utils/mail";
-import { login, siapkanToko } from "./helpers/merchant";
+import { login, prepareMerchants } from "./helpers/merchant";
 
 // F11: POST /auth/password/{forgot,verify,reset} — OTP email
 const EMAIL = "budi@mail.com";
@@ -19,7 +19,7 @@ const salah = (r: request.Response) =>
   expect(r.body.error.fields).toEqual({ code: ["Kode salah atau sudah kedaluwarsa."] });
 
 beforeAll(async () => {
-  await siapkanToko();
+  await prepareMerchants();
 });
 beforeEach(() => {
   otpLimiter.reset();

@@ -5,10 +5,10 @@ import db from "../src/config/db";
 import { loginLimiter } from "../src/middleware/rate-limiter";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { transitionOrder } from "../src/services/order-status.service";
-import { pembeliBaru, pesanDulu, siapCheckout } from "./helpers/merchant";
+import { createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F08 Task 3: GET /me/notifications & POST /me/notifications/read (C-21, R-10; D13, D14)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let tAni: string;
 let budi: number;
 let ani: number;
@@ -16,11 +16,11 @@ let siti: number;
 let ids: { b1: number; b2: number; b3: number; a1: number };
 const DIBACA = new Date("2026-01-02T03:04:05Z");
 
-const get = (q = "", token: string | null = s.tCust) => {
+const get = (q = "", token: string | null = s.customerToken) => {
   const r = request(app).get(`/api/v1/me/notifications${q}`);
   return token ? r.set("Authorization", `Bearer ${token}`) : r;
 };
-const tandai = (body?: unknown, token: string | null = s.tCust) => {
+const tandai = (body?: unknown, token: string | null = s.customerToken) => {
   const r = request(app).post("/api/v1/me/notifications/read");
   const t = token ? r.set("Authorization", `Bearer ${token}`) : r;
   return body === undefined ? t : t.send(body as object);
@@ -42,8 +42,8 @@ const readAt = async (id: number) =>
   ((await db.query<any[]>("SELECT read_at FROM notifications WHERE id = ?", [id]))[0] as any[])[0].read_at;
 
 beforeAll(async () => {
-  s = await siapCheckout();
-  tAni = await pembeliBaru(1);
+  s = await prepareCheckout();
+  tAni = await createCustomer(1);
   const id = async (email: string) =>
     Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
   budi = await id("budi@mail.com");
@@ -89,7 +89,7 @@ describe("GET /me/notifications (D13)", () => {
   });
 
   test("notifikasi dari transisi nyata ikut tampil", async () => {
-    const code = await pesanDulu(s.tCust, s.menu);
+    const code = await placeOrder(s.customerToken, s.menu);
     await dalamTransaksi((c) =>
       transitionOrder(c, code, "confirm", { kind: "merchant", userId: siti, merchantId: s.idA }),
     );
@@ -142,7 +142,7 @@ describe("GET /me/notifications (D13)", () => {
     expect(r.body.meta).toMatchObject({ total: 6, unread_count: 4 });
     // milik orang lain tidak ikut; penjual tanpa notifikasi → kosong
     expect(judul(await get("?type=promo", tAni).expect(200))).toEqual(["Promo Ani"]);
-    expect((await get("?type=promo", s.tA).expect(200)).body).toEqual({
+    expect((await get("?type=promo", s.tokenA).expect(200)).body).toEqual({
       data: [],
       meta: { page: 1, limit: 20, total: 0, unread_count: 0 },
     });
@@ -170,7 +170,7 @@ describe("GET /me/notifications (D13)", () => {
   });
 
   test("penjual → daftar kosong; tanpa token → 401", async () => {
-    const r = await get("", s.tA).expect(200);
+    const r = await get("", s.tokenA).expect(200);
     expect(r.body).toEqual({ data: [], meta: { page: 1, limit: 20, total: 0, unread_count: 0 } });
     expect((await get("", null)).status).toBe(401);
     expect((await tandai({ all: true }, null)).status).toBe(401);

@@ -5,15 +5,15 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { releaseStock } from "../src/services/order-stock.service";
-import { menuRow, siapCheckout, sisipMenu } from "./helpers/merchant";
+import { menuRow, prepareCheckout, insertMenu } from "./helpers/merchant";
 
 // F06 Task 5: lepasStok untuk F07/F08 (R-01, R-03, R-12, D14)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const pesan = async (items: { menu_id: number; qty: number }[]) => {
   const r = await request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Authorization", `Bearer ${s.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({ items, pickup_point_id: 1, payment_method: "cod" })
     .expect(201);
@@ -27,7 +27,7 @@ const stok = async (id: number) => {
 };
 
 beforeEach(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
 });
 
 test("hari sama: kembali → held turun; terjual → held turun, sold_today & sold_total naik", async () => {
@@ -95,11 +95,11 @@ test("dua menu (baris menu sama dijumlah) → keduanya diperbarui; stock_date NU
 
 // AUD-31: batas 3 pesanan menunggu tidak cukup (satu pesanan bisa berisi ratusan porsi); porsi tertahan juga dibatasi
 test("satu pembeli maksimal 20 porsi menunggu", async () => {
-  const besar = await sisipMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
+  const besar = await insertMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
   await pesan([{ menu_id: besar, qty: 15 }]);
   const r = await request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Authorization", `Bearer ${s.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({ items: [{ menu_id: besar, qty: 6 }], pickup_point_id: 1, payment_method: "cod" })
     .expect(409);

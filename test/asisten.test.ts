@@ -5,12 +5,12 @@ import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
-import { bekukanJam, pesanDulu, siapCheckout, sisipMenu } from "./helpers/merchant";
+import { freezeClock, placeOrder, prepareCheckout, insertMenu } from "./helpers/merchant";
 
 // F17: POST /merchant/assistant (Gemini) — konteks hanya data toko sendiri.
 // Rubrik AI: prompt memuat Role, Constraint, Output Schema; keluaran JSON divalidasi & disimpan; injeksi ditolak; data pribadi disamarkan.
-let s: Awaited<ReturnType<typeof siapCheckout>>;
-const tanya = (question: unknown, t = s.tA) =>
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
+const tanya = (question: unknown, t = s.tokenA) =>
   request(app).post("/api/v1/merchant/assistant").set("Authorization", `Bearer ${t}`).send({ question });
 const JSON_OK = JSON.stringify({
   jawaban: "Naikkan ke Rp 6.000.",
@@ -20,9 +20,9 @@ const JSON_OK = JSON.stringify({
 const hasil = async () => (await db.query<any[]>("SELECT * FROM ai_results ORDER BY id"))[0] as any[];
 
 beforeAll(async () => {
-  s = await siapCheckout();
-  await sisipMenu(s.idA, { name: "Risol Mayo", price: 5000, hpp: 2500 });
-  await sisipMenu(s.idB, { name: "Menu Rahasia Andi", price: 9000, hpp: 7000 });
+  s = await prepareCheckout();
+  await insertMenu(s.idA, { name: "Risol Mayo", price: 5000, hpp: 2500 });
+  await insertMenu(s.idB, { name: "Menu Rahasia Andi", price: 9000, hpp: 7000 });
 });
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -122,8 +122,8 @@ describe("asisten", () => {
 
   test("anonimisasi: email, nomor HP, nama penjual & pelanggan toko disamarkan sebelum masuk prompt", async () => {
     env.GEMINI_API_KEY = "kunci-uji";
-    bekukanJam();
-    await pesanDulu(s.tCust, s.menu); // Budi jadi pelanggan Dapur Siti
+    freezeClock();
+    await placeOrder(s.customerToken, s.menu); // Budi jadi pelanggan Dapur Siti
     const spy = vi.spyOn(ai, "tanya").mockResolvedValue(JSON_OK);
     await tanya("Saya Siti. Budi (budi@mail.com, 0812-3456-7890) minta diskon, kasih berapa?").expect(200);
     const [, pesan] = spy.mock.calls[0];
@@ -153,7 +153,7 @@ describe("asisten", () => {
 
   test("validasi, peran, batas 10 per 10 menit", async () => {
     expect((await tanya("").expect(400)).body.error.fields).toEqual({ question: ["Pertanyaan 1–500 karakter."] });
-    await tanya("halo", s.tCust).expect(403);
+    await tanya("halo", s.customerToken).expect(403);
     env.GEMINI_API_KEY = "kunci-uji";
     vi.spyOn(ai, "tanya").mockResolvedValue(JSON_OK);
     for (let i = 0; i < 10; i++) await tanya("halo").expect(200);

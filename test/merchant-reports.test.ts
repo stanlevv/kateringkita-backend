@@ -5,10 +5,10 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { rentangUtc } from "../src/services/merchant-laporan.service";
-import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/merchant";
+import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F09: /merchant/reports/* (M-09, R-10; D1–D9)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 const k: Record<string, string> = {};
 
 const atur = (code: string, o: Record<string, unknown>) => db.query("UPDATE orders SET ? WHERE code = ?", [o, code]);
@@ -18,7 +18,7 @@ const HARI = getWibDate();
 const H = "2026-03-20"; // hari uji laporan per jam; completed_at disimpan UTC (WIB − 7 jam)
 // Hari uji tetap di masa lalu: batas WIB sama dengan "kemarin 17:30 UTC = hari ini 00:30 WIB" tanpa mencemari data hari ini
 const D = "2026-03-10";
-const get = (jalur: string, qs: string, token = s.tA) =>
+const get = (jalur: string, qs: string, token = s.tokenA) =>
   request(app).get(`/api/v1/merchant/reports/${jalur}?${qs}`).set("Authorization", `Bearer ${token}`);
 const ringkasan = (from: string, to = from) => get("summary", `from=${from}&to=${to}`);
 const salahTanggal = async (qs: string, pesan: string[]) => {
@@ -62,38 +62,38 @@ async function pesanDua(token: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  s = await siapCheckout();
-  await tampilkan(s.idB);
+  s = await prepareCheckout();
+  await makeVisible(s.idB);
   await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [s.idB]);
-  const menuB = await sisipMenu(s.idB, { name: "Soto" });
+  const menuB = await insertMenu(s.idB, { name: "Soto" });
   const pagi = wib(HARI, "09:00:00");
   const siang = wib(HARI, "12:00:00");
-  k.multi = await pesanDua(s.tCust);
+  k.multi = await pesanDua(s.customerToken);
   await atur(k.multi, { status: "completed", completed_at: pagi });
-  k.satu = await pesanDulu(s.tCust, s.menu2, 3);
+  k.satu = await placeOrder(s.customerToken, s.menu2, 3);
   await atur(k.satu, { status: "completed", completed_at: siang });
   // tiga status lain punya item dan completed_at, tetap tidak boleh dihitung (D1)
   for (const status of ["cancelled", "expired", "ready"]) {
-    k[status] = await pesanDulu(s.tCust, s.menu);
+    k[status] = await placeOrder(s.customerToken, s.menu);
     await atur(k[status], { status, completed_at: siang });
   }
-  k.b = await pesanDulu(s.tCust, menuB, 4);
+  k.b = await placeOrder(s.customerToken, menuB, 4);
   await atur(k.b, { status: "completed", completed_at: siang });
 
   // fixture per jam di hari uji tersendiri (WIB = UTC + 7)
-  const a = await pesanDua(s.tCust); // 2× Nasi Ayam 30.000 + 1× Es Teh 5.000, 08.10 WIB
+  const a = await pesanDua(s.customerToken); // 2× Nasi Ayam 30.000 + 1× Es Teh 5.000, 08.10 WIB
   await atur(a, { status: "completed", completed_at: new Date(`${H}T01:10:00Z`) });
-  const b = await pesanDulu(s.tCust, s.menu2, 3); // 15.000, 08.50 WIB (jam yang sama)
+  const b = await placeOrder(s.customerToken, s.menu2, 3); // 15.000, 08.50 WIB (jam yang sama)
   await atur(b, { status: "completed", completed_at: new Date(`${H}T01:50:00Z`) });
-  const c = await pesanDulu(s.tCust, s.menu2, 1); // 5.000, 12.05 WIB
+  const c = await placeOrder(s.customerToken, s.menu2, 1); // 5.000, 12.05 WIB
   await atur(c, { status: "completed", completed_at: new Date(`${H}T05:05:00Z`) });
-  const tengahMalam = await pesanDulu(s.tCust, s.menu2); // 5.000, 00.20 WIB
+  const tengahMalam = await placeOrder(s.customerToken, s.menu2); // 5.000, 00.20 WIB
   await atur(tengahMalam, { status: "completed", completed_at: new Date(`${geser(H, -1)}T17:20:00Z`) });
-  const akhirHari = await pesanDulu(s.tCust, s.menu2); // 5.000, 23.59 WIB
+  const akhirHari = await placeOrder(s.customerToken, s.menu2); // 5.000, 23.59 WIB
   await atur(akhirHari, { status: "completed", completed_at: new Date(`${H}T16:59:00Z`) });
-  const batal = await pesanDulu(s.tCust, s.menu2); // status lain, jam 20.00 WIB, tidak boleh muncul
+  const batal = await placeOrder(s.customerToken, s.menu2); // status lain, jam 20.00 WIB, tidak boleh muncul
   await atur(batal, { status: "cancelled", completed_at: new Date(`${H}T13:00:00Z`) });
-  const tokoB = await pesanDulu(s.tCust, menuB, 4); // toko lain, jam 10.00 WIB, tidak boleh muncul
+  const tokoB = await placeOrder(s.customerToken, menuB, 4); // toko lain, jam 10.00 WIB, tidak boleh muncul
   await atur(tokoB, { status: "completed", completed_at: new Date(`${H}T03:00:00Z`) });
 });
 afterAll(() => {
@@ -141,11 +141,11 @@ describe("GET /merchant/reports/summary", () => {
 
   test("tanggal = completed_at WIB: 00:30 WIB masuk hari itu, 23:59:59 WIB hari sebelumnya; pre-order dibuat sebelumnya masuk hari selesai", async () => {
     const hari = geser(D, -1);
-    k.x = await pesanDulu(s.tCust, s.menu2); // 00:30 WIB tanggal D
+    k.x = await placeOrder(s.customerToken, s.menu2); // 00:30 WIB tanggal D
     await atur(k.x, { status: "completed", completed_at: new Date(`${hari}T17:30:00Z`) });
-    k.y = await pesanDulu(s.tCust, s.menu2); // 23:59:59 WIB tanggal D-1
+    k.y = await placeOrder(s.customerToken, s.menu2); // 23:59:59 WIB tanggal D-1
     await atur(k.y, { status: "completed", completed_at: new Date(`${hari}T16:59:59Z`) });
-    k.z = await pesanDulu(s.tCust, s.menu2); // dibuat D-2, selesai D
+    k.z = await placeOrder(s.customerToken, s.menu2); // dibuat D-2, selesai D
     await atur(k.z, {
       status: "completed",
       created_at: wib(geser(D, -2), "10:00:00"),
@@ -230,14 +230,14 @@ describe("validasi query (D9) & penjaga", () => {
   });
 
   test("token pembeli → 403, tanpa token → 401", async () => {
-    await get("summary", `from=${HARI}&to=${HARI}`, s.tCust).expect(403);
-    await get("transactions", `from=${HARI}&to=${HARI}`, s.tCust).expect(403);
+    await get("summary", `from=${HARI}&to=${HARI}`, s.customerToken).expect(403);
+    await get("transactions", `from=${HARI}&to=${HARI}`, s.customerToken).expect(403);
     await request(app).get(`/api/v1/merchant/reports/summary?from=${HARI}&to=${HARI}`).expect(401);
   });
 });
 
 describe("GET /merchant/reports/hourly", () => {
-  const hourly = (date: string, token = s.tA) => get("hourly", `date=${date}`, token);
+  const hourly = (date: string, token = s.tokenA) => get("hourly", `date=${date}`, token);
 
   test("hanya jam bertransaksi, urut naik; Σ revenue semua jam = summary.revenue; toko B & status lain tidak ikut", async () => {
     const r = await hourly(H).expect(200);
@@ -262,6 +262,6 @@ describe("GET /merchant/reports/hourly", () => {
   });
 
   test("token pembeli → 403", async () => {
-    await hourly(HARI, s.tCust).expect(403);
+    await hourly(HARI, s.customerToken).expect(403);
   });
 });

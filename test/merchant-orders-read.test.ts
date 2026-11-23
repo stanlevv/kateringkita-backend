@@ -3,10 +3,10 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/merchant";
+import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F07 Task 3: GET /merchant/orders & /merchant/orders/:code (M-04, R-10, R-11; D9, D11–D13)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 const k: Record<string, string> = {};
 
 const KUNCI = [
@@ -37,23 +37,23 @@ const KUNCI = [
   "total",
   "updated_at",
 ];
-const daftar = (qs = "", token = s.tA) =>
+const daftar = (qs = "", token = s.tokenA) =>
   request(app).get(`/api/v1/merchant/orders${qs}`).set("Authorization", `Bearer ${token}`);
 const kodeDari = (r: request.Response) => r.body.data.map((o: { code: string }) => o.code).sort();
 const atur = (code: string, o: Record<string, unknown>) => db.query("UPDATE orders SET ? WHERE code = ?", [o, code]);
 const kemarin = () => new Date(Date.parse(`${getWibDate()}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
 
 beforeAll(async () => {
-  s = await siapCheckout();
-  await tampilkan(s.idB);
+  s = await prepareCheckout();
+  await makeVisible(s.idB);
   await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [s.idB]);
-  const menuB = await sisipMenu(s.idB, { name: "Soto" });
-  k.holding = await pesanDulu(s.tCust, s.menu, 2);
-  k.confirmed = await pesanDulu(s.tCust, s.menu);
+  const menuB = await insertMenu(s.idB, { name: "Soto" });
+  k.holding = await placeOrder(s.customerToken, s.menu, 2);
+  k.confirmed = await placeOrder(s.customerToken, s.menu);
   await atur(k.confirmed, { status: "confirmed" });
-  k.completed = await pesanDulu(s.tCust, s.menu2);
+  k.completed = await placeOrder(s.customerToken, s.menu2);
   await atur(k.completed, { status: "completed" });
-  k.b = await pesanDulu(s.tCust, menuB);
+  k.b = await placeOrder(s.customerToken, menuB);
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -143,20 +143,20 @@ describe("GET /merchant/orders/:code", () => {
   test("200 bentuk sama; toko lain → 404; pembeli → 403", async () => {
     const r = await request(app)
       .get(`/api/v1/merchant/orders/${k.holding}`)
-      .set("Authorization", `Bearer ${s.tA}`)
+      .set("Authorization", `Bearer ${s.tokenA}`)
       .expect(200);
     expect(Object.keys(r.body.data).sort()).toEqual(KUNCI);
     expect(r.body.data.code).toBe(k.holding);
     const b = await request(app)
       .get(`/api/v1/merchant/orders/${k.b}`)
-      .set("Authorization", `Bearer ${s.tA}`)
+      .set("Authorization", `Bearer ${s.tokenA}`)
       .expect(404);
     expect(b.body.error.message).toBe("Pesanan tidak ditemukan.");
     await request(app)
       .get(`/api/v1/merchant/orders/${k.holding}`)
-      .set("Authorization", `Bearer ${s.tCust}`)
+      .set("Authorization", `Bearer ${s.customerToken}`)
       .expect(403);
-    await daftar("", s.tCust).expect(403);
+    await daftar("", s.customerToken).expect(403);
   });
 });
 

@@ -3,10 +3,10 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, menuRow, pesanDulu, siapCheckout } from "./helpers/merchant";
+import { login, menuRow, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // F19: moderasi ulasan & menu oleh admin
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let tAdmin: string;
 let ulasanId: number;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
@@ -18,15 +18,15 @@ const logs = async (action: string) =>
   ((await db.query<any[]>("SELECT * FROM admin_audit_logs WHERE action = ?", [action]))[0] as any[]).length;
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   tAdmin = await login("081300000009");
-  const code = await pesanDulu(s.tCust, s.menu);
+  const code = await placeOrder(s.customerToken, s.menu);
   for (const a of ["confirm", "cook", "ready", "complete"])
-    await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set(H(s.tA)).expect(200);
+    await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set(H(s.tokenA)).expect(200);
   await request(app)
     .post(`/api/v1/orders/${code}/reviews`)
-    .set(H(s.tCust))
+    .set(H(s.customerToken))
     .send({ items: [{ menu_id: s.menu, rating: 1, comment: "Spam promo judi" }] })
     .expect(201);
   ulasanId = ((await db.query<any[]>("SELECT id FROM reviews"))[0] as any[])[0].id;
@@ -48,7 +48,7 @@ describe("ulasan", () => {
     });
     expect((await adm("get", "/reviews?status=moderated").expect(200)).body.data).toEqual([]);
     await adm("get", "/reviews?status=x").expect(400);
-    await request(app).get("/api/v1/admin/reviews").set(H(s.tA)).expect(403);
+    await request(app).get("/api/v1/admin/reviews").set(H(s.tokenA)).expect(403);
   });
 
   test("hide wajib alasan; rating & daftar publik/toko mengabaikan; idempoten; unhide memulihkan", async () => {
@@ -57,7 +57,7 @@ describe("ulasan", () => {
     expect(r.body.data).toMatchObject({ hidden: true, hidden_reason: "Spam" });
     expect(await menuRow(s.menu)).toMatchObject({ rating_avg: "0.00", rating_count: 0 });
     expect((await request(app).get(`/api/v1/menus/${s.menu}/reviews`).expect(200)).body.meta.total).toBe(0);
-    expect((await request(app).get("/api/v1/merchant/reviews").set(H(s.tA)).expect(200)).body.data).toEqual([]);
+    expect((await request(app).get("/api/v1/merchant/reviews").set(H(s.tokenA)).expect(200)).body.data).toEqual([]);
     await adm("post", `/reviews/${ulasanId}/hide`, { reason: "Lagi" }).expect(200);
     expect(await logs("review.hide")).toBe(1);
 
@@ -84,7 +84,7 @@ describe("menu", () => {
     expect(await logs("menu.takedown")).toBe(1);
     await request(app).get(`/api/v1/menus/${s.menu2}`).expect(404);
     const aktifkan = () =>
-      request(app).patch(`/api/v1/merchant/menus/${s.menu2}`).set(H(s.tA)).send({ is_active: true });
+      request(app).patch(`/api/v1/merchant/menus/${s.menu2}`).set(H(s.tokenA)).send({ is_active: true });
     expect((await aktifkan().expect(409)).body.error.message).toBe(
       "Menu ini diturunkan admin: Foto melanggar. Hubungi admin untuk memulihkan.",
     );
@@ -138,14 +138,14 @@ describe("menu", () => {
     const foto = `https://foto.test/merchants/${s.idA}/menu/n.jpg`;
     await db.query("UPDATE menus SET gallery = ? WHERE id = ?", [JSON.stringify([foto]), s.menu]);
     await adm("post", `/menus/${s.menu}/photos/remove`, { url: foto, reason: "Foto buram" }).expect(200);
-    const r = (await request(app).get("/api/v1/me/notifications?type=moderation").set(H(s.tA)).expect(200)).body;
+    const r = (await request(app).get("/api/v1/me/notifications?type=moderation").set(H(s.tokenA)).expect(200)).body;
     expect(r.data[0]).toMatchObject({ type: "moderation", title: "Foto menu dihapus admin" });
     expect(r.data[0].body).toContain("Foto buram");
     expect(r.data[0].body).toContain(String(((await menuRow(s.menu)) as { name: string }).name));
     expect(r.meta.unread_count).toBeGreaterThan(0);
     // penjual lain tidak menerima
     expect(
-      (await request(app).get("/api/v1/me/notifications?type=moderation").set(H(s.tB)).expect(200)).body.data,
+      (await request(app).get("/api/v1/me/notifications?type=moderation").set(H(s.tokenB)).expect(200)).body.data,
     ).toEqual([]);
   });
 

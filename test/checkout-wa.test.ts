@@ -4,15 +4,15 @@ import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { pembeliBaru, siapCheckout } from "./helpers/merchant";
+import { createCustomer, prepareCheckout } from "./helpers/merchant";
 
 // F06 Task 6: GET /orders/:code/whatsapp (C-13, D15)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const pesan = async (o: Record<string, unknown> = {}) => {
   const r = await request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Authorization", `Bearer ${s.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({
       items: [
@@ -26,12 +26,12 @@ const pesan = async (o: Record<string, unknown> = {}) => {
     .expect(201);
   return r.body.data.code as string;
 };
-const wa = (code: string, token = s.tCust) =>
+const wa = (code: string, token = s.customerToken) =>
   request(app).get(`/api/v1/orders/${code}/whatsapp`).set("Authorization", `Bearer ${token}`);
 const teks = (url: string) => decodeURIComponent(url.split("text=")[1]);
 
 beforeEach(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
 });
 
 test("pesan tetap bersuara pembeli, tautan wa.me 62…", async () => {
@@ -87,7 +87,7 @@ test("ambil bukan hari ini → tanggal ikut ditulis", async () => {
 
 test("pembeli lain 404, penjual 403", async () => {
   const code = await pesan();
-  const r = await wa(code, await pembeliBaru(1)).expect(404);
+  const r = await wa(code, await createCustomer(1)).expect(404);
   expect(r.body.error.message).toBe("Pesanan tidak ditemukan.");
-  await wa(code, s.tA).expect(403);
+  await wa(code, s.tokenA).expect(403);
 });

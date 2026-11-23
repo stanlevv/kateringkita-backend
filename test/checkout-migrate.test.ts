@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from "vitest";
 import db from "../src/config/db";
-import { siapkanToko } from "./helpers/merchant";
+import { prepareMerchants } from "./helpers/merchant";
 
 // F06 Task 1 (BE-03, D17): orders.stock_date + tabel idempotensi per pengguna
 describe("migrasi 003_checkout", () => {
@@ -8,7 +8,7 @@ describe("migrasi 003_checkout", () => {
   let siti: number;
 
   beforeAll(async () => {
-    await siapkanToko();
+    await prepareMerchants();
     const [u] = await db.query<any[]>("SELECT id, full_name FROM users WHERE full_name IN ('Budi','Siti')");
     budi = u.find((r) => r.full_name === "Budi").id;
     siti = u.find((r) => r.full_name === "Siti").id;

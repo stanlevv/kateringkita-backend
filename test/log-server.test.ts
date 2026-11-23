@@ -8,10 +8,10 @@ import { recordServerLog, requestId } from "../src/middleware/request-logger";
 import { createAdmin } from "../src/scripts/create-admin";
 import { bersihkanLog } from "../src/services/log-server.service";
 import { AppError } from "../src/utils/errors";
-import { login, siapkanToko } from "./helpers/merchant";
+import { login, prepareMerchants } from "./helpers/merchant";
 
 // F23 log server: 5xx & request lambat tercatat (fire-and-forget), dashboard admin, pembersihan > 30 hari
-let s: Awaited<ReturnType<typeof siapkanToko>>;
+let s: Awaited<ReturnType<typeof prepareMerchants>>;
 let tAdmin = "";
 const uji = express()
   .use(requestId, recordServerLog)
@@ -40,7 +40,7 @@ async function tungguLog(rid: string) {
 }
 
 beforeAll(async () => {
-  s = await siapkanToko();
+  s = await prepareMerchants();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   tAdmin = await login("081300000009");
 });
@@ -100,7 +100,7 @@ describe("dashboard admin", () => {
     expect(st.per_jam).toHaveLength(24);
     expect(st.ringkas_24j.error).toBeGreaterThanOrEqual(2);
     expect(st.ringkas_24j.lambat).toBeGreaterThanOrEqual(1);
-    await request(app).get("/api/v1/admin/server-status").set("Authorization", `Bearer ${s.tA}`).expect(403);
+    await request(app).get("/api/v1/admin/server-status").set("Authorization", `Bearer ${s.tokenA}`).expect(403);
   });
 
   test("urut waktu terbaru dulu, bukan id (AUTO_INCREMENT TiDB tidak urut antar-node)", async () => {

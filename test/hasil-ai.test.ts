@@ -4,10 +4,10 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
 import { simpanHasil } from "../src/services/hasil-ai.service";
-import { login, siapkanToko } from "./helpers/merchant";
+import { login, prepareMerchants } from "./helpers/merchant";
 
 // Rubrik AI: hasil AI tersimpan tampil di panel admin web dan diverifikasi manual (setujui / tolak + catatan), diaudit.
-let s: Awaited<ReturnType<typeof siapkanToko>>;
+let s: Awaited<ReturnType<typeof prepareMerchants>>;
 let tSuper: string, tOps: string, tSupport: string, opsId: number, budi: number, siti: number;
 const daftar = (q = "", t = tSuper) =>
   request(app).get(`/api/v1/admin/hasil-ai${q}`).set("Authorization", `Bearer ${t}`);
@@ -21,7 +21,7 @@ const audit = async () =>
   )[0] as any[];
 
 beforeAll(async () => {
-  s = await siapkanToko();
+  s = await prepareMerchants();
   await createAdmin({ phone: "081300000009", fullName: "Admin Super", password: "rahasia123" });
   opsId = (await createAdmin({ phone: "081300000010", fullName: "Admin Ops", password: "rahasia123" })).id;
   await createAdmin({ phone: "081300000011", fullName: "Admin Support", password: "rahasia123" });
@@ -136,8 +136,8 @@ describe("PATCH /admin/hasil-ai/:id", () => {
     const { a } = await isi();
     await daftar("", tSupport).expect(200);
     await verif(a, { status: "disetujui" }, tSupport).expect(403);
-    await daftar("", s.tA).expect(403);
-    await daftar("", s.tCust).expect(403);
+    await daftar("", s.tokenA).expect(403);
+    await daftar("", s.customerToken).expect(403);
     await verif(a, { status: "disetujui" }, tSuper).expect(200);
   });
 });

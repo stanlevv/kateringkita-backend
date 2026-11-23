@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { menuRow, siapCheckout, sisipMenu, tampilkan } from "./helpers/merchant";
+import { menuRow, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F06 Task 2: POST /orders/quote (C-09, R-07, R-13, R-14, D1–D3, D10, D13)
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 
-const quote = (body: unknown, token = s.tCust) =>
+const quote = (body: unknown, token = s.customerToken) =>
   request(app)
     .post("/api/v1/orders/quote")
     .set("Authorization", `Bearer ${token}`)
@@ -32,7 +32,7 @@ const wib = (d: number, jam = "10:00") =>
   `${getWibDate(new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + d * 86400e3))}T${jam}:00+07:00`;
 
 beforeEach(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
 });
 
 test("harga dihitung server: opsi + biaya layanan, field harga client diabaikan, tanpa angka internal", async () => {
@@ -127,7 +127,7 @@ describe("validasi body (zod)", () => {
 test("body bukan objek / kosong → pesan Indonesia", async () => {
   // primitif JSON sudah ditolak express.json (strict) dengan "Format JSON tidak valid."
   for (const body of [undefined, "[1,2]"]) {
-    const req = request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${s.tCust}`);
+    const req = request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${s.customerToken}`);
     const r = await (body === undefined ? req : req.set("Content-Type", "application/json").send(body)).expect(400);
     expect(r.body.error).toEqual({
       code: "VALIDATION_ERROR",
@@ -146,15 +146,15 @@ test("total melewati batas angka → 400 items", async () => {
 
 describe("urutan validasi D3", () => {
   test("menu nonaktif / terhapus / tidak ada → items.0.menu_id", async () => {
-    const mati = await sisipMenu(s.idA, { is_active: false });
-    const hapus = await sisipMenu(s.idA, { deleted_at: new Date() });
+    const mati = await insertMenu(s.idA, { is_active: false });
+    const hapus = await insertMenu(s.idA, { deleted_at: new Date() });
     for (const id of [mati, hapus, 99999])
       await tolak400(satu({}, { menu_id: id }), "items.0.menu_id", "Menu tidak tersedia.");
   });
 
   test("menu dari dua toko → items", async () => {
-    await tampilkan(s.idB);
-    const mB = await sisipMenu(s.idB);
+    await makeVisible(s.idB);
+    const mB = await insertMenu(s.idB);
     await tolak400(
       {
         items: [
@@ -173,7 +173,7 @@ describe("urutan validasi D3", () => {
       await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [st, s.idA]);
       await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
     }
-    await tampilkan(s.idA);
+    await makeVisible(s.idA);
     await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [
       s.idA,
     ]);
@@ -183,7 +183,7 @@ describe("urutan validasi D3", () => {
   test("R-13: saklar mati / di luar jam → MERCHANT_CLOSED dengan jam buka", async () => {
     await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [s.idA]);
     await tolak409(satu(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 07.00–16.00 WIB.");
-    await tampilkan(s.idA, { buka: false });
+    await makeVisible(s.idA, { open: false });
     await tolak409(satu(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.");
     // dua galat sekaligus: toko tutup menang atas titik temu salah
     await tolak409(satu({ pickup_point_id: 2 }), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.");
@@ -235,5 +235,5 @@ describe("pickup_at (D13)", () => {
 
 test("auth: tanpa token 401, penjual 403", async () => {
   await request(app).post("/api/v1/orders/quote").send(satu()).expect(401);
-  await quote(satu(), s.tA).expect(403);
+  await quote(satu(), s.tokenA).expect(403);
 });

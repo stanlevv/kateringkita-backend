@@ -3,21 +3,22 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { menuRow, pembeliBaru, siapCheckout, sisipMenu } from "./helpers/merchant";
+import { menuRow, createCustomer, prepareCheckout, insertMenu } from "./helpers/merchant";
 
 // F13: POST /orders/:code/reviews + GET /merchant/reviews + rating menu/toko + can_review
-let s: Awaited<ReturnType<typeof siapCheckout>>;
+let s: Awaited<ReturnType<typeof prepareCheckout>>;
 let kode: string;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-const ulas = (items: object[], code = kode, t = s.tCust) =>
+const ulas = (items: object[], code = kode, t = s.customerToken) =>
   request(app).post(`/api/v1/orders/${code}/reviews`).set(H(t)).send({ items });
-const detail = async () => (await request(app).get(`/api/v1/orders/${kode}`).set(H(s.tCust)).expect(200)).body.data;
+const detail = async () =>
+  (await request(app).get(`/api/v1/orders/${kode}`).set(H(s.customerToken)).expect(200)).body.data;
 
 beforeAll(async () => {
-  s = await siapCheckout();
+  s = await prepareCheckout();
   const r = await request(app)
     .post("/api/v1/orders")
-    .set(H(s.tCust))
+    .set(H(s.customerToken))
     .set("Idempotency-Key", randomUUID())
     .send({
       items: [
@@ -41,7 +42,7 @@ describe("kirim ulasan", () => {
     );
     expect((await detail()).can_review).toBe(false);
     for (const a of ["confirm", "cook", "ready", "complete"]) {
-      await request(app).post(`/api/v1/merchant/orders/${kode}/${a}`).set(H(s.tA)).expect(200);
+      await request(app).post(`/api/v1/merchant/orders/${kode}/${a}`).set(H(s.tokenA)).expect(200);
     }
     expect((await detail()).can_review).toBe(true);
   });
@@ -50,11 +51,11 @@ describe("kirim ulasan", () => {
     expect((await ulas([{ menu_id: s.menu, rating: 6 }]).expect(400)).body.error.fields).toEqual({
       "items.0.rating": ["Rating harus 1–5."],
     });
-    const lain = await sisipMenu(s.idA, { name: "Lain" });
+    const lain = await insertMenu(s.idA, { name: "Lain" });
     expect((await ulas([{ menu_id: lain, rating: 5 }]).expect(409)).body.error.fields).toEqual({
       "items.0.menu_id": ["Menu tidak ada di pesanan ini."],
     });
-    await ulas([{ menu_id: s.menu, rating: 5 }], kode, await pembeliBaru(1)).expect(404);
+    await ulas([{ menu_id: s.menu, rating: 5 }], kode, await createCustomer(1)).expect(404);
   });
 
   test("ulasan menghitung rating menu & toko; can_review mati setelah semua diulas; ganda ditolak", async () => {
@@ -78,7 +79,7 @@ describe("kirim ulasan", () => {
 
 describe("GET /merchant/reviews", () => {
   test("ulasan toko sendiri, terbaru dulu, sesuai tipe Review fe", async () => {
-    const r = await request(app).get("/api/v1/merchant/reviews").set(H(s.tA)).expect(200);
+    const r = await request(app).get("/api/v1/merchant/reviews").set(H(s.tokenA)).expect(200);
     expect(r.body.data).toHaveLength(2);
     expect(r.body.data.find((x: { menu_id: number }) => x.menu_id === s.menu)).toMatchObject({
       menu_name: "Nasi Ayam",
@@ -95,6 +96,6 @@ describe("GET /merchant/reviews", () => {
       "menu_name",
       "rating",
     ]);
-    expect((await request(app).get("/api/v1/merchant/reviews").set(H(s.tB)).expect(200)).body.data).toEqual([]);
+    expect((await request(app).get("/api/v1/merchant/reviews").set(H(s.tokenB)).expect(200)).body.data).toEqual([]);
   });
 });

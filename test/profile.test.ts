@@ -6,7 +6,7 @@ import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
 import { loginLimiter, passwordLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
-import { fotoUrl, isiR2 } from "./helpers/merchant";
+import { photoUrl, setR2Env } from "./helpers/merchant";
 
 let customerToken: string;
 let merchantToken: string;
@@ -200,15 +200,15 @@ test("register & login menyertakan avatar_url dan favorite_pickup_point_id null"
 
 // F04 D10/D15: avatar hanya dari unggahan milik pengguna sendiri (dulu diabaikan, F02 D1 dicabut)
 test("avatar_url: unggahan sendiri diterima, null mengosongkan, selain itu 400", async () => {
-  isiR2();
+  setR2Env();
   const [[c]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
   const [[m]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'siti@mail.com'");
-  const url = fotoUrl(`users/${c.id}/avatar/`, "webp");
+  const url = photoUrl(`users/${c.id}/avatar/`, "webp");
   expect((await patch({ avatar_url: url }, customerToken)).body.data.user.avatar_url).toBe(url);
   const uuid = "0b9a4b7e-1f3e-4c55-9d1a-2f6a0e3c9b11";
   for (const bad of [
     "https://x",
-    fotoUrl(`users/${m.id}/avatar/`),
+    photoUrl(`users/${m.id}/avatar/`),
     `https://foto.test/users/${c.id}/avatar/../${m.id}/avatar/${uuid}.png`,
     `https://foto.test/users/${c.id}/avatar/${uuid}.png?x=1`,
   ]) {
@@ -225,5 +225,5 @@ test("avatar_url: unggahan sendiri diterima, null mengosongkan, selain itu 400",
 });
 
 afterEach(() => {
-  isiR2(false);
+  setR2Env(false);
 });
