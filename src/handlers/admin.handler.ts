@@ -12,6 +12,7 @@ import { parse } from "../middleware/validate";
 import { daftarMenuAdmin, daftarUlasanAdmin, hapusFotoMenu, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
 import { buatAdmin, daftarAdmin, resetSandiAdmin, setAktifAdmin, ubahLevel } from "../services/admin-akun.service";
 import { AppError } from "../utils/errors";
+import { ambilPemeliharaan, ubahPemeliharaan } from "../services/pemeliharaan.service";
 
 const angka = (v: unknown, def: number, max: number) => {
   const n = Math.floor(Number(v));
@@ -79,7 +80,11 @@ export const setAktifPromoHandler = (aktif: boolean): RequestHandler => async (r
   res.json({ data: await setAktifPromo(adminId(req), req.params.id, aktif) });
 };
 export const ambilBiayaHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: { service_fee: await ambilBiaya(), cs_whatsapp: await ambilKontakCs() } });
+  res.json({ data: { service_fee: await ambilBiaya(), cs_whatsapp: await ambilKontakCs(), maintenance: await ambilPemeliharaan() } });
+};
+// F27 (body divalidasi pemeliharaanSchema)
+export const ubahPemeliharaanHandler: RequestHandler = async (req, res) => {
+  res.json({ data: { maintenance: await ubahPemeliharaan(adminId(req), req.body) } });
 };
 export const ubahBiayaHandler: RequestHandler = async (req, res) => {
   res.json({ data: await ubahBiaya(adminId(req), req.body) });

@@ -15,6 +15,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { catatLogServer, requestId, requestLogger } from './middleware/requestLogger';
 import { healthHandler } from './handlers/health.handler';
 import { env } from './config/env';
+import { pemeliharaan } from './middleware/pemeliharaan';
 
 const app: Application = express();
 
@@ -33,6 +34,9 @@ if (env.NODE_ENV !== 'test') {
 }
 
 app.get('/api/v1/health', healthHandler);
+
+// F27: saat mode pemeliharaan aktif semua rute selain pengecualian (admin, login, webhook, dll.) dibalas 503
+app.use(pemeliharaan);
 
 // admin dipasang sebelum v1; path admin tak dikenal: tanpa token 401, bukan admin 403, admin 404 (notFound)
 app.use('/api/v1/admin', requireAuth, requireRole('admin'), aksesAdmin, admin);

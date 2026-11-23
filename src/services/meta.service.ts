@@ -1,5 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
+import { ambilPemeliharaan } from "./pemeliharaan.service";
 
 // Data referensi publik (jenis usaha, kategori, titik ambil, pengaturan)
 
@@ -21,5 +22,5 @@ export async function daftarTitikTemu() {
 export async function ambilPengaturan() {
   const [rows] = await db.query<RowDataPacket[]>("SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('service_fee', 'timezone', 'cs_whatsapp')");
   const s = Object.fromEntries(rows.map((r) => [r.setting_key, r.setting_value]));
-  return { service_fee: Number(s.service_fee), timezone: s.timezone, cs_whatsapp: s.cs_whatsapp || null };
+  return { service_fee: Number(s.service_fee), timezone: s.timezone, cs_whatsapp: s.cs_whatsapp || null, maintenance: await ambilPemeliharaan() };
 }
