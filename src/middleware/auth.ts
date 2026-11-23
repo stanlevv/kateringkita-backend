@@ -20,7 +20,7 @@ export type AuthedRequest = Request & {
 const unauthenticated = () => new AppError(401, "UNAUTHENTICATED", "Silakan masuk terlebih dahulu.");
 
 // Sesi dari header Bearer; null bila tidak ada/tidak valid/kadaluarsa/dicabut (galat DB tetap dilempar)
-export async function bacaSesi(req: Request): Promise<AuthedRequest["auth"] | null> {
+export async function getSession(req: Request): Promise<AuthedRequest["auth"] | null> {
   const header = req.get("authorization") ?? "";
   if (!header.startsWith("Bearer ")) return null;
 
@@ -48,17 +48,17 @@ export async function bacaSesi(req: Request): Promise<AuthedRequest["auth"] | nu
 }
 
 export const requireAuth: RequestHandler = async (req, _res, next) => {
-  const auth = await bacaSesi(req);
+  const auth = await getSession(req);
   if (!auth) throw unauthenticated();
   (req as AuthedRequest).auth = auth;
   next();
 };
 
 // D14 (F05): katalog publik membaca sesi bila ada, tanpa pernah 401; galat DB saat membaca sesi → tamu
-export const authOpsional: RequestHandler = async (req, _res, next) => {
-  const auth = await bacaSesi(req).catch((err) => {
+export const optionalAuth: RequestHandler = async (req, _res, next) => {
+  const auth = await getSession(req).catch((error) => {
     // hanya pesan: objek galat mysql2 membawa SQL berisi jti sesi
-    console.error("Gagal membaca sesi:", err instanceof Error ? err.message : err);
+    console.error("Gagal membaca sesi:", error instanceof Error ? error.message : error);
     return null;
   });
   if (auth) (req as AuthedRequest).auth = auth;

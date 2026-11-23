@@ -106,7 +106,7 @@ export const setAktifAdmin = (actorId: number, id: unknown, aktif: boolean) =>
   ubah(actorId, id, aktif ? "admin.activate" : "admin.deactivate", async (conn, t) => {
     if (!aktif) await jagaSuperTerakhir(conn, t);
     await conn.query("UPDATE users SET is_active = ? WHERE id = ?", [aktif, t.id]);
-    // bacaSesi sudah menolak user nonaktif; sesi tetap dicabut agar tidak hidup lagi saat diaktifkan ulang
+    // getSession sudah menolak user nonaktif; sesi tetap dicabut agar tidak hidup lagi saat diaktifkan ulang
     if (!aktif)
       await conn.query(
         "UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL",

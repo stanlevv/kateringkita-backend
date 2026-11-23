@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { uploadLimiter } from "../src/middleware/rate-limiter";
-import { presignPut, r2Config, sigv4Query } from "../src/utils/r2";
+import { presignPut, getR2Config, presignSigV4Url } from "../src/utils/r2";
 import { R2_UJI, isiR2, siapkanToko } from "./helpers/toko";
 
 describe("SigV4 (D11)", () => {
   test("vektor resmi AWS: GET test.txt presigned 86400 detik", () => {
-    const url = sigv4Query({
+    const url = presignSigV4Url({
       method: "GET",
       host: "examplebucket.s3.amazonaws.com",
       path: "/test.txt",
@@ -70,7 +70,7 @@ describe("endpoint unggah (D12–D14)", () => {
 
   test("R2 kosong → 503 di kedua endpoint", async () => {
     isiR2(false);
-    expect(r2Config()).toBeNull();
+    expect(getR2Config()).toBeNull();
     for (const [t, u, b] of [
       [tA, "/merchant/uploads", MENU],
       [tCust, "/me/avatar", { content_type: "image/png", size: 10 }],

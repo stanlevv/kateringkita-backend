@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
-import { fieldsDari, parse } from "../middleware/validate";
+import { fieldsFromIssues, parse } from "../middleware/validate";
 import { Conn, catat, dalamTransaksi, kunci, withBool } from "./admin-audit.service";
 
 const bulat = (label: string, min: number) =>
@@ -71,7 +71,7 @@ export function rapikan(input: unknown, terpakai: number, cekKode = false) {
     else fields.code = c.error.issues.map((i) => i.message);
   }
   const r = skema(terpakai).safeParse(pick);
-  if (!r.success) Object.assign(fields, fieldsDari(r.error.issues));
+  if (!r.success) Object.assign(fields, fieldsFromIssues(r.error.issues));
   if (Object.keys(fields).length || !r.success)
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
   const d = r.data;

@@ -3,7 +3,7 @@ import { kuotaSchema, menuQuerySchema } from "../dto/merchant-menu.dto";
 import { merchantOrdersQuerySchema } from "../dto/merchant-order.dto";
 import { rentangSchema, tanggalSchema } from "../dto/merchant-laporan.dto";
 import { AuthedRequest } from "../middleware/auth";
-import { fieldsDari, parse } from "../middleware/validate";
+import { fieldsFromIssues, parse } from "../middleware/validate";
 import {
   ambilMenu,
   buatMenu,
@@ -69,7 +69,7 @@ export const ubahKuotaHandler: RequestHandler = async (req, res) => {
   const r = kuotaSchema.safeParse(req.body);
   if (!r.success) {
     // galat lintas-field (path kosong) tidak punya field; galat per field tetap di fields
-    const fields = fieldsDari(r.error.issues.filter((i) => i.path.length > 0));
+    const fields = fieldsFromIssues(r.error.issues.filter((i) => i.path.length > 0));
     throw new AppError(
       400,
       "VALIDATION_ERROR",

@@ -7,7 +7,7 @@ import { createAdmin } from "../src/scripts/create-admin";
 import { ai } from "../src/services/ai.service";
 import { bersihkanLog } from "../src/services/log-server.service";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
-import { dekripsi } from "../src/utils/crypto";
+import { decrypt } from "../src/utils/crypto";
 import { login, siapkanToko } from "./helpers/toko";
 
 // F22 AI gateway: penyedia dikelola admin, key terenkripsi & tak pernah keluar, fallback berurutan dengan istirahat
@@ -78,7 +78,7 @@ describe("admin mengelola penyedia AI", () => {
     expect(JSON.stringify(r.body)).not.toContain("rahasia");
     const b = await baris(r.body.data.id);
     expect(b.api_key_enc).not.toContain("rahasia");
-    expect(dekripsi(b.api_key_enc)).toBe("gsk_rahasia_1234567890ABCD");
+    expect(decrypt(b.api_key_enc)).toBe("gsk_rahasia_1234567890ABCD");
     const [[log]] = await db.query<any[]>(
       "SELECT action, after_json FROM admin_audit_logs WHERE target_type = 'ai_provider'",
     );

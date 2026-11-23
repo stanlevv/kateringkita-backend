@@ -2,7 +2,7 @@
 // Lapis kode ini melengkapi aturan di prompt ("data, bukan instruksi"): permintaan yang jelas mencoba
 // mengambil alih AI ditolak sebelum dikirim, dan data pribadi diganti penanda sebelum keluar ke penyedia AI.
 
-const POLA_INJEKSI: RegExp[] = [
+const INJECTION_PATTERNS: RegExp[] = [
   // "abaikan/lupakan … instruksi/perintah/prompt" atau "… aturan sebelumnya/di atas/sistem"
   /\b(abaikan|lupakan|acuhkan|hiraukan)\b.{0,40}\b(instruksi|perintah|prompt|aturan\s+(di\s*atas|sebelumnya|sistem))/i,
   /\b(ignore|disregard|forget|override)\b.{0,40}\b(instructions?|prompts?|rules?)\b/i,
@@ -18,40 +18,40 @@ const POLA_INJEKSI: RegExp[] = [
 ];
 
 /** true bila teks berisi pola percobaan prompt injection. */
-export const adaInjeksi = (teks: string): boolean => POLA_INJEKSI.some((p) => p.test(teks));
+export const hasInjection = (text: string): boolean => INJECTION_PATTERNS.some((pattern) => pattern.test(text));
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
-const NIK = /(?<!\d)\d{16}(?!\d)/g;
+const EMAIL_PATTERN = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
+const NIK_PATTERN = /(?<!\d)\d{16}(?!\d)/g;
 // 08…, 62 8…, +62 8…; pemisah spasi/titik/strip. Panjang angka dicek di bawah (9–15 digit).
-const TELEPON = /(?<![\d\p{L}])(\+?62|0)[\s.-]?8\d{1,3}([\s.-]?\d{2,5}){1,4}(?!\d)/gu;
+const PHONE_PATTERN = /(?<![\d\p{L}])(\+?62|0)[\s.-]?8\d{1,3}([\s.-]?\d{2,5}){1,4}(?!\d)/gu;
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Ganti data pribadi dengan penanda: email → [email], NIK → [nik], nomor HP → [nomor],
  * dan kata dari nama yang diketahui (≥ 3 huruf) → [nama].
  */
-export function samarkan(teks: string, o: { nama?: string[] } = {}): string {
-  let hasil = teks
-    .replace(EMAIL, "[email]")
-    .replace(NIK, "[nik]")
-    .replace(TELEPON, (m) => {
-      const digit = m.replace(/\D/g, "").length;
-      return digit >= 9 && digit <= 15 ? "[nomor]" : m;
+export function anonymize(text: string, options: { names?: string[] } = {}): string {
+  let result = text
+    .replace(EMAIL_PATTERN, "[email]")
+    .replace(NIK_PATTERN, "[nik]")
+    .replace(PHONE_PATTERN, (match) => {
+      const digitCount = match.replace(/\D/g, "").length;
+      return digitCount >= 9 && digitCount <= 15 ? "[nomor]" : match;
     });
-  const kata = [
+  const nameWords = [
     ...new Set(
-      (o.nama ?? [])
-        .flatMap((n) => n.split(/\s+/))
-        .map((k) => k.trim())
-        .filter((k) => k.length >= 3),
+      (options.names ?? [])
+        .flatMap((fullName) => fullName.split(/\s+/))
+        .map((word) => word.trim())
+        .filter((word) => word.length >= 3),
     ),
   ];
-  if (kata.length) {
-    hasil = hasil.replace(
-      new RegExp(`(?<![\\p{L}\\p{N}])(${kata.map(escape).join("|")})(?![\\p{L}\\p{N}])`, "giu"),
+  if (nameWords.length) {
+    result = result.replace(
+      new RegExp(`(?<![\\p{L}\\p{N}])(${nameWords.map(escapeRegex).join("|")})(?![\\p{L}\\p{N}])`, "giu"),
       "[nama]",
     );
   }
-  return hasil;
+  return result;
 }

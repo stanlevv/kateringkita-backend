@@ -2,7 +2,14 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { env } from "../config/env";
 import { AppError } from "../utils/errors";
-import { BankVa, buatQrisMidtrans, buatSnap, buatVaMidtrans, notifikasiSah, statusMidtrans } from "../utils/midtrans";
+import {
+  VaBank,
+  createMidtransQris,
+  createSnapPayment,
+  createMidtransVa,
+  isValidNotification,
+  getMidtransStatus,
+} from "../utils/midtrans";
 import { dalamTransaksi } from "./admin-audit.service";
 import { getMyOrder } from "./order.service";
 import { transitionOrder } from "./order-status.service";
@@ -34,7 +41,7 @@ export async function bukaSnap(o: RowDataPacket, code: string, kembali?: string)
   // menit dibulatkan ke bawah: halaman bayar tutup sebelum hold habis
   const menit = Number(o.menit);
   if (menit < 1) throw konflik("Batas waktu pesanan sudah habis.");
-  const { redirect_url } = await buatSnap(code, o.total, menit, kembali);
+  const { redirect_url } = await createSnapPayment(code, o.total, menit, kembali);
   await db.query(
     `INSERT INTO payments (order_id, method, provider, amount, status, expires_at, redirect_url)
      VALUES (?, 'online', 'midtrans', ?, 'pending', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?)`,
@@ -72,7 +79,7 @@ export async function buatQris(userId: number, code: string) {
     // menit dibulatkan ke bawah: QR kedaluwarsa sebelum hold habis
     const menit = Number(o.menit);
     if (menit < 1) throw konflik("Batas waktu pesanan sudah habis.");
-    const q = await buatQrisMidtrans(code, o.total, menit);
+    const q = await createMidtransQris(code, o.total, menit);
     try {
       await db.query(
         `INSERT INTO payments (order_id, method, provider, provider_ref, qr_string, redirect_url, amount, status, expires_at)
@@ -91,7 +98,7 @@ export async function buatQris(userId: number, code: string) {
 // F10: VA untuk pesanan VA milik pembeli yang masih holding. Midtrans dipanggil di luar transaksi agar kunci tidak ditahan
 // selama HTTP; idempoten: VA yang sudah ada dikembalikan.
 // shortcut: satu VA per pesanan (bank pertama dipakai); ganti bank butuh order_id Midtrans baru, tambahkan bila diminta
-export async function buatVa(userId: number, code: string, bank: BankVa) {
+export async function buatVa(userId: number, code: string, bank: VaBank) {
   const [[o]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.total, o.status, o.payment_method, o.payment_status, TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), o.hold_until) AS menit,
        EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'va') AS ada
@@ -106,7 +113,7 @@ export async function buatVa(userId: number, code: string, bank: BankVa) {
     // menit dibulatkan ke bawah: VA tutup sebelum hold habis, jadi transfer tidak masuk ke pesanan yang sudah lewat waktu
     const menit = Number(o.menit);
     if (menit < 1) throw konflik("Batas waktu pesanan sudah habis.");
-    const va = await buatVaMidtrans(code, o.total, bank, menit);
+    const va = await createMidtransVa(code, o.total, bank, menit);
     try {
       await db.query(
         `INSERT INTO payments (order_id, method, provider, provider_ref, bank, va_number, amount, status, expires_at)
@@ -134,13 +141,13 @@ const STATUS: Record<string, "paid" | "expired" | "failed"> = {
 // settlement → transisi pay oleh sistem (holding → confirmed, stok terjual, notifikasi pembeli) lalu payments lunas.
 // Notifikasi berulang aman: baris yang sudah lunas atau sudah di-refund tidak disentuh (AUD-24), transisi kedua ditolak 409.
 export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Promise<void> {
-  if (!notifikasiSah(n)) throw new AppError(403, "FORBIDDEN", "Tanda tangan notifikasi tidak sah.");
+  if (!isValidNotification(n)) throw new AppError(403, "FORBIDDEN", "Tanda tangan notifikasi tidak sah.");
   if (!STATUS[String(n.transaction_status)]) return; // pending: belum ada yang berubah
   const code = String(n.order_id);
   // AUD-23: signature hanya mencakup order_id + status_code + gross_amount; transaction_status bisa diganti pada body
   // bertanda tangan yang bocor → status, nominal, dan transaction_id diambil dari Get Status Midtrans, bukan dari body.
   // Midtrans tidak terjangkau → 502 → Midtrans mengirim ulang notifikasi nanti.
-  const s = await statusMidtrans(code);
+  const s = await getMidtransStatus(code);
   const baru = STATUS[String(s.transaction_status)];
   if (!baru || String(s.order_id) !== code) return;
   await dalamTransaksi(async (conn) => {

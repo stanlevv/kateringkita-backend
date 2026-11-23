@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { asistenLimiter } from "../src/middleware/rate-limiter";
+import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
 import { kataKunci } from "../src/services/rekomendasi.service";
 import { AppError } from "../src/utils/errors";
@@ -54,7 +54,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   bekukanJam();
-  asistenLimiter.reset();
+  assistantLimiter.reset();
 });
 afterEach(() => vi.restoreAllMocks());
 

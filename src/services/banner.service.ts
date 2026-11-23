@@ -12,7 +12,7 @@ import {
   ubahBannerTokoSchema,
 } from "../dto/banner.dto";
 import { AppError } from "../utils/errors";
-import { PRESIGN_DETIK } from "../utils/r2";
+import { PRESIGN_SECONDS } from "../utils/r2";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { jam } from "./katalog.service";
 import { idToko } from "./merchant-menu.service";
@@ -239,7 +239,7 @@ const AKSI: Record<string, string> = {
   nonaktif: "banner.deactivate",
 };
 // masa berlaku presign + 1 menit toleransi selisih jam
-const JEDA_SETUJUI_DETIK = PRESIGN_DETIK + 60;
+const JEDA_SETUJUI_DETIK = PRESIGN_SECONDS + 60;
 
 /** Status (setujui / tolak + alasan / nonaktifkan) & urutan untuk semua banner; isi hanya untuk banner platform. */
 export async function tinjauBanner(adminId: number, idRaw: unknown, body: unknown) {

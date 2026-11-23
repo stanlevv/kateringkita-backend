@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { tiketLimiter } from "../src/middleware/rate-limiter";
+import { ticketLimiter } from "../src/middleware/rate-limiter";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { kodeTiket } from "../src/services/tiket.service";
 import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
@@ -92,7 +92,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.query("DELETE FROM support_tickets");
-  tiketLimiter.reset();
+  ticketLimiter.reset();
 });
 afterAll(() => {
   vi.restoreAllMocks();

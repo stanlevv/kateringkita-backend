@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test, vi } from "vitest";
 import mysql from "mysql2/promise";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
-import { hostLokal, jalankan } from "../src/scripts/seed-demo";
+import { isLocalHost, run } from "../src/scripts/seed-demo";
 import { resetTestDatabase } from "./helpers/db";
 
 describe("seed demo (F18)", () => {
@@ -20,20 +20,20 @@ describe("seed demo (F18)", () => {
 
   test("menolak di produksi dan tanpa DEMO_PASSWORD", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await jalankan({ NODE_ENV: "production", DEMO_PASSWORD: "rahasia123" })).toBe(1);
-    expect(await jalankan({})).toBe(1);
+    expect(await run({ NODE_ENV: "production", DEMO_PASSWORD: "rahasia123" })).toBe(1);
+    expect(await run({})).toBe(1);
     // sandi lemah ditolak dengan aturan sandi yang sama dengan registrasi (review akhir A2)
-    expect(await jalankan({ DEMO_PASSWORD: "lemah" })).toBe(1);
-    expect(await jalankan({ DEMO_PASSWORD: "hanyahuruf" })).toBe(1);
+    expect(await run({ DEMO_PASSWORD: "lemah" })).toBe(1);
+    expect(await run({ DEMO_PASSWORD: "hanyahuruf" })).toBe(1);
     // DB bukan lokal ditolak kecuali --paksa (review akhir A2)
-    expect(await jalankan({ DEMO_PASSWORD: "rahasia123", DATABASE_URL: "mysql://u:p@db.contoh.com:4000/kk" })).toBe(1);
+    expect(await run({ DEMO_PASSWORD: "rahasia123", DATABASE_URL: "mysql://u:p@db.contoh.com:4000/kk" })).toBe(1);
     err.mockRestore();
     expect(await query("SELECT id FROM merchants")).toHaveLength(0);
   });
 
   test("tanpa admin: 4 penjual dengan status berbeda, tanpa log", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    expect(await jalankan({ DEMO_PASSWORD: "rahasia123" })).toBe(0);
+    expect(await run({ DEMO_PASSWORD: "rahasia123" })).toBe(0);
     log.mockRestore();
     const rows = await query(
       "SELECT verification_status s, verification_note n, suspended_reason r FROM merchants ORDER BY id",
@@ -48,18 +48,18 @@ describe("seed demo (F18)", () => {
   });
 
   test("hostLokal: hanya localhost/127.0.0.1/::1", () => {
-    expect(hostLokal("mysql://root@127.0.0.1:3306/kk")).toBe(true);
-    expect(hostLokal("mysql://root@localhost/kk")).toBe(true);
-    expect(hostLokal("mysql://root@[::1]:3306/kk")).toBe(true);
-    expect(hostLokal("mysql://u:p@gateway01.tidbcloud.com:4000/kk")).toBe(false);
-    expect(hostLokal("bukan url")).toBe(false);
+    expect(isLocalHost("mysql://root@127.0.0.1:3306/kk")).toBe(true);
+    expect(isLocalHost("mysql://root@localhost/kk")).toBe(true);
+    expect(isLocalHost("mysql://root@[::1]:3306/kk")).toBe(true);
+    expect(isLocalHost("mysql://u:p@gateway01.tidbcloud.com:4000/kk")).toBe(false);
+    expect(isLocalHost("bukan url")).toBe(false);
   });
 
   test("diulang setelah ada admin: tidak menggandakan penjual, log dibuat sekali", async () => {
     await createAdmin({ phone: "081300000099", fullName: "Admin Uji", password: "rahasia123" });
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    expect(await jalankan({ DEMO_PASSWORD: "rahasia123" })).toBe(0);
-    expect(await jalankan({ DEMO_PASSWORD: "rahasia123" })).toBe(0);
+    expect(await run({ DEMO_PASSWORD: "rahasia123" })).toBe(0);
+    expect(await run({ DEMO_PASSWORD: "rahasia123" })).toBe(0);
     log.mockRestore();
     expect(await query("SELECT id FROM merchants")).toHaveLength(4);
     expect(await query("SELECT id FROM admin_audit_logs")).toHaveLength(3);

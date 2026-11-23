@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { errorHandler } from "../src/middleware/error-handler";
-import { catatLogServer, requestId } from "../src/middleware/request-logger";
+import { recordServerLog, requestId } from "../src/middleware/request-logger";
 import { createAdmin } from "../src/scripts/create-admin";
 import { bersihkanLog } from "../src/services/log-server.service";
 import { AppError } from "../src/utils/errors";
@@ -14,7 +14,7 @@ import { login, siapkanToko } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapkanToko>>;
 let tAdmin = "";
 const uji = express()
-  .use(requestId, catatLogServer)
+  .use(requestId, recordServerLog)
   .get("/rusak", () => {
     throw new Error("kode pesanan bentrok");
   })

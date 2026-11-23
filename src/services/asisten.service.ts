@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
-import { adaInjeksi, samarkan } from "../utils/safe-prompt";
+import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { ai } from "./ai.service";
 import { simpanHasil } from "./hasil-ai.service";
 import { hariIniWib } from "./merchant-kuota.service";
@@ -67,12 +67,12 @@ async function namaTerkait(merchantId: number, userId: number): Promise<string[]
 
 export async function tanyaAsisten(userId: number, question: string) {
   const merchantId = await idToko(userId);
-  if (adaInjeksi(question)) {
+  if (hasInjection(question)) {
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
       question: ["Pertanyaan berisi perintah yang tidak diizinkan."],
     });
   }
-  const aman = samarkan(question, { nama: await namaTerkait(merchantId, userId) });
+  const aman = anonymize(question, { names: await namaTerkait(merchantId, userId) });
   const hariIni = hariIniWib();
   const rentang = { from: hariSebelum(hariIni, 29), to: hariIni };
   const [[toko]] = await db.query<RowDataPacket[]>(

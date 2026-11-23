@@ -9,16 +9,16 @@ import {
   createTableOrderHandler,
   getGuestOrderHandler,
 } from "../handlers/table.handler";
-import { mejaLimiter } from "../middleware/rate-limiter";
+import { tableOrderLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 /**
  * Router meja (publik, tanpa login). Pesanan tamu dibaca dan dibayar dengan header X-Guest-Token. Membuat pesanan
- * dibatasi `mejaLimiter` (batas jumlah permintaan per token meja dalam waktu tertentu) supaya tidak dibanjiri.
+ * dibatasi `tableOrderLimiter` (batas jumlah permintaan per token meja dalam waktu tertentu) supaya tidak dibanjiri.
  */
 export const table = Router();
 
 table.get("/tables/:token", getTableMenuHandler);
-table.post("/tables/:token/orders", mejaLimiter, validate(tableOrderSchema), createTableOrderHandler);
+table.post("/tables/:token/orders", tableOrderLimiter, validate(tableOrderSchema), createTableOrderHandler);
 table.get("/guest/orders/:code", getGuestOrderHandler);
 table.post("/guest/orders/:code/pay", validate(payGuestOrderSchema), payGuestOrderHandler);

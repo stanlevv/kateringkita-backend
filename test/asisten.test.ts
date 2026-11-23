@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vite
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { asistenLimiter } from "../src/middleware/rate-limiter";
+import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
 import { bekukanJam, pesanDulu, siapCheckout, sisipMenu } from "./helpers/toko";
 
@@ -27,7 +27,7 @@ beforeAll(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  asistenLimiter.reset();
+  assistantLimiter.reset();
   env.GEMINI_API_KEY = undefined;
   await db.query("DELETE FROM ai_results");
 });

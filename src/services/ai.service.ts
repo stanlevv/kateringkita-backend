@@ -2,7 +2,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { env } from "../config/env";
 import { AppError } from "../utils/errors";
-import { dekripsi, enkripsi } from "../utils/crypto";
+import { decrypt, encrypt } from "../utils/crypto";
 import type { AiInput, UbahAiInput } from "../dto/ai.dto";
 import { catat, dalamTransaksi, type Conn } from "./admin-audit.service";
 import { hariIniWib } from "./merchant-kuota.service";
@@ -164,7 +164,7 @@ async function penyedia(): Promise<{ siap: Penyedia[]; ada: boolean }> {
   const siap: Penyedia[] = [];
   for (const r of rows) {
     if (Number(r.istirahat)) continue;
-    const key = dekripsi(r.api_key_enc);
+    const key = decrypt(r.api_key_enc);
     if (key) siap.push({ id: r.id, jenis: r.provider, label: r.label, model: r.model, key });
     else
       await tandaiGagal(
@@ -253,7 +253,7 @@ export const buatAi = (adminId: number, input: AiInput) =>
         input.provider,
         input.label,
         input.model,
-        enkripsi(input.api_key),
+        encrypt(input.api_key),
         input.api_key.slice(-4),
         input.priority,
         input.is_active,
@@ -274,7 +274,7 @@ export const ubahAi = (adminId: number, idRaw: unknown, input: UbahAiInput) =>
       if (input[k] !== undefined) (sets.push(`${k} = ?`), args.push(input[k]));
     }
     if (input.api_key !== undefined)
-      (sets.push("api_key_enc = ?", "key_hint = ?"), args.push(enkripsi(input.api_key), input.api_key.slice(-4)));
+      (sets.push("api_key_enc = ?", "key_hint = ?"), args.push(encrypt(input.api_key), input.api_key.slice(-4)));
     // key/model baru atau diaktifkan lagi = mulai bersih, tidak menunggu istirahat lama
     if (input.api_key !== undefined || input.model !== undefined || input.is_active)
       sets.push("cooldown_until = NULL", "last_error = NULL", "last_error_at = NULL");
@@ -307,7 +307,7 @@ export async function ujiAi(idRaw: unknown) {
     [id],
   );
   if (!r) throw tidakAda();
-  const key = dekripsi(r.api_key_enc);
+  const key = decrypt(r.api_key_enc);
   const p: Penyedia = { id: r.id, jenis: r.provider, label: r.label, model: r.model, key: key ?? "" };
   if (!key) {
     await tandaiGagal(p, "API key tidak bisa dibuka (JWT_SECRET berubah?). Isi ulang key.", 3600);

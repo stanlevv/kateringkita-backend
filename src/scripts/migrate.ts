@@ -20,18 +20,18 @@ export async function migrate(databaseUrl: string, dir = MIGRATIONS_DIR): Promis
       "CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)",
     );
     const [rows] = await conn.query<mysql.RowDataPacket[]>("SELECT name FROM schema_migrations");
-    const done = new Set(rows.map((r) => r.name));
+    const appliedNames = new Set(rows.map((row) => row.name));
     const pending = fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith(".sql") && !done.has(f))
+      .filter((fileName) => fileName.endsWith(".sql") && !appliedNames.has(fileName))
       .sort();
     for (const name of pending) {
       try {
         await conn.query(fs.readFileSync(path.join(dir, name), "utf8"));
-      } catch (err) {
+      } catch (error) {
         // DDL MySQL auto-commit: pernyataan sebelum yang gagal tetap tersimpan
         throw new Error(
-          `Migrasi ${name} gagal: ${(err as Error).message}. Hapus manual objek yang sempat dibuat file ini, lalu jalankan ulang.`,
+          `Migrasi ${name} gagal: ${(error as Error).message}. Hapus manual objek yang sempat dibuat file ini, lalu jalankan ulang.`,
         );
       }
       await conn.query("INSERT INTO schema_migrations (name) VALUES (?)", [name]);
@@ -46,8 +46,8 @@ if (require.main === module) {
   const { env } = require("../config/env");
   migrate(env.DATABASE_URL).then(
     (applied) => console.log(applied.length ? `Diterapkan: ${applied.join(", ")}` : "Tidak ada migrasi baru."),
-    (err) => {
-      console.error(err);
+    (error) => {
+      console.error(error);
       process.exit(1);
     },
   );

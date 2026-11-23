@@ -16,27 +16,27 @@ import { klaimVoucherHandler, voucherPlatformHandler, voucherSayaHandler } from 
 import { bannerPublikHandler } from "../handlers/banner.handler";
 import { popupPublikHandler } from "../handlers/popup.handler";
 import { rekomendasiSchema } from "../dto/rekomendasi.dto";
-import { authOpsional, requireAuth, requireRole } from "../middleware/auth";
-import { asistenLimiter } from "../middleware/rate-limiter";
+import { optionalAuth, requireAuth, requireRole } from "../middleware/auth";
+import { assistantLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 // Katalog publik (C-05, C-06, C-07) + favorit (C-19); dipasang di /api/v1 sebelum v1
 export const katalog = Router();
 
-katalog.get("/menus", authOpsional, daftarKatalogHandler);
+katalog.get("/menus", optionalAuth, daftarKatalogHandler);
 
-katalog.get("/menus/:id", authOpsional, detailMenuHandler);
+katalog.get("/menus/:id", optionalAuth, detailMenuHandler);
 
 katalog.get("/menus/:id/reviews", ulasanMenuHandler);
 
-katalog.get("/merchants/:slug", authOpsional, profilTokoHandler);
+katalog.get("/merchants/:slug", optionalAuth, profilTokoHandler);
 
 // Voucher: daftar voucher platform publik, klaim ke Voucher Saya, Voucher Saya (+ penanda bisa dipakai untuk checkout)
-katalog.get("/vouchers/platform", authOpsional, voucherPlatformHandler);
+katalog.get("/vouchers/platform", optionalAuth, voucherPlatformHandler);
 // Banner beranda yang tayang (maks 8); promo.claimed hanya untuk pembeli login
-katalog.get("/banners", authOpsional, bannerPublikHandler);
+katalog.get("/banners", optionalAuth, bannerPublikHandler);
 // Pop-up promo yang tayang (atau null); promo.claimed hanya untuk pembeli login
-katalog.get("/popup", authOpsional, popupPublikHandler);
+katalog.get("/popup", optionalAuth, popupPublikHandler);
 katalog.post("/me/vouchers/:id/claim", requireAuth, requireRole("customer"), klaimVoucherHandler);
 katalog.get("/me/vouchers", requireAuth, requireRole("customer"), voucherSayaHandler);
 
@@ -59,6 +59,6 @@ katalog.post(
   requireAuth,
   requireRole("customer"),
   validate(rekomendasiSchema),
-  asistenLimiter,
+  assistantLimiter,
   rekomendasiHandler,
 );

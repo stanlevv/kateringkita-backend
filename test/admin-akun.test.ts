@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
 import { loginLimiter } from "../src/middleware/rate-limiter";
-import { bolehAkses } from "../src/middleware/admin-access";
+import { canAccess } from "../src/middleware/admin-access";
 import { resetTestDatabase } from "./helpers/db";
 
 const login = async (identifier: string, password: string) => {
@@ -49,7 +49,7 @@ describe("bolehAkses (tingkat admin)", () => {
     ["support", "POST", "/Broadcasts", false],
     ["support", "POST", "/Tickets/TK-20261113-7QPX/messages", true],
   ] as const)("%s %s %s → %s", (level, method, path, ok) => {
-    expect(bolehAkses(level, method, path)).toBe(ok);
+    expect(canAccess(level, method, path)).toBe(ok);
   });
 });
 

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { tiketLimiter } from "../src/middleware/rate-limiter";
+import { ticketLimiter } from "../src/middleware/rate-limiter";
 import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // Tiket bantuan (CS) sisi admin: /admin/tickets (kontrak tiket-kontrak.md); semua tingkat admin boleh baca & balas
@@ -93,7 +93,7 @@ beforeEach(async () => {
   await db.query("DELETE FROM support_tickets");
   await db.query("DELETE FROM notifications");
   await db.query("DELETE FROM admin_audit_logs");
-  tiketLimiter.reset();
+  ticketLimiter.reset();
 });
 afterAll(() => {
   vi.restoreAllMocks();

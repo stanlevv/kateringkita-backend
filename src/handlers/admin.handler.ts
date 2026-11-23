@@ -165,7 +165,7 @@ export const kirimPengumumanHandler: RequestHandler = async (req, res) => {
   res.status(201).json({ data: await kirimPengumuman(adminId(req), req.body) });
 };
 
-// Fase 1 kelola admin (khusus super, dijaga aksesAdmin)
+// Fase 1 kelola admin (khusus super, dijaga adminAccess)
 export const daftarAdminHandler: RequestHandler = async (_req, res) => {
   res.json({ data: await daftarAdmin() });
 };

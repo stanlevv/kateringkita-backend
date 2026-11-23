@@ -5,7 +5,7 @@ import { RekomendasiInput } from "../dto/rekomendasi.dto";
 import { ai } from "./ai.service";
 import { BUKA, DARI, JOIN_FAVORIT, KOLOM_KARTU, MenuCard, SISA, TAMPIL, jam, jamWib, kartu } from "./katalog.service";
 import { AppError } from "../utils/errors";
-import { adaInjeksi, samarkan } from "../utils/safe-prompt";
+import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { simpanHasil } from "./hasil-ai.service";
 import { hariIniWib } from "./merchant-kuota.service";
 
@@ -217,7 +217,7 @@ const keluaran = (summary: string, h: { groups: Grup[]; total: number }) => ({
 });
 
 export async function rekomendasi(userId: number, input: RekomendasiInput) {
-  if (adaInjeksi(input.question)) {
+  if (hasInjection(input.question)) {
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
       question: ["Permintaan berisi perintah yang tidak diizinkan."],
     });
@@ -234,7 +234,7 @@ export async function rekomendasi(userId: number, input: RekomendasiInput) {
     };
   }
   const [[u]] = await db.query<RowDataPacket[]>("SELECT full_name FROM users WHERE id = ?", [userId]);
-  const permintaan = samarkan(input.question, { nama: u ? [u.full_name] : [] });
+  const permintaan = anonymize(input.question, { names: u ? [u.full_name] : [] });
   const data = kandidat.map((k) => ({
     id: k.card.id,
     menu: k.card.name,

@@ -17,9 +17,9 @@ const pool = mysql.createPool({
 // CURRENT_TIMESTAMP mengikuti time_zone sesi; semua perbandingan kita mengasumsikan UTC.
 // Perintah ini diantrekan di koneksi baru sebelum query pertama pemakai.
 pool.pool.on("connection", (conn) => {
-  conn.query("SET time_zone = '+00:00'", (err) => {
-    if (!err) return;
-    console.error("Gagal mengatur zona waktu koneksi:", err.message);
+  conn.query("SET time_zone = '+00:00'", (error) => {
+    if (!error) return;
+    console.error("Gagal mengatur zona waktu koneksi:", error.message);
     conn.destroy(); // koneksi tanpa UTC tidak boleh dipakai ulang oleh pool
   });
 });

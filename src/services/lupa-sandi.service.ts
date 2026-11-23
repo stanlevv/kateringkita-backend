@@ -4,7 +4,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { ResetPasswordInput } from "../dto/auth.dto";
 import { AppError } from "../utils/errors";
-import { surel } from "../utils/mail";
+import { mailer } from "../utils/mail";
 
 // F11 lupa sandi: OTP 6 digit via email, di-hash di password_resets, berlaku 10 menit, maks 5 percobaan, sekali pakai.
 const BCRYPT_COST = 10;
@@ -26,7 +26,7 @@ export async function mintaOtp(email: string) {
     "INSERT INTO password_resets (user_id, code_hash, expires_at) VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 10 MINUTE))",
     [u.id, await bcrypt.hash(kode, BCRYPT_COST)],
   );
-  await surel.kirim(
+  await mailer.send(
     email,
     "Kode reset kata sandi KateringKita",
     `Kode reset kata sandi Anda: ${kode}\n\nBerlaku 10 menit. Abaikan email ini bila Anda tidak memintanya.`,

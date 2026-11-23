@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, test } from "vitest";
 import { env } from "../src/config/env";
-import { notifikasiSah } from "../src/utils/midtrans";
+import { isValidNotification } from "../src/utils/midtrans";
 
 // Sejak 28 Okt 2026 Midtrans menandatangani notifikasi dengan Signature Secret Key, terpisah dari Server Key
 const tanda = (key: string) => {
@@ -21,17 +21,17 @@ describe("notifikasiSah", () => {
   test("Signature Secret Key diisi → dipakai; signature dari Server Key ditolak", () => {
     env.MIDTRANS_SERVER_KEY = "SB-Mid-server-baru";
     env.MIDTRANS_SIGNATURE_KEY = "rahasia-tanda-tangan";
-    expect(notifikasiSah(tanda("rahasia-tanda-tangan"))).toBe(true);
-    expect(notifikasiSah(tanda("SB-Mid-server-baru"))).toBe(false);
+    expect(isValidNotification(tanda("rahasia-tanda-tangan"))).toBe(true);
+    expect(isValidNotification(tanda("SB-Mid-server-baru"))).toBe(false);
   });
 
   test("tanpa Signature Secret Key → pakai Server Key (akun lama)", () => {
     env.MIDTRANS_SERVER_KEY = "SB-Mid-server-lama";
-    expect(notifikasiSah(tanda("SB-Mid-server-lama"))).toBe(true);
-    expect(notifikasiSah(tanda("lain"))).toBe(false);
+    expect(isValidNotification(tanda("SB-Mid-server-lama"))).toBe(true);
+    expect(isValidNotification(tanda("lain"))).toBe(false);
   });
 
   test("tanpa kunci sama sekali → ditolak", () => {
-    expect(notifikasiSah(tanda(""))).toBe(false);
+    expect(isValidNotification(tanda(""))).toBe(false);
   });
 });

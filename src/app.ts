@@ -4,7 +4,7 @@ import { v1 } from "./routes/auth";
 import { requireAuth, requireRole } from "./middleware/auth";
 import { meta } from "./routes/meta";
 import { admin } from "./routes/admin";
-import { aksesAdmin } from "./middleware/admin-access";
+import { adminAccess } from "./middleware/admin-access";
 import { merchant } from "./routes/merchant";
 import { katalog } from "./routes/katalog";
 import { table } from "./routes/table";
@@ -12,10 +12,10 @@ import { order } from "./routes/order";
 import { notifikasi } from "./routes/notifikasi";
 import { tiket } from "./routes/tiket";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
-import { catatLogServer, requestId, requestLogger } from "./middleware/request-logger";
+import { recordServerLog, requestId, requestLogger } from "./middleware/request-logger";
 import { healthHandler } from "./handlers/health.handler";
 import { env } from "./config/env";
-import { pemeliharaan } from "./middleware/maintenance";
+import { maintenanceGuard } from "./middleware/maintenance";
 
 const app: Application = express();
 
@@ -26,7 +26,7 @@ if (env.NODE_ENV === "production") app.set("trust proxy", 1);
 // production wajib mengisi CORS_ORIGIN (divalidasi di env.ts); dev default ke web lokal
 app.use(cors({ origin: env.CORS_ORIGIN.length ? env.CORS_ORIGIN : ["http://localhost:3000"] }));
 app.use(requestId);
-app.use(catatLogServer);
+app.use(recordServerLog);
 app.use(express.json());
 
 if (env.NODE_ENV !== "test") {
@@ -36,10 +36,10 @@ if (env.NODE_ENV !== "test") {
 app.get("/api/v1/health", healthHandler);
 
 // F27: saat mode pemeliharaan aktif semua rute selain pengecualian (admin, login, webhook, dll.) dibalas 503
-app.use(pemeliharaan);
+app.use(maintenanceGuard);
 
 // admin dipasang sebelum v1; path admin tak dikenal: tanpa token 401, bukan admin 403, admin 404 (notFound)
-app.use("/api/v1/admin", requireAuth, requireRole("admin"), aksesAdmin, admin);
+app.use("/api/v1/admin", requireAuth, requireRole("admin"), adminAccess, admin);
 app.use("/api/v1/merchant", requireAuth, requireRole("merchant"), merchant);
 // F21: menu & pesanan meja tanpa login
 app.use("/api/v1", table);

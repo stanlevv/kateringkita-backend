@@ -26,20 +26,20 @@ export async function createAdmin(input: {
   return { id };
 }
 
-const opsi = (argv: string[], nama: string) => {
-  const i = argv.indexOf(nama);
-  return i >= 0 ? argv[i + 1] : undefined;
+const getOption = (argv: string[], flag: string) => {
+  const index = argv.indexOf(flag);
+  return index >= 0 ? argv[index + 1] : undefined;
 };
 
 // Mengembalikan kode keluar proses. Sandi hanya dari env dan tidak pernah dicetak.
-export async function jalankan(argv: string[], env: NodeJS.ProcessEnv): Promise<number> {
+export async function run(argv: string[], env: NodeJS.ProcessEnv): Promise<number> {
   const password = env.ADMIN_INITIAL_PASSWORD;
   if (!password) {
     console.error("ADMIN_INITIAL_PASSWORD belum diisi.");
     return 1;
   }
-  const phone = opsi(argv, "--phone");
-  const name = opsi(argv, "--name");
+  const phone = getOption(argv, "--phone");
+  const name = getOption(argv, "--name");
   if (!phone || !name) {
     console.error('Pemakaian: npm run admin:create -- --phone 08xxxxxxxxxx --name "Nama Admin"');
     return 1;
@@ -48,17 +48,17 @@ export async function jalankan(argv: string[], env: NodeJS.ProcessEnv): Promise<
     const { id } = await createAdmin({ phone, fullName: name, password });
     console.log(`Admin dibuat (id ${id}).`);
     return 0;
-  } catch (err) {
-    console.error((err as Error).message);
+  } catch (error) {
+    console.error((error as Error).message);
     return 1;
   }
 }
 
 if (require.main === module) {
-  jalankan(process.argv.slice(2), process.env)
+  run(process.argv.slice(2), process.env)
     .then((code) => db.end().then(() => process.exit(code)))
-    .catch((err) => {
-      console.error((err as Error).message);
+    .catch((error) => {
+      console.error((error as Error).message);
       process.exit(1);
     });
 }

@@ -2,7 +2,7 @@
 // bayar, batal, daftar, dan ulasan. Dipakai routes (validate) dan handlers (parse) sebelum data diteruskan ke
 // services. Nama kunci di sini adalah kontrak JSON dengan aplikasi, jadi tidak boleh diganti sembarangan.
 import { z } from "zod";
-import { BANK_VA } from "../utils/midtrans";
+import { VA_BANKS } from "../utils/midtrans";
 
 // Kolom harga/total dari aplikasi sengaja tidak dicantumkan sehingga dibuang z.object; server menghitung ulang.
 const ITEMS_MSG = "Pilih 1–20 menu.";
@@ -94,7 +94,7 @@ export const orderSchema = quoteSchema.extend({
  * rekening sementara untuk membayar lewat transfer bank.
  */
 export const vaSchema = z.object(
-  { bank: z.enum(BANK_VA, { error: "Pilih bank BCA, BNI, atau BRI." }) },
+  { bank: z.enum(VA_BANKS, { error: "Pilih bank BCA, BNI, atau BRI." }) },
   { error: "Pilih bank BCA, BNI, atau BRI." },
 );
 /**

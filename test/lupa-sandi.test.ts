@@ -3,12 +3,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 import app from "../src/app";
 import db from "../src/config/db";
 import { loginLimiter, otpLimiter } from "../src/middleware/rate-limiter";
-import { surel } from "../src/utils/mail";
+import { mailer } from "../src/utils/mail";
 import { login, siapkanToko } from "./helpers/toko";
 
 // F11: POST /auth/password/{forgot,verify,reset} — OTP email
 const EMAIL = "budi@mail.com";
-const kirim = vi.spyOn(surel, "kirim").mockResolvedValue();
+const kirim = vi.spyOn(mailer, "send").mockResolvedValue();
 const post = (path: string, body: object) => request(app).post(`/api/v1/auth/password/${path}`).send(body);
 const kodeTerakhir = () => String(kirim.mock.calls.at(-1)?.[2]).match(/\d{6}/)![0];
 const minta = async () => {
