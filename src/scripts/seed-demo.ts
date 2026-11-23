@@ -8,7 +8,7 @@ import db from "../config/db";
 import { env as config } from "../config/env";
 import { insertUser } from "../services/auth.service";
 import { passwordSchema } from "../dto/auth.dto";
-import { catat, dalamTransaksi } from "../services/admin-audit.service";
+import { recordAudit, withTransaction } from "../services/admin-audit.service";
 
 // Status verifikasi penjual, sama dengan nilai kolom merchants.verification_status.
 type VerificationStatus = "pending" | "needs_fix" | "verified" | "suspended";
@@ -86,7 +86,7 @@ async function createDemoMerchant(demo: DemoMerchant, password: string): Promise
   // Lewati bila akun dengan nomor ini sudah ada; sisanya dibuat dalam satu transaksi.
   const [existing] = await db.query<RowDataPacket[]>("SELECT id FROM users WHERE phone = ?", [demo.phone]);
   if (existing.length) return false;
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     // 1. Buat akun penjual dan tokonya; tanggal verifikasi/penangguhan diisi sesuai status.
     const user = await insertUser(conn, "merchant", { full_name: demo.owner, phone: demo.phone, password });
     const slug = `demo-${demo.phone.slice(-2)}`;
@@ -142,11 +142,11 @@ async function createDemoAuditLogs(): Promise<"ok" | "no-admin"> {
     verified: "merchant.verify",
     suspended: "merchant.suspend",
   };
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     // 3. Satu log per penjual, dicatat seolah admin mengubah status dari "pending" ke status demo.
     for (const merchant of demoMerchants) {
       if (!actionByStatus[merchant.s]) continue;
-      await catat(conn, {
+      await recordAudit(conn, {
         adminId: admins[0].id,
         action: actionByStatus[merchant.s],
         targetType: "merchant",

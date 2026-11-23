@@ -1,48 +1,48 @@
 import { RequestHandler, Router } from "express";
 import {
-  buatAdminSchema,
-  hapusFotoSchema,
-  kontakCsSchema,
-  levelAdminSchema,
-  pemeliharaanSchema,
-  pengumumanSchema,
-  reasonBody,
+  createAdminSchema,
+  removePhotoSchema,
+  csContactSchema,
+  updateAdminLevelSchema,
+  maintenanceSchema,
+  announcementSchema,
+  adminReasonSchema,
 } from "../dto/admin.dto";
 import {
-  aksiPenjualHandler,
-  ambilBiayaHandler,
-  antrianVerifikasiHandler,
-  buatMasterHandler,
-  buatPromoHandler,
-  daftarLogHandler,
-  daftarMasterHandler,
-  daftarPenjualHandler,
-  daftarPromoHandler,
-  detailPenjualHandler,
-  idParam,
-  ringkasanHandler,
-  setAktifMasterHandler,
-  setAktifPromoHandler,
-  ubahBiayaHandler,
-  ubahMasterHandler,
-  ubahPromoHandler,
-  daftarMenuAdminHandler,
-  daftarUlasanAdminHandler,
-  hapusFotoMenuHandler,
-  kirimPengumumanHandler,
-  moderasiMenuHandler,
-  moderasiUlasanHandler,
-  rekapKeuanganHandler,
-  ubahKontakCsHandler,
-  ubahPemeliharaanHandler,
-  daftarAdminHandler,
-  buatAdminHandler,
-  ubahLevelAdminHandler,
-  setAktifAdminHandler,
-  resetSandiAdminHandler,
+  merchantActionHandler,
+  getSettingsHandler,
+  getVerificationQueueHandler,
+  createMasterDataHandler,
+  createPromoHandler,
+  listAuditLogsHandler,
+  listMasterDataHandler,
+  listMerchantsHandler,
+  listPromosHandler,
+  getMerchantDetailHandler,
+  parseMerchantId,
+  getSummaryHandler,
+  setMasterActiveHandler,
+  setPromoActiveHandler,
+  updateServiceFeeHandler,
+  updateMasterDataHandler,
+  updatePromoHandler,
+  listAdminMenusHandler,
+  listAdminReviewsHandler,
+  removeMenuPhotoHandler,
+  sendAnnouncementHandler,
+  moderateMenuHandler,
+  moderateReviewHandler,
+  getFinanceSummaryHandler,
+  updateCsContactHandler,
+  updateMaintenanceHandler,
+  listAdminsHandler,
+  createAdminHandler,
+  updateAdminLevelHandler,
+  setAdminActiveHandler,
+  resetAdminPasswordHandler,
 } from "../handlers/admin.handler";
-import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
-import { verifikasiAiSchema } from "../dto/ai-result.dto";
+import { aiProviderSchema, updateAiProviderSchema } from "../dto/ai.dto";
+import { verifyAiResultSchema } from "../dto/ai-result.dto";
 import { adminUploadSchema } from "../dto/upload.dto";
 import {
   createAdminBannerHandler,
@@ -52,16 +52,16 @@ import {
 } from "../handlers/banner.handler";
 import { createPopupHandler, listPopupsHandler, updatePopupHandler } from "../handlers/popup.handler";
 import { uploadLimiter } from "../middleware/rate-limiter";
-import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/ai-result.handler";
+import { listAiResultsHandler, verifyAiResultHandler } from "../handlers/ai-result.handler";
 import {
-  buatAiHandler,
-  daftarAiHandler,
-  hapusAiHandler,
-  pemakaianAiHandler,
-  ubahAiHandler,
-  ujiAiHandler,
+  createAiProviderHandler,
+  listAiProvidersHandler,
+  deleteAiProviderHandler,
+  getAiUsageHandler,
+  updateAiProviderHandler,
+  testAiProviderHandler,
 } from "../handlers/ai.handler";
-import { daftarLogServerHandler, statusServerHandler } from "../handlers/server-log.handler";
+import { listServerLogsHandler, getServerStatusHandler } from "../handlers/server-log.handler";
 import { payoutSchema, refundSchema } from "../dto/payout.dto";
 import {
   recordPayoutHandler,
@@ -84,58 +84,63 @@ import { AppError } from "../utils/errors";
 export const admin = Router();
 
 // POST <path>/activate dan <path>/deactivate
-const toggle = (path: string, handler: (aktif: boolean) => RequestHandler) => {
-  for (const [aksi, aktif] of [
+const toggle = (path: string, handler: (active: boolean) => RequestHandler) => {
+  for (const [action, active] of [
     ["activate", true],
     ["deactivate", false],
   ] as const) {
-    admin.post(`${path}/${aksi}`, handler(aktif));
+    admin.post(`${path}/${action}`, handler(active));
   }
 };
 
-admin.get("/audit-logs", daftarLogHandler);
+admin.get("/audit-logs", listAuditLogsHandler);
 
 // Fase 1 kelola admin (khusus super; lihat middleware/admin-access.ts)
-admin.get("/admins", daftarAdminHandler);
-admin.post("/admins", validate(buatAdminSchema), buatAdminHandler);
-admin.patch("/admins/:id/level", validate(levelAdminSchema), ubahLevelAdminHandler);
-toggle("/admins/:id", setAktifAdminHandler);
-admin.post("/admins/:id/reset-password", resetSandiAdminHandler);
+admin.get("/admins", listAdminsHandler);
+admin.post("/admins", validate(createAdminSchema), createAdminHandler);
+admin.patch("/admins/:id/level", validate(updateAdminLevelSchema), updateAdminLevelHandler);
+toggle("/admins/:id", setAdminActiveHandler);
+admin.post("/admins/:id/reset-password", resetAdminPasswordHandler);
 
-admin.get("/merchants", daftarPenjualHandler);
+admin.get("/merchants", listMerchantsHandler);
 
-admin.get("/verification-queue", antrianVerifikasiHandler);
+admin.get("/verification-queue", getVerificationQueueHandler);
 
-admin.get("/merchants/:id", detailPenjualHandler);
+admin.get("/merchants/:id", getMerchantDetailHandler);
 
 // id dicek sebelum body: id tak valid → 404 walau body kosong
-const cekId: RequestHandler = (req, _res, next) => {
-  idParam(req.params.id);
+const checkMerchantId: RequestHandler = (req, _res, next) => {
+  parseMerchantId(req.params.id);
   next();
 };
 for (const name of ACTION_NAMES) {
   const needsReason = name === "request-fix" || name === "suspend";
-  admin.post(`/merchants/:id/${name}`, cekId, ...(needsReason ? [validate(reasonBody)] : []), aksiPenjualHandler(name));
+  admin.post(
+    `/merchants/:id/${name}`,
+    checkMerchantId,
+    ...(needsReason ? [validate(adminReasonSchema)] : []),
+    merchantActionHandler(name),
+  );
 }
 
-admin.get("/master/:kind", daftarMasterHandler);
-admin.post("/master/:kind", buatMasterHandler);
-admin.patch("/master/:kind/:id", ubahMasterHandler);
-toggle("/master/:kind/:id", setAktifMasterHandler);
+admin.get("/master/:kind", listMasterDataHandler);
+admin.post("/master/:kind", createMasterDataHandler);
+admin.patch("/master/:kind/:id", updateMasterDataHandler);
+toggle("/master/:kind/:id", setMasterActiveHandler);
 
-admin.get("/promos", daftarPromoHandler);
-admin.post("/promos", buatPromoHandler);
-admin.patch("/promos/:id", ubahPromoHandler);
-toggle("/promos/:id", setAktifPromoHandler);
-admin.get("/settings", ambilBiayaHandler);
-admin.put("/settings/service-fee", ubahBiayaHandler);
-admin.put("/settings/cs-contact", validate(kontakCsSchema), ubahKontakCsHandler);
-admin.put("/settings/maintenance", validate(pemeliharaanSchema), ubahPemeliharaanHandler);
-admin.post("/broadcasts", validate(pengumumanSchema), kirimPengumumanHandler);
-admin.get("/summary", ringkasanHandler);
+admin.get("/promos", listPromosHandler);
+admin.post("/promos", createPromoHandler);
+admin.patch("/promos/:id", updatePromoHandler);
+toggle("/promos/:id", setPromoActiveHandler);
+admin.get("/settings", getSettingsHandler);
+admin.put("/settings/service-fee", updateServiceFeeHandler);
+admin.put("/settings/cs-contact", validate(csContactSchema), updateCsContactHandler);
+admin.put("/settings/maintenance", validate(maintenanceSchema), updateMaintenanceHandler);
+admin.post("/broadcasts", validate(announcementSchema), sendAnnouncementHandler);
+admin.get("/summary", getSummaryHandler);
 
 // F20 rekap keuangan per toko
-admin.get("/finance", rekapKeuanganHandler);
+admin.get("/finance", getFinanceSummaryHandler);
 
 // F26 pencairan dana Midtrans ke penjual & pengembalian dana pesanan batal yang sudah lunas
 admin.get("/payouts/balances", listBalancesHandler);
@@ -145,22 +150,22 @@ admin.get("/refunds", listRefundsHandler);
 admin.post("/refunds/:code", validate(refundSchema), markRefundedHandler);
 
 // F19 moderasi ulasan & menu (suspend toko: /merchants/:id/suspend)
-admin.get("/reviews", daftarUlasanAdminHandler);
-admin.post("/reviews/:id/hide", validate(reasonBody), moderasiUlasanHandler(true));
-admin.post("/reviews/:id/unhide", moderasiUlasanHandler(false));
-admin.get("/menus", daftarMenuAdminHandler);
-admin.post("/menus/:id/takedown", validate(reasonBody), moderasiMenuHandler(true));
-admin.post("/menus/:id/restore", moderasiMenuHandler(false));
-admin.post("/menus/:id/photos/remove", validate(hapusFotoSchema), hapusFotoMenuHandler);
+admin.get("/reviews", listAdminReviewsHandler);
+admin.post("/reviews/:id/hide", validate(adminReasonSchema), moderateReviewHandler(true));
+admin.post("/reviews/:id/unhide", moderateReviewHandler(false));
+admin.get("/menus", listAdminMenusHandler);
+admin.post("/menus/:id/takedown", validate(adminReasonSchema), moderateMenuHandler(true));
+admin.post("/menus/:id/restore", moderateMenuHandler(false));
+admin.post("/menus/:id/photos/remove", validate(removePhotoSchema), removeMenuPhotoHandler);
 
 // F22 AI gateway: penyedia AI, urutan fallback, uji koneksi
-admin.get("/ai-providers", daftarAiHandler);
-admin.post("/ai-providers", validate(aiSchema), buatAiHandler);
-admin.patch("/ai-providers/:id", validate(ubahAiSchema), ubahAiHandler);
-admin.delete("/ai-providers/:id", hapusAiHandler);
-admin.post("/ai-providers/:id/test", ujiAiHandler);
+admin.get("/ai-providers", listAiProvidersHandler);
+admin.post("/ai-providers", validate(aiProviderSchema), createAiProviderHandler);
+admin.patch("/ai-providers/:id", validate(updateAiProviderSchema), updateAiProviderHandler);
+admin.delete("/ai-providers/:id", deleteAiProviderHandler);
+admin.post("/ai-providers/:id/test", testAiProviderHandler);
 // F25 pemakaian AI: token, panggilan, gagal, latensi
-admin.get("/ai-usage", pemakaianAiHandler);
+admin.get("/ai-usage", getAiUsageHandler);
 // Banner beranda (rancangan voucher 2026-11-16 §5.4): semua tingkat melihat, super & ops memutuskan; unggah gambar platform
 admin.get("/banners", listAdminBannersHandler);
 admin.post("/banners", createAdminBannerHandler);
@@ -171,12 +176,12 @@ admin.get("/popups", listPopupsHandler);
 admin.post("/popups", createPopupHandler);
 admin.patch("/popups/:id", updatePopupHandler);
 // Rubrik AI: hasil AI tersimpan diverifikasi manual (ops & super; support hanya melihat — bukan path "ai-" khusus super)
-admin.get("/hasil-ai", daftarHasilAiHandler);
-admin.patch("/hasil-ai/:id", validate(verifikasiAiSchema), verifikasiHasilAiHandler);
+admin.get("/hasil-ai", listAiResultsHandler);
+admin.patch("/hasil-ai/:id", validate(verifyAiResultSchema), verifyAiResultHandler);
 
 // F23 dashboard server: status, error 5xx & request lambat
-admin.get("/server-status", statusServerHandler);
-admin.get("/server-logs", daftarLogServerHandler);
+admin.get("/server-status", getServerStatusHandler);
+admin.get("/server-logs", listServerLogsHandler);
 
 // Tiket bantuan (CS) dari pembeli; semua tingkat admin boleh baca, balas, tutup (lihat middleware/admin-access.ts)
 admin.get("/tickets", listAdminTicketsHandler);

@@ -16,7 +16,7 @@ import {
 } from "../dto/banner.dto";
 import { AppError } from "../utils/errors";
 import { PRESIGN_SECONDS } from "../utils/r2";
-import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
+import { recordAudit, withTransaction, lockRow } from "./admin-audit.service";
 import { clock } from "./catalog.service";
 import { getMerchantId } from "./merchant-menu.service";
 import { validateImageUrl } from "./upload.service";
@@ -320,7 +320,7 @@ export async function createAdminBanner(adminId: number, body: unknown) {
       : [[]];
     if (!promo) throw invalidFields({ promo_id: ["Pilih voucher."] });
   }
-  return dalamTransaksi(async (conn) => {
+  return withTransaction(async (conn) => {
     // 2. Simpan sebagai banner platform yang sudah disetujui.
     const [result] = await conn.query<ResultSetHeader>(
       `INSERT INTO banners (merchant_id, title, image_url, target, promo_id, status, starts_at, ends_at, sort_order, created_by, reviewed_by, reviewed_at)
@@ -338,7 +338,7 @@ export async function createAdminBanner(adminId: number, body: unknown) {
       ],
     );
     // 3. Catat di log audit admin.
-    await catat(conn, {
+    await recordAudit(conn, {
       adminId,
       action: "banner.create",
       targetType: "banner",
@@ -377,12 +377,12 @@ export async function reviewBanner(adminId: number, idRaw: unknown, body: unknow
     throw invalidFields(fields);
   }
   const input: ReviewBannerInput = parsed.data;
-  const id = await dalamTransaksi(async (conn) => {
+  const id = await withTransaction(async (conn) => {
     // 2. Kunci banner. URL unggah gambar (presigned URL: alamat unggah sementara yang sudah ditandatangani) bisa
     //    dipakai ulang selama masih berlaku, jadi penjual bisa mengganti isi gambar setelah diajukan. Karena itu
     //    banner penjual baru boleh disetujui setelah URL itu kedaluwarsa, dihitung dari updated_at (ikut berubah
     //    setiap kali penjual mengajukan atau mengubah banner).
-    const banner = await kunci(conn, "banners", idRaw, { notFound: "Banner tidak ditemukan." });
+    const banner = await lockRow(conn, "banners", idRaw, { notFound: "Banner tidak ditemukan." });
     if (input.status === "disetujui" && banner.merchant_id !== null && banner.status === "menunggu") {
       const [[ageRow]] = await conn.query<RowDataPacket[]>(
         "SELECT TIMESTAMPDIFF(SECOND, updated_at, CURRENT_TIMESTAMP) AS umur FROM banners WHERE id = ?",
@@ -424,7 +424,7 @@ export async function reviewBanner(adminId: number, idRaw: unknown, body: unknow
         `UPDATE banners SET ${columns.map((column) => `${column} = ?`).join(", ")}${input.status ? ", reviewed_at = UTC_TIMESTAMP()" : ""} WHERE id = ?`,
         [...columns.map((column) => changes[column]), banner.id],
       );
-      await catat(conn, {
+      await recordAudit(conn, {
         adminId,
         action: input.status ? AUDIT_ACTIONS[input.status] : "banner.update",
         targetType: "banner",

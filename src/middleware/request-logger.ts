@@ -3,7 +3,7 @@
 // requestLogger menulis satu baris log per request (tidak dipasang saat test).
 import { randomUUID } from "node:crypto";
 import { RequestHandler } from "express";
-import { catatLog, LAMBAT_MS } from "../services/server-log.service";
+import { saveServerLog, SLOW_REQUEST_MS } from "../services/server-log.service";
 import { AuthedRequest } from "./auth";
 
 // Id dari pemanggil hanya dipakai bila berisi huruf, angka, dan . : _ - (paling panjang 128), supaya log tidak bisa
@@ -58,10 +58,10 @@ export const recordServerLog: RequestHandler = (req, res, next) => {
   res.on("finish", () => {
     // 1. Lewati request yang berhasil dan cukup cepat, juga 503 karena mode pemeliharaan.
     const durationMs = Date.now() - startedAt;
-    if (res.statusCode < 500 && durationMs <= LAMBAT_MS) return;
+    if (res.statusCode < 500 && durationMs <= SLOW_REQUEST_MS) return;
     if (res.locals.maintenance) return;
     // 2. Simpan tanpa ditunggu; kegagalan menyimpan diabaikan.
-    catatLog({
+    saveServerLog({
       requestId: String(res.getHeader("X-Request-Id") ?? "") || null,
       level: res.statusCode >= 500 ? "error" : "slow",
       method: req.method,

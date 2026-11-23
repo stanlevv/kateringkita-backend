@@ -6,7 +6,7 @@
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
-import { Conn, dalamTransaksi } from "./admin-audit.service";
+import { Conn, withTransaction } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { validateImageUrl } from "./upload.service";
 import { getWibDate, refreshDailyQuota } from "./merchant-quota.service";
@@ -346,7 +346,7 @@ const loadOneMenu = async (merchantId: number, id: number) => (await loadMenus(m
  */
 export async function createMenu(userId: number, input: z.infer<typeof menuSchema>): Promise<MerchantMenu> {
   const merchantId = await getMerchantId(userId);
-  const id = await dalamTransaksi(async (conn) => {
+  const id = await withTransaction(async (conn) => {
     // 1. Periksa dan siapkan kolom, lalu sisipkan baris menu.
     const columnValues = await prepareMenuColumns(conn, merchantId, input, null);
     const [result] = await conn.query<ResultSetHeader>("INSERT INTO menus SET ?", [
@@ -379,7 +379,7 @@ export async function updateMenu(userId: number, rawId: unknown, input: MenuInpu
   const id = parseMenuId(rawId);
   const merchantId = await getMerchantId(userId);
   if (Object.keys(input).length === 0) throw new AppError(400, "VALIDATION_ERROR", "Tidak ada data yang diubah.");
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     // 1. Reset kuota harian bila sudah ganti hari, lalu kunci baris menu.
     await refreshDailyQuota(conn, merchantId, getWibDate());
     const storedMenu = await lockMenu(conn, merchantId, id);
@@ -424,7 +424,7 @@ export async function updateMenu(userId: number, rawId: unknown, input: MenuInpu
 export async function deleteMenu(userId: number, rawId: unknown): Promise<void> {
   const id = parseMenuId(rawId);
   const merchantId = await getMerchantId(userId);
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     const [result] = await conn.query<ResultSetHeader>(
       "UPDATE menus SET deleted_at = UTC_TIMESTAMP(), is_active = FALSE WHERE id = ? AND merchant_id = ? AND deleted_at IS NULL",
       [id, merchantId],
@@ -448,7 +448,7 @@ export async function deleteMenu(userId: number, rawId: unknown): Promise<void> 
 export async function updateQuota(userId: number, rawId: unknown, input: QuotaInput): Promise<MerchantMenu> {
   const id = parseMenuId(rawId);
   const merchantId = await getMerchantId(userId);
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     // 1. Reset kuota harian bila sudah ganti hari, lalu kunci baris menu.
     await refreshDailyQuota(conn, merchantId, getWibDate());
     const menu = await lockMenu(conn, merchantId, id);

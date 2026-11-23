@@ -15,7 +15,7 @@ const minta = (body: Record<string, unknown>, token: string | null = setup.custo
   const req = request(app).post("/api/v1/assistant/recommendations");
   return (token ? req.set("Authorization", `Bearer ${token}`) : req).send(body);
 };
-const jawab = (teks: string) => vi.spyOn(ai, "tanya").mockResolvedValue(teks);
+const jawab = (teks: string) => vi.spyOn(ai, "ask").mockResolvedValue(teks);
 
 beforeAll(async () => {
   freezeClock();
@@ -150,7 +150,7 @@ describe("rekomendasi AI pembeli", () => {
   });
 
   test("AI tidak aktif/gagal → cadangan: kandidat paling cocok kata kunci, qty = porsi", async () => {
-    vi.spyOn(ai, "tanya").mockRejectedValue(new AppError(502, "UPSTREAM_ERROR", "x"));
+    vi.spyOn(ai, "ask").mockRejectedValue(new AppError(502, "UPSTREAM_ERROR", "x"));
     const data = (await minta({ question: "nasi goreng buat 5 orang", portions: 5 }).expect(200)).body.data;
     expect(data.source).toBe("fallback");
     expect(data.summary).toMatch(/tidak tersedia/);
@@ -223,7 +223,7 @@ describe("rekomendasi AI pembeli", () => {
         },
       ],
     });
-    vi.spyOn(ai, "tanya").mockRejectedValue(new AppError(502, "UPSTREAM_ERROR", "x"));
+    vi.spyOn(ai, "ask").mockRejectedValue(new AppError(502, "UPSTREAM_ERROR", "x"));
     expect((await minta({ question: "nasi goreng" }).expect(200)).body.data).toMatchObject({
       source: "fallback",
       result_id: null,

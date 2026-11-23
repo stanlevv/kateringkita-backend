@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
 import { loginLimiter } from "../src/middleware/rate-limiter";
-import { rentangHariWib, ringkasan, sedangBuka } from "../src/services/admin-summary.service";
+import { getWibDayRange, getAdminSummary, isOpenAt } from "../src/services/admin-summary.service";
 import { resetTestDatabase } from "./helpers/db";
 
 let token: string;
@@ -15,22 +15,22 @@ const T = Date.parse("2026-05-10T05:00:00Z"); // 12:00 WIB, tetap
 const utc = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
 
 test("rentangHariWib: 00:00 WIB = 17:00 UTC hari sebelumnya", () => {
-  const r = rentangHariWib(Date.parse("2026-05-10T20:00:00Z")); // 11 Mei 03:00 WIB
+  const r = getWibDayRange(Date.parse("2026-05-10T20:00:00Z")); // 11 Mei 03:00 WIB
   expect(r.from.toISOString()).toBe("2026-05-10T17:00:00.000Z");
   expect(r.to.toISOString()).toBe("2026-05-11T17:00:00.000Z");
-  const s = rentangHariWib(Date.parse("2026-05-10T16:59:00Z")); // 10 Mei 23:59 WIB
+  const s = getWibDayRange(Date.parse("2026-05-10T16:59:00Z")); // 10 Mei 23:59 WIB
   expect(s.from.toISOString()).toBe("2026-05-09T17:00:00.000Z");
 });
 
 test("sedangBuka: jam WIB, lewat tengah malam", () => {
   const t = Date.parse("2026-05-10T03:00:00Z"); // 10:00 WIB
-  expect(sedangBuka(t, "07:00:00", "16:00:00")).toBe(true);
-  expect(sedangBuka(t, "11:00:00", "16:00:00")).toBe(false);
-  expect(sedangBuka(t, "22:00:00", "11:00:00")).toBe(true);
-  expect(sedangBuka(t, "10:30:00", "02:00:00")).toBe(false);
+  expect(isOpenAt(t, "07:00:00", "16:00:00")).toBe(true);
+  expect(isOpenAt(t, "11:00:00", "16:00:00")).toBe(false);
+  expect(isOpenAt(t, "22:00:00", "11:00:00")).toBe(true);
+  expect(isOpenAt(t, "10:30:00", "02:00:00")).toBe(false);
   const malam = Date.parse("2026-05-09T18:00:00Z"); // 01:00 WIB
-  expect(sedangBuka(malam, "18:00:00", "02:00:00")).toBe(true);
-  expect(sedangBuka(malam, "18:00:00", "00:30:00")).toBe(false);
+  expect(isOpenAt(malam, "18:00:00", "02:00:00")).toBe(true);
+  expect(isOpenAt(malam, "18:00:00", "00:30:00")).toBe(false);
 });
 
 beforeAll(async () => {
@@ -92,7 +92,7 @@ test("ringkasan", async () => {
     "INSERT INTO admin_audit_logs (admin_user_id, action, target_type, target_id) SELECT id, 'x.y', 'merchant', '1' FROM users WHERE role='admin'",
   );
   await request(app).get("/api/v1/admin/summary").set(A()).expect(200);
-  const r = JSON.parse(JSON.stringify(await ringkasan(T)));
+  const r = JSON.parse(JSON.stringify(await getAdminSummary(T)));
   expect(r.orders_today).toEqual({
     holding: 3,
     confirmed: 0,

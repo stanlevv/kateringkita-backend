@@ -6,7 +6,7 @@ import db from "../src/config/db";
 import { errorHandler } from "../src/middleware/error-handler";
 import { recordServerLog, requestId } from "../src/middleware/request-logger";
 import { createAdmin } from "../src/scripts/create-admin";
-import { bersihkanLog } from "../src/services/server-log.service";
+import { cleanupServerLogs } from "../src/services/server-log.service";
 import { AppError } from "../src/utils/errors";
 import { login, prepareMerchants } from "./helpers/merchant";
 
@@ -122,7 +122,7 @@ describe("dashboard admin", () => {
     await db.query(
       "INSERT INTO server_logs (request_id, level, method, path, status, duration_ms, created_at) VALUES ('tua', 'error', 'GET', '/x', 500, 1, UTC_TIMESTAMP() - INTERVAL 31 DAY)",
     );
-    await bersihkanLog();
+    await cleanupServerLogs();
     expect(
       (await db.query<any[]>("SELECT request_id FROM server_logs WHERE request_id IN ('tua', 'uji-500')"))[0],
     ).toEqual([{ request_id: "uji-500" }]);

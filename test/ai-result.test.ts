@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { simpanHasil } from "../src/services/ai-result.service";
+import { saveAiResult } from "../src/services/ai-result.service";
 import { login, prepareMerchants } from "./helpers/merchant";
 
 // Rubrik AI: hasil AI tersimpan tampil di panel admin web dan diverifikasi manual (setujui / tolak + catatan), diaudit.
@@ -38,15 +38,15 @@ beforeEach(async () => {
 });
 
 const isi = async () => {
-  const a = await simpanHasil({
-    fitur: "asisten",
+  const a = await saveAiResult({
+    feature: "asisten",
     userId: siti,
     merchantId: s.idA,
     input: "Harga risol [nama]?",
     output: { jawaban: "Rp 6.000", poin: [], asumsi: "" },
   });
-  const b = await simpanHasil({
-    fitur: "rekomendasi",
+  const b = await saveAiResult({
+    feature: "rekomendasi",
     userId: budi,
     input: "nasi goreng",
     output: { summary: "Paket", items: [], total: 0 },

@@ -3,7 +3,7 @@
 // routes → handlers: dimulai oleh server.ts, lalu memakai order-status.service (aksi `expire`) untuk tiap pesanan.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { dalamTransaksi } from "./admin-audit.service";
+import { withTransaction } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { Actor, transitionOrder } from "./order-status.service";
 
@@ -23,7 +23,7 @@ export const SYSTEM_ACTOR: Actor = { kind: "system" };
 export async function expireHeldOrders(
   limit = 100,
   expire: (code: string) => Promise<unknown> = (code) =>
-    dalamTransaksi((conn) => transitionOrder(conn, code, "expire", SYSTEM_ACTOR)),
+    withTransaction((conn) => transitionOrder(conn, code, "expire", SYSTEM_ACTOR)),
 ): Promise<number> {
   // 1. Cari pesanan menunggu yang sudah lewat batas waktu, terlama dulu.
   const [rows] = await db.query<RowDataPacket[]>(

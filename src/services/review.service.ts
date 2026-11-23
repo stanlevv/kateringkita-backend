@@ -5,7 +5,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { ReviewInput } from "../dto/order.dto";
 import { AppError } from "../utils/errors";
-import { Conn, dalamTransaksi } from "./admin-audit.service";
+import { Conn, withTransaction } from "./admin-audit.service";
 import { getMerchantId } from "./merchant-menu.service";
 
 // Ulasan = rating 1–5 bintang dan komentar opsional untuk satu menu dalam satu pesanan. Satu menu hanya bisa diulas
@@ -50,7 +50,7 @@ export async function recalculateRatings(conn: Pick<Conn, "query">, menuIds: num
  *         pesanan / sudah diulas / dikirim dua kali (galat per baris `items.N.menu_id`)
  */
 export async function createReview(userId: number, code: string, data: ReviewInput) {
-  return dalamTransaksi(async (conn) => {
+  return withTransaction(async (conn) => {
     // 1. Kunci pesanan milik pembeli ini; hanya pesanan selesai yang boleh diulas.
     const [[order]] = await conn.query<RowDataPacket[]>(
       "SELECT id, merchant_id, status FROM orders WHERE code = ? AND customer_id = ? FOR UPDATE",

@@ -6,7 +6,7 @@ import { bodyObject } from "../dto/order.dto";
 import { replyTicketSchema, createTicketSchema, listAdminTicketsSchema, listTicketsSchema } from "../dto/ticket.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { balasTiketAdmin, daftarTiketAdmin, detailTiketAdmin, tutupTiketAdmin } from "../services/admin-ticket.service";
+import { replyAdminTicket, listAdminTickets, getAdminTicket, closeAdminTicket } from "../services/admin-ticket.service";
 import { getMyTicket, replyMyTicket, createTicket, listMyTickets, closeMyTicket } from "../services/ticket.service";
 
 // id pengguna yang login (pembeli atau admin), sudah dipasang middleware requireAuth di rute.
@@ -79,7 +79,7 @@ export const closeMyTicketHandler: RequestHandler = async (req, res) => {
  * @throws 400 status tidak dikenal atau kata cari terlalu panjang
  */
 export const listAdminTicketsHandler: RequestHandler = async (req, res) => {
-  res.json(await daftarTiketAdmin(parse(listAdminTicketsSchema, req.query)));
+  res.json(await listAdminTickets(parse(listAdminTicketsSchema, req.query)));
 };
 
 /**
@@ -90,7 +90,7 @@ export const listAdminTicketsHandler: RequestHandler = async (req, res) => {
  * @throws 404 tiket tidak ada
  */
 export const getAdminTicketHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await detailTiketAdmin(getTicketCode(req)) });
+  res.json({ data: await getAdminTicket(getTicketCode(req)) });
 };
 
 /**
@@ -102,7 +102,7 @@ export const getAdminTicketHandler: RequestHandler = async (req, res) => {
  */
 export const replyAdminTicketHandler: RequestHandler = async (req, res) => {
   const body = getReplyBody(req);
-  res.status(201).json({ data: await balasTiketAdmin(getUserId(req), getTicketCode(req), body) });
+  res.status(201).json({ data: await replyAdminTicket(getUserId(req), getTicketCode(req), body) });
 };
 
 /**
@@ -113,5 +113,5 @@ export const replyAdminTicketHandler: RequestHandler = async (req, res) => {
  * @throws 404 tiket tidak ada
  */
 export const closeAdminTicketHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await tutupTiketAdmin(getUserId(req), getTicketCode(req)) });
+  res.json({ data: await closeAdminTicket(getUserId(req), getTicketCode(req)) });
 };

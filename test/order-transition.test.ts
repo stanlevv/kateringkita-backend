@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { dalamTransaksi } from "../src/services/admin-audit.service";
+import { withTransaction } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
@@ -16,7 +16,7 @@ const sistem: Actor = { kind: "system" };
 const BERUBAH = "Pesanan sudah berubah status.";
 const HABIS = "Batas waktu pesanan sudah habis.";
 const jalan = (code: string, aksi: OrderAction, aktor: Actor, reason?: string | null) =>
-  dalamTransaksi((conn) => transitionOrder(conn, code, aksi, aktor, reason));
+  withTransaction((conn) => transitionOrder(conn, code, aksi, aktor, reason));
 const pesanan = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 const log = async (code: string) =>

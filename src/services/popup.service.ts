@@ -5,7 +5,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { PopupInput, UpdatePopupInput, popupSchema, updatePopupSchema } from "../dto/popup.dto";
 import { AppError } from "../utils/errors";
-import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
+import { recordAudit, withTransaction, lockRow } from "./admin-audit.service";
 import { parseBodyWithImage } from "./banner.service";
 import { clock } from "./catalog.service";
 import { VoucherCard, getAvailableVoucher } from "./voucher.service";
@@ -96,7 +96,7 @@ export async function createPopup(adminId: number, body: unknown) {
   // 1. Periksa isian dan voucher.
   const input: PopupInput = parseBodyWithImage(popupSchema, body, POPUP_PREFIX);
   const promoId = await validatePlatformVoucher(input.promo_id);
-  const id = await dalamTransaksi(async (conn) => {
+  const id = await withTransaction(async (conn) => {
     // 2. Simpan pop-up.
     const [result] = await conn.query<ResultSetHeader>(
       "INSERT INTO popups (title, image_url, promo_id, starts_at, ends_at, is_active, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -111,7 +111,7 @@ export async function createPopup(adminId: number, body: unknown) {
       ],
     );
     // 3. Catat di log audit admin.
-    await catat(conn, {
+    await recordAudit(conn, {
       adminId,
       action: "popup.create",
       targetType: "popup",
@@ -136,9 +136,9 @@ export async function updatePopup(adminId: number, idRaw: unknown, body: unknown
   // 1. Periksa isian dan voucher (bila dikirim).
   const input: UpdatePopupInput = parseBodyWithImage(updatePopupSchema, body, POPUP_PREFIX);
   const promoId = input.promo_id === undefined ? undefined : await validatePlatformVoucher(input.promo_id);
-  const id = await dalamTransaksi(async (conn) => {
+  const id = await withTransaction(async (conn) => {
     // 2. Kunci pop-up dan susun kolom yang dikirim saja.
-    const popup = await kunci(conn, "popups", idRaw, { notFound: "Pop-up tidak ditemukan." });
+    const popup = await lockRow(conn, "popups", idRaw, { notFound: "Pop-up tidak ditemukan." });
     const changes: Record<string, unknown> = Object.fromEntries(
       Object.entries({
         title: input.title,
@@ -156,7 +156,7 @@ export async function updatePopup(adminId: number, idRaw: unknown, body: unknown
         ...columns.map((column) => changes[column]),
         popup.id,
       ]);
-      await catat(conn, {
+      await recordAudit(conn, {
         adminId,
         action: "popup.update",
         targetType: "popup",

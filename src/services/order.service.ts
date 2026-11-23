@@ -7,7 +7,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import db from "../config/db";
 import { env } from "../config/env";
-import { dalamTransaksi } from "./admin-audit.service";
+import { withTransaction } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { clock, toWibTime, REMAINING_STOCK } from "./catalog.service";
 import { getWibDate } from "./merchant-quota.service";
@@ -276,7 +276,7 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
   const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex");
   let code: string;
   try {
-    code = await dalamTransaksi(async (conn) => {
+    code = await withTransaction(async (conn) => {
       // 1. Kunci baris pembeli lebih dulu. Checkout milik pembeli yang sama jadi antre satu per satu, sehingga batas
       //    3 pesanan menunggu tidak bisa ditembus dengan mengirim banyak permintaan sekaligus. Ini harus sebelum
       //    langkah 2: catatan idempotensi berelasi ke tabel users, dan menyimpannya ikut mengunci baris pembeli.
@@ -681,7 +681,7 @@ const transitionMyOrder = async (
   action: "cancel" | "complete",
   reason: string | null = null,
 ) => {
-  await dalamTransaksi((conn) => transitionOrder(conn, code, action, { kind: "customer", userId }, reason));
+  await withTransaction((conn) => transitionOrder(conn, code, action, { kind: "customer", userId }, reason));
   return getMyOrder(userId, code);
 };
 /**

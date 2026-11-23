@@ -6,7 +6,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { PAYOUT_BANKS, getBankName, PayoutInput, RefundInput, BankAccountInput } from "../dto/payout.dto";
-import { catat, dalamTransaksi } from "./admin-audit.service";
+import { recordAudit, withTransaction } from "./admin-audit.service";
 
 // Cara uang mengalir: pembayaran non-tunai (VA dan online) masuk ke akun Midtrans milik platform, lalu admin
 // mentransfer bagian penjual secara manual (pencairan). Bagian penjual per pesanan selesai = subtotal (harga menu)
@@ -158,7 +158,7 @@ export async function listBalances() {
  *         (termasuk bila pencatatan yang sama sudah lebih dulu tersimpan), atau jumlah saldo berbeda dari `amount`
  */
 export async function recordPayout(adminId: number, input: PayoutInput) {
-  return dalamTransaksi(async (conn) => {
+  return withTransaction(async (conn) => {
     // 1. Kunci baris toko (FOR UPDATE), supaya penjual tidak bisa mengganti rekening di tengah pencatatan.
     const [[merchant]] = await conn.query<RowDataPacket[]>(
       "SELECT id, payout_bank, payout_account_number, payout_account_name, payout_updated_at FROM merchants WHERE id = ? FOR UPDATE",
@@ -209,7 +209,7 @@ export async function recordPayout(adminId: number, input: PayoutInput) {
       ids,
     ]);
     // 7. Catat di log audit admin, lalu kembalikan baris riwayatnya.
-    await catat(conn, {
+    await recordAudit(conn, {
       adminId,
       action: "payout.create",
       targetType: "merchant",
@@ -284,7 +284,7 @@ export async function listRefunds() {
  * @throws 404 pesanan ini tidak ada di antrean refund
  */
 export async function markRefunded(adminId: number, code: string, input: RefundInput) {
-  return dalamTransaksi(async (conn) => {
+  return withTransaction(async (conn) => {
     // 1. Kunci pembayaran pesanan ini, hanya bila memang ada di antrean refund.
     const [[payment]] = await conn.query<RowDataPacket[]>(
       `SELECT p.id, p.order_id, p.amount FROM payments p JOIN orders o ON o.id = p.order_id WHERE ${REFUND_DUE_SQL} AND o.code = ? FOR UPDATE`,
@@ -298,7 +298,7 @@ export async function markRefunded(adminId: number, code: string, input: RefundI
     );
     await conn.query("UPDATE orders SET payment_status = 'refunded' WHERE id = ?", [payment.order_id]);
     // 3. Catat di log audit admin.
-    await catat(conn, {
+    await recordAudit(conn, {
       adminId,
       action: "refund.mark",
       targetType: "order",

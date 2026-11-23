@@ -3,7 +3,7 @@
 // database. Toko selalu diambil dari akun yang login; pesanan toko lain dijawab 404 seolah tidak ada.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { dalamTransaksi } from "./admin-audit.service";
+import { withTransaction } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { parse } from "../middleware/validate";
 import { reasonSchema, bodyObject } from "../dto/order.dto";
@@ -125,7 +125,9 @@ export async function transitionMerchantOrder(userId: number, code: string, acti
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { reason: ["Pilih alasan penolakan."] });
   }
   const merchantId = await getMerchantId(userId);
-  await dalamTransaksi((conn) => transitionOrder(conn, code, action, { kind: "merchant", userId, merchantId }, reason));
+  await withTransaction((conn) =>
+    transitionOrder(conn, code, action, { kind: "merchant", userId, merchantId }, reason),
+  );
   return getMerchantOrder(userId, code);
 }
 

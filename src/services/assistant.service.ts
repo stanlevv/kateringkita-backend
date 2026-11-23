@@ -7,7 +7,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { ai } from "./ai.service";
-import { simpanHasil } from "./ai-result.service";
+import { saveAiResult } from "./ai-result.service";
 import { getWibDate } from "./merchant-quota.service";
 import { getMerchantSummary } from "./merchant-report.service";
 import { getMerchantId } from "./merchant-menu.service";
@@ -133,17 +133,17 @@ export async function askAssistant(userId: number, question: string) {
     })),
   };
   // 3. Kirim ke AI: data toko ditandai DATA_TOKO supaya AI memperlakukannya sebagai data, bukan perintah.
-  const answerText = await ai.tanya(
+  const answerText = await ai.ask(
     ASSISTANT_SYSTEM_PROMPT,
     `DATA_TOKO:\n${JSON.stringify(data)}\n\nPERTANYAAN PENJUAL:\n${safeQuestion}`,
     {
-      fitur: "asisten",
+      feature: "asisten",
       userId,
     },
   );
   // 4. Periksa bentuk jawaban, simpan untuk diperiksa admin, lalu kirim dengan nama kunci bahasa Inggris.
   const answer = parseAssistantAnswer(answerText);
   if (!answer) throw new AppError(502, "UPSTREAM_ERROR", "Jawaban AI tidak sesuai format. Coba lagi.");
-  const resultId = await simpanHasil({ fitur: "asisten", userId, merchantId, input: safeQuestion, output: answer });
+  const resultId = await saveAiResult({ feature: "asisten", userId, merchantId, input: safeQuestion, output: answer });
   return { answer: answer.jawaban, points: answer.poin, assumption: answer.asumsi || null, result_id: resultId };
 }

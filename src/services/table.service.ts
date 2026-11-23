@@ -6,7 +6,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { TableOrderInput, UpdateTableInput } from "../dto/table.dto";
-import { dalamTransaksi } from "./admin-audit.service";
+import { withTransaction } from "./admin-audit.service";
 import { isAllowedOrigin, openSnapPayment, SNAP_COLUMNS, PAYMENT_URL_SQL } from "./va-payment.service";
 import {
   MENU_FROM,
@@ -236,7 +236,7 @@ export async function createTableOrder(token: string, data: TableOrderInput) {
   // Transaksi memakai tingkat isolasi READ COMMITTED (argumen terakhir dalamTransaksi): setiap baca melihat data
   // terbaru yang sudah disimpan, dan penghitungan pesanan tidak mengunci "celah" di indeks. Alasannya dijelaskan di
   // createOrder (order.service).
-  const code = await dalamTransaksi(async (conn) => {
+  const code = await withTransaction(async (conn) => {
     // 1. Kunci baris meja (FOR UPDATE = baca sambil mengunci) supaya pesanan dari meja yang sama antre satu per
     //    satu, sehingga batas pesanan menunggu tidak bisa ditembus dengan banyak permintaan sekaligus.
     await conn.query("SELECT id FROM merchant_tables WHERE id = ? FOR UPDATE", [table.id]);

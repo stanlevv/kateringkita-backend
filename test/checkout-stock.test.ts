@@ -3,7 +3,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { dalamTransaksi } from "../src/services/admin-audit.service";
+import { withTransaction } from "../src/services/admin-audit.service";
 import { releaseStock } from "../src/services/order-stock.service";
 import { menuRow, prepareCheckout, insertMenu } from "./helpers/merchant";
 
@@ -20,7 +20,7 @@ const pesan = async (items: { menu_id: number; qty: number }[]) => {
   const [[order]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [res.body.data.code]);
   return order.id as number;
 };
-const lepas = (id: number, jadi: "terjual" | "kembali") => dalamTransaksi((conn) => releaseStock(conn, id, jadi));
+const lepas = (id: number, jadi: "terjual" | "kembali") => withTransaction((conn) => releaseStock(conn, id, jadi));
 const stok = async (id: number) => {
   const menu = await menuRow(id);
   return { held: menu.held_today, sold: menu.sold_today, total: menu.sold_total };

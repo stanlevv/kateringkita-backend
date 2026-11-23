@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 import app from "../src/app";
 import db from "../src/config/db";
 import { loginLimiter } from "../src/middleware/rate-limiter";
-import { dalamTransaksi } from "../src/services/admin-audit.service";
+import { withTransaction } from "../src/services/admin-audit.service";
 import { transitionOrder } from "../src/services/order-status.service";
 import { createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
@@ -90,7 +90,7 @@ describe("GET /me/notifications (D13)", () => {
 
   test("notifikasi dari transisi nyata ikut tampil", async () => {
     const code = await placeOrder(setup.customerToken, setup.menu);
-    await dalamTransaksi((conn) =>
+    await withTransaction((conn) =>
       transitionOrder(conn, code, "confirm", { kind: "merchant", userId: siti, merchantId: setup.idA }),
     );
     const res = await get().expect(200);

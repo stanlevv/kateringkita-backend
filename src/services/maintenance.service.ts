@@ -4,7 +4,7 @@
 // Dibaca middleware/maintenance.ts, meta.service, dan admin.handler; diubah lewat admin.handler → file ini → database.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { catat, dalamTransaksi } from "./admin-audit.service";
+import { recordAudit, withTransaction } from "./admin-audit.service";
 
 /**
  * Status mode pemeliharaan. Nama kuncinya (`aktif`, `pesan`) ikut terkirim apa adanya di JSON respons meta dan admin.
@@ -52,7 +52,7 @@ export async function updateMaintenance(
   adminId: number,
   { aktif: active, pesan: message }: { aktif: boolean; pesan: string },
 ) {
-  const savedStatus = await dalamTransaksi(async (conn) => {
+  const savedStatus = await withTransaction(async (conn) => {
     // 1. Pastikan dua baris pengaturan ada (INSERT IGNORE = sisipkan bila belum ada, abaikan bila sudah ada).
     await conn.query(
       "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES ('maintenance_mode', '0'), ('maintenance_message', '')",
@@ -70,7 +70,7 @@ export async function updateMaintenance(
     ]);
     await conn.query("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'maintenance_message'", [message]);
     // 4. Catat status sebelum dan sesudah di log audit admin, di transaksi yang sama.
-    await catat(conn, {
+    await recordAudit(conn, {
       adminId,
       action: "settings.maintenance",
       targetType: "settings",

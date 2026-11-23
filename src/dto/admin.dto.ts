@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fullNameSchema, phoneSchema } from "./auth.dto";
 
-export const reasonBody = z.object({
+export const adminReasonSchema = z.object({
   reason: z
     .string({ error: "Alasan wajib diisi." })
     .trim()
@@ -10,12 +10,12 @@ export const reasonBody = z.object({
 });
 
 // F19: hapus satu foto menu (foto utama atau tambahan) tanpa menurunkan menunya
-export const hapusFotoSchema = reasonBody.extend({
+export const removePhotoSchema = adminReasonSchema.extend({
   url: z.string({ error: "Foto wajib dipilih." }).min(1, "Foto wajib dipilih.").max(500, "Foto tidak valid."),
 });
 
 // Broadcast pengumuman admin (tab Info di aplikasi pembeli); panjang = kolom notifications
-export const pengumumanSchema = z.object({
+export const announcementSchema = z.object({
   audience: z.enum(["all", "customer", "merchant"], { error: "Pilih penerima pengumuman." }),
   title: z
     .string({ error: "Judul wajib diisi." })
@@ -28,10 +28,10 @@ export const pengumumanSchema = z.object({
     .min(1, "Isi wajib diisi.")
     .max(255, "Isi maksimal 255 karakter."),
 });
-export type PengumumanInput = z.infer<typeof pengumumanSchema>;
+export type AnnouncementInput = z.infer<typeof announcementSchema>;
 
 // Kontak CS: nomor WA 08…, atau "" untuk mengosongkan
-export const kontakCsSchema = z.object({
+export const csContactSchema = z.object({
   wa_number: z
     .string({ error: "Nomor WA tidak valid." })
     .trim()
@@ -39,12 +39,16 @@ export const kontakCsSchema = z.object({
 });
 
 // F27 mode pemeliharaan; pesan "" = pesan bawaan
-export const pemeliharaanSchema = z.object({
+export const maintenanceSchema = z.object({
   aktif: z.boolean({ error: "Pilih nyala atau mati." }),
   pesan: z.string({ error: "Pesan tidak valid." }).trim().max(200, "Pesan maksimal 200 karakter.").default(""),
 });
 
 // Fase 1 kelola admin
-const adminLevel = z.enum(["super", "ops", "support"], { error: "Pilih tingkat admin." });
-export const buatAdminSchema = z.object({ full_name: fullNameSchema, phone: phoneSchema, admin_level: adminLevel });
-export const levelAdminSchema = z.object({ admin_level: adminLevel });
+const adminLevelSchema = z.enum(["super", "ops", "support"], { error: "Pilih tingkat admin." });
+export const createAdminSchema = z.object({
+  full_name: fullNameSchema,
+  phone: phoneSchema,
+  admin_level: adminLevelSchema,
+});
+export const updateAdminLevelSchema = z.object({ admin_level: adminLevelSchema });

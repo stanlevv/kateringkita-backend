@@ -6,7 +6,7 @@ import { randomInt } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
-import { Conn, dalamTransaksi } from "./admin-audit.service";
+import { Conn, withTransaction } from "./admin-audit.service";
 import { getWibDate } from "./merchant-quota.service";
 import { CreateTicketInput, ListTicketsQuery } from "../dto/ticket.dto";
 
@@ -214,7 +214,7 @@ async function insertTicket(conn: Conn, userId: number, orderId: number | null, 
  * @throws 400 pesanan tidak ditemukan atau bukan milik pembeli, 409 masih ada 3 tiket yang belum selesai
  */
 export async function createTicket(userId: number, input: CreateTicketInput) {
-  const code = await dalamTransaksi(async (conn) => {
+  const code = await withTransaction(async (conn) => {
     // 1. Kunci baris pembeli dulu supaya pembuatan tiket satu pembeli berjalan satu per satu, sehingga batas 3 tiket
     //    tidak bisa dilampaui permintaan yang datang bersamaan. Harus sebelum INSERT, karena INSERT ke support_tickets
     //    ikut mengambil kunci bersama pada baris users (lewat foreign key), sama seperti di checkout.
@@ -304,7 +304,7 @@ export async function getMyTicket(userId: number, code: string) {
  * @throws 404 tiket tidak ada atau milik pembeli lain, 409 tiket sudah ditutup
  */
 export async function replyMyTicket(userId: number, code: string, body: string) {
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     const ticket = await lockTicket(conn, code, userId);
     if (ticket.status === "closed") throw ticketClosed();
     await conn.query("UPDATE support_tickets SET status = 'open', last_message_at = UTC_TIMESTAMP() WHERE id = ?", [

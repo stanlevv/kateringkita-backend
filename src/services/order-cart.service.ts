@@ -4,7 +4,7 @@
 // reset kuota harian menu (lewat refreshDailyQuota) saat loadCart dipanggil dengan `refresh: true` oleh checkout.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
-import { rentangHariWib } from "./admin-summary.service";
+import { getWibDayRange } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
 import { REMAINING_STOCK, isMerchantOpen } from "./catalog.service";
 import { refreshDailyQuota } from "./merchant-quota.service";
@@ -181,7 +181,7 @@ export function validateCart(
   // dalam jumlah besar
   if (
     preorderDays >= 0 &&
-    (pickupMs === null || pickupMs < rentangHariWib(nowMs + preorderDays * DAY_MS).from.getTime())
+    (pickupMs === null || pickupMs < getWibDayRange(nowMs + preorderDays * DAY_MS).from.getTime())
   ) {
     throwIfInvalid({ pickup_at: [`Menu pre-order harus diambil paling cepat H-${preorderDays}.`] });
   }

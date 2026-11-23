@@ -20,7 +20,7 @@ import {
 } from "./catalog.service";
 import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
-import { simpanHasil } from "./ai-result.service";
+import { saveAiResult } from "./ai-result.service";
 import { getWibDate } from "./merchant-quota.service";
 
 // Istilah yang dipakai di file ini:
@@ -342,11 +342,11 @@ export async function recommendMenus(userId: number, input: RecommendationInput)
   }));
   const userPrompt = `KANDIDAT:\n${JSON.stringify(candidateList)}\n\nANGGARAN: ${input.budget ?? "tidak disebut"}\nPORSI: ${input.portions ?? "tidak disebut"}\n\nPERMINTAAN:\n${maskedQuestion}`;
   const saveResult = (summary: string, result: { groups: MerchantGroup[]; total: number }) =>
-    simpanHasil({ fitur: "rekomendasi", userId, input: maskedQuestion, output: toSavedOutput(summary, result) });
+    saveAiResult({ feature: "rekomendasi", userId, input: maskedQuestion, output: toSavedOutput(summary, result) });
   let summary = "Asisten AI sedang tidak tersedia. Ini menu paling cocok yang masih tersedia.";
   try {
     // 5. Tanya AI lalu baca jawabannya.
-    const answer = parseAiAnswer(await ai.tanya(SYSTEM_PROMPT, userPrompt, { fitur: "rekomendasi", userId }));
+    const answer = parseAiAnswer(await ai.ask(SYSTEM_PROMPT, userPrompt, { feature: "rekomendasi", userId }));
     // 6. AI sengaja tidak memilih apa pun (contoh: anggaran kurang, pantangan): hormati, jangan diganti cadangan.
     if (answer && !answer.items.length) {
       const emptyResult = { groups: [], total: 0 };

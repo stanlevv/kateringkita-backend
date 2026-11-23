@@ -3,7 +3,7 @@
 // dipakai service lain, antara lain favorit, rekomendasi, meja (table), dan pesanan. File ini hanya membaca (SELECT).
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { sedangBuka } from "./admin-summary.service";
+import { isOpenAt } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
 import { getWibDate } from "./merchant-quota.service";
 import { parseGallery, parseMenuId, menuNotFound } from "./merchant-menu.service";
@@ -102,7 +102,7 @@ const badge = (available: number, preorder: boolean): MenuCard["badge"] =>
  * @returns true bila toko sedang buka
  */
 export const isMerchantOpen = (row: RowDataPacket, nowMs: number) =>
-  Boolean(row.is_open) && sedangBuka(nowMs, String(row.open_time), String(row.close_time));
+  Boolean(row.is_open) && isOpenAt(nowMs, String(row.open_time), String(row.close_time));
 
 /**
  * Mengubah satu baris hasil {@link MENU_CARD_COLUMNS} menjadi kartu menu publik. Kunci ditulis satu per satu (tidak

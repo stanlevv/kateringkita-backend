@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
-import { catat } from "../src/services/admin-audit.service";
+import { recordAudit } from "../src/services/admin-audit.service";
 import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 
@@ -109,13 +109,13 @@ test("admin+mobile: satu bcrypt.compare, body sama dengan sandi salah", async ()
 test("catat tersimpan & terbaca sebagai objek; rollback tidak meninggalkan baris", async () => {
   const conn = await db.getConnection();
   await conn.beginTransaction();
-  await catat(conn, { adminId, action: "uji.rollback", targetType: "merchant", targetId: 1, before: { a: 1 } });
+  await recordAudit(conn, { adminId, action: "uji.rollback", targetType: "merchant", targetId: 1, before: { a: 1 } });
   await conn.rollback();
   conn.release();
   let r = await request(app).get("/api/v1/admin/audit-logs").set("Authorization", `Bearer ${adminToken}`).expect(200);
   expect(r.body.data).toEqual([]);
 
-  await catat(db, {
+  await recordAudit(db, {
     adminId,
     action: "uji.simpan",
     targetType: "merchant",

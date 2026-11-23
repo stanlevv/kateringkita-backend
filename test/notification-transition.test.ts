@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vite
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { dalamTransaksi } from "../src/services/admin-audit.service";
+import { withTransaction } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
@@ -18,7 +18,7 @@ const sistem: Actor = { kind: "system" };
 const TOKO = "Dapur Siti";
 
 const jalan = (code: string, aksi: OrderAction, aktor: Actor, reason?: string | null) =>
-  dalamTransaksi((conn) => transitionOrder(conn, code, aksi, aktor, reason));
+  withTransaction((conn) => transitionOrder(conn, code, aksi, aktor, reason));
 const notif = async (userId = budi) =>
   (await db.query<any[]>("SELECT * FROM notifications WHERE user_id = ? ORDER BY id", [userId]))[0] as any[];
 const siap = async (status: Status = "holding") => {

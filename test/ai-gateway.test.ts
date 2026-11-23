@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ai } from "../src/services/ai.service";
-import { bersihkanLog } from "../src/services/server-log.service";
+import { cleanupServerLogs } from "../src/services/server-log.service";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { decrypt } from "../src/utils/crypto";
 import { login, prepareMerchants } from "./helpers/merchant";
@@ -134,7 +134,7 @@ describe("gateway & fallback", () => {
         : openai("Halo dari OR"),
     );
     vi.stubGlobal("fetch", fetch);
-    expect(await ai.tanya("sistem", "pesan", { fitur: "asisten" })).toBe("Halo dari OR");
+    expect(await ai.ask("sistem", "pesan", { feature: "asisten" })).toBe("Halo dari OR");
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([URL_GROQ, URL_OR]);
     const init = fetch.mock.calls[1][1] as unknown as RequestInit & { headers: Record<string, string> };
     expect(init.headers.Authorization).toBe("Bearer sk-or-12345678");
@@ -150,7 +150,7 @@ describe("gateway & fallback", () => {
     expect(Number(g.sisa)).toBeGreaterThan(100);
     expect((await baris(or)).last_ok_at).not.toBeNull();
     fetch.mockClear();
-    expect(await ai.tanya("s", "p", { fitur: "asisten" })).toBe("Halo dari OR");
+    expect(await ai.ask("s", "p", { feature: "asisten" })).toBe("Halo dari OR");
     expect(fetch).toHaveBeenCalledTimes(1);
     // asisten penjual memakai gateway yang sama (jawaban asisten wajib JSON sesuai Output Schema)
     fetch.mockImplementation(async () => openai(JSON.stringify({ jawaban: "Halo dari OR", poin: [], asumsi: "" })));
@@ -167,7 +167,7 @@ describe("gateway & fallback", () => {
   });
 
   test("tanpa penyedia → 503; nonaktif dilewati; GEMINI_API_KEY env cadangan terakhir; semua gagal → 502", async () => {
-    await expect(ai.tanya("s", "p", { fitur: "asisten" })).rejects.toMatchObject({ status: 503 });
+    await expect(ai.ask("s", "p", { feature: "asisten" })).rejects.toMatchObject({ status: 503 });
     await tambah({ priority: 1, is_active: false });
     await tambah({
       provider: "nvidia",
@@ -183,13 +183,13 @@ describe("gateway & fallback", () => {
         : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Halo env" }] } }] })),
     );
     vi.stubGlobal("fetch", fetch);
-    expect(await ai.tanya("s", "p", { fitur: "asisten" })).toBe("Halo env");
+    expect(await ai.ask("s", "p", { feature: "asisten" })).toBe("Halo env");
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([
       URL_NIM,
       `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`,
     ]);
     fetch.mockImplementation(async () => new Response("{}", { status: 500 }));
-    await expect(ai.tanya("s", "p", { fitur: "asisten" })).rejects.toMatchObject({ status: 502 });
+    await expect(ai.ask("s", "p", { feature: "asisten" })).rejects.toMatchObject({ status: 502 });
   });
 });
 
@@ -222,7 +222,7 @@ describe("pemakaian AI (F25)", () => {
             ),
       ),
     );
-    expect(await ai.tanya("s", "p", { fitur: "rekomendasi", userId: 42 })).toBe("Halo");
+    expect(await ai.ask("s", "p", { feature: "rekomendasi", userId: 42 })).toBe("Halo");
     const [rows] = await db.query<any[]>(
       "SELECT provider, label, fitur, ok, prompt_tokens, completion_tokens, total_tokens, error, user_id, latency_ms FROM ai_usage ORDER BY provider",
     );
@@ -309,7 +309,7 @@ describe("pemakaian AI (F25)", () => {
         ),
       ),
     );
-    expect(await ai.tanya("s", "p", { fitur: "asisten", userId: 7 })).toBe("Hai");
+    expect(await ai.ask("s", "p", { feature: "asisten", userId: 7 })).toBe("Hai");
     const [[r]] = await db.query<any[]>(
       "SELECT provider_id, provider, label, prompt_tokens, completion_tokens, total_tokens FROM ai_usage",
     );
@@ -334,7 +334,7 @@ describe("pemakaian AI (F25)", () => {
         [label, hari],
       );
     }
-    await bersihkanLog();
+    await cleanupServerLogs();
     expect((await db.query<any[]>("SELECT label FROM ai_usage"))[0]).toEqual([{ label: "baru" }]);
   });
 });

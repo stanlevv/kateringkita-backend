@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { dalamTransaksi } from "../src/services/admin-audit.service";
+import { withTransaction } from "../src/services/admin-audit.service";
 import { AppError } from "../src/utils/errors";
 import { transitionOrder } from "../src/services/order-status.service";
 import { expireHeldOrders, startExpiryJob, SYSTEM_ACTOR } from "../src/services/order-expiry.service";
@@ -18,7 +18,7 @@ const count = async (sql: string, args: unknown[] = []) =>
   Number(((await db.query<any[]>(sql, args))[0] as any[])[0].n);
 const lewat = (code: string, menit = 1) =>
   db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL ? MINUTE WHERE code = ?", [menit, code]);
-const asli = (code: string) => dalamTransaksi((conn) => transitionOrder(conn, code, "expire", SYSTEM_ACTOR));
+const asli = (code: string) => withTransaction((conn) => transitionOrder(conn, code, "expire", SYSTEM_ACTOR));
 const notifKedaluwarsa = () =>
   count("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND title = 'Pesanan kedaluwarsa'", [budi]);
 

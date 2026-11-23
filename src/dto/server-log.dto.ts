@@ -1,14 +1,14 @@
 import { z } from "zod";
 
 // F23 filter log server (query string)
-export const filterLogServerSchema = z.object({
+export const serverLogFilterSchema = z.object({
   level: z.enum(["error", "slow"], { error: "Level tidak dikenal." }).optional(),
   q: z
     .string()
     .trim()
     .max(128, "Pencarian maksimal 128 karakter.")
     .optional()
-    .transform((s) => s || undefined),
+    .transform((text) => text || undefined),
   page: z.coerce
     .number({ error: "Halaman tidak valid." })
     .int("Halaman tidak valid.")

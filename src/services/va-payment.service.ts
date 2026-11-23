@@ -25,7 +25,7 @@ import {
   isValidNotification,
   getMidtransStatus,
 } from "../utils/midtrans";
-import { dalamTransaksi } from "./admin-audit.service";
+import { withTransaction } from "./admin-audit.service";
 import { getMyOrder } from "./order.service";
 import { transitionOrder } from "./order-status.service";
 
@@ -261,7 +261,7 @@ export async function handleMidtransNotification(notification: Record<string, un
   const newStatus = PAYMENT_STATUS_FROM_MIDTRANS[String(midtransStatus.transaction_status)];
   if (!newStatus || String(midtransStatus.order_id) !== code) return;
   // 3. Sisanya dalam satu transaksi database: semua perubahan tersimpan bersama atau dibatalkan bersama.
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     // 4. Cari baris pembayaran Midtrans pesanan ini (VA, Snap `online`, atau QRIS). Pesanan online bisa punya baris
     //    Snap dan QRIS sekaligus, jadi baris yang provider_ref-nya sama dengan transaction_id diutamakan.
     const transactionId = typeof midtransStatus.transaction_id === "string" ? midtransStatus.transaction_id : null;

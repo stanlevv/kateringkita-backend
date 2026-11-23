@@ -4,7 +4,7 @@
 // mengubah tokonya sendiri.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { dalamTransaksi } from "./admin-audit.service";
+import { withTransaction } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { validateImageUrl } from "./upload.service";
 import { UpdateProfileInput } from "../dto/merchant.dto";
@@ -116,7 +116,7 @@ export async function updateProfile(userId: number, input: UpdateProfileInput) {
   if (Object.keys(columnValues).length === 0 && !pickupPointIds)
     throw new AppError(400, "VALIDATION_ERROR", "Tidak ada data yang diubah.");
 
-  await dalamTransaksi(async (conn) => {
+  await withTransaction(async (conn) => {
     let pickupPointsChanged = false;
     // 3. Kunci baris toko (FOR UPDATE = baca sambil mengunci, transaksi lain menunggu). Urutan kunci selalu toko lalu
     //    titik temu, sama dengan pengecekan titik temu terakhir di admin-master.service, supaya tidak saling menunggu.

@@ -277,7 +277,7 @@ test("catat gagal setelah UPDATE → baris penjual tidak berubah (rollback) (rev
   const n = await logCount();
   const before = await merchantRow(andiId);
   const err = vi.spyOn(console, "error").mockImplementation(() => {});
-  const spy = vi.spyOn(audit, "catat").mockRejectedValueOnce(new Error("gagal tulis log"));
+  const spy = vi.spyOn(audit, "recordAudit").mockRejectedValueOnce(new Error("gagal tulis log"));
   await post(`/merchants/${andiId}/verify`).expect(500);
   spy.mockRestore();
   err.mockRestore();
