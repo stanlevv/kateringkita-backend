@@ -1,3 +1,7 @@
+// Isi file: promo milik toko yang dikelola penjual sendiri (daftar, buat, ubah, hapus). Alurnya routes/merchant.ts →
+// handlers/merchant.handler.ts → file ini → database. Promo toko dan promo platform (dibuat admin) tersimpan di tabel
+// yang sama, `promos`: promo toko punya `merchant_id`, promo platform `merchant_id`-nya NULL. Promo yang `is_public`
+// tampil sebagai voucher di halaman toko dan bisa diklaim pembeli (lihat voucher.service).
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
@@ -6,24 +10,37 @@ import { FIELD, kodeGanda, kodeSkema, nilai, publikDari, rapikan } from "./admin
 import { getMerchantId } from "./merchant-menu.service";
 import { kabariPromoToko } from "./admin-pengumuman.service";
 
-// F12 promo toko: aturan isian sama dengan promo platform (rapikan); kode unik di seluruh tabel promos.
-// Berbeda dengan admin: kode boleh diubah, status lewat PATCH is_active, boleh dihapus selama belum dipakai, tanpa log audit admin.
+// Aturan isian sama dengan promo platform (dicek `rapikan` di admin-promo.service): jenis `percent` (potongan persen,
+// boleh diberi batas `max_discount`), `fixed` (potongan rupiah tetap), `min_subtotal` (minimal belanja), `quota`
+// (jumlah pemakaian total untuk semua pembeli; kosong = tanpa batas), dan `per_user_limit` (jatah pakai per pembeli).
+// Kode promo unik di seluruh tabel promos. Bedanya dengan promo admin: kode boleh diubah, status lewat PATCH
+// is_active, boleh dihapus selama belum pernah dipakai, dan tidak dicatat di log audit admin.
 const isDuplicateKey = (error: unknown) => (error as { code?: string } | null)?.code === "ER_DUP_ENTRY";
+// Isi permintaan yang bukan objek (kosong, teks, daftar) dianggap {} supaya galatnya tetap per kolom.
 const toObject = (body: unknown) =>
   (typeof body === "object" && body !== null && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
 const invalidField = (field: string, message: string) =>
   new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { [field]: [message] });
 
+// `is_active` dari isi permintaan: undefined bila tidak dikirim; selain true/false ditolak 400.
 function readIsActive(body: Record<string, unknown>): boolean | undefined {
   if (!("is_active" in body)) return undefined;
   if (typeof body.is_active !== "boolean") throw invalidField("is_active", "Status promo tidak valid.");
   return body.is_active;
 }
 
-// merchantId berasal dari DB (bilangan bulat), aman disisipkan ke klausa where milik kunci()
+// Mengunci satu promo milik toko ini (FOR UPDATE = baris dikunci sampai transaksi selesai, supaya dua perubahan tidak
+// saling timpa); promo toko lain dianggap tidak ada (404). merchantId berasal dari database (bilangan bulat), jadi
+// aman disisipkan ke klausa where milik kunci().
 const lockMerchantPromo = (conn: Parameters<typeof kunci>[0], merchantId: number, idRaw: unknown) =>
   kunci(conn, "promos", idRaw, { where: `merchant_id = ${Number(merchantId)}`, notFound: "Promo tidak ditemukan." });
 
+/**
+ * Daftar semua promo milik toko penjual yang login, yang terbaru di atas.
+ * @param userId id pengguna penjual dari token login
+ * @returns baris promo apa adanya, dengan `is_active` dan `is_public` sebagai true/false
+ * @throws 404 bila pengguna ini tidak punya toko
+ */
 export async function listMerchantPromos(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE merchant_id = ? ORDER BY id DESC", [
     await getMerchantId(userId),
@@ -31,12 +48,23 @@ export async function listMerchantPromos(userId: number) {
   return rows.map(withBool);
 }
 
-// C2: biaya layanan milik platform, jadi voucher toko hanya potongan persen / nominal (promo lama jenis itu tetap berlaku)
+// Biaya layanan masuk ke platform, jadi promo toko hanya boleh potongan persen atau nominal. Promo toko lama yang
+// sudah berjenis gratis biaya layanan tetap berlaku.
 const rejectFreeServiceFee = (type: unknown) => {
   if (type === "free_service_fee") throw invalidField("type", "Promo toko hanya potongan persen atau nominal.");
 };
 
+/**
+ * Membuat promo baru untuk toko penjual yang login. Bila promo langsung aktif dan publik, pembeli yang memfavoritkan
+ * menu toko ini diberi notifikasi promo.
+ * @param userId id pengguna penjual dari token login
+ * @param body   isi permintaan mentah: `code`, kolom promo (lihat komentar di atas), `is_active` dan `is_public`
+ *               (keduanya bawaan true)
+ * @returns baris promo yang baru disimpan
+ * @throws 400 isian tidak valid atau jenis gratis biaya layanan, 404 pengguna tidak punya toko, 409 kode sudah dipakai
+ */
 export async function createMerchantPromo(userId: number, body: unknown) {
+  // 1. Periksa isian; promo toko tidak boleh berjenis gratis biaya layanan.
   const input = toObject(body);
   const isActive = readIsActive(input) ?? true;
   const isPublic = publikDari(input) ?? true;
@@ -44,6 +72,7 @@ export async function createMerchantPromo(userId: number, body: unknown) {
   rejectFreeServiceFee(data.type);
   const merchantId = await getMerchantId(userId);
   try {
+    // 2. Simpan; kode kembar ditolak oleh indeks unik database (ER_DUP_ENTRY) lalu dijawab 409.
     const [insertResult] = await db.query<ResultSetHeader>(
       `INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at,
          is_active, is_public)
@@ -64,6 +93,8 @@ export async function createMerchantPromo(userId: number, body: unknown) {
         isPublic,
       ],
     );
+    // 3. Kabari pemfavorit menu toko. kabariPromoToko sendiri yang memeriksa promo aktif, publik, belum berakhir,
+    //    dan tokonya tampil di katalog.
     const [[row]] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [insertResult.insertId]);
     await kabariPromoToko(row);
     return withBool(row);
@@ -73,7 +104,17 @@ export async function createMerchantPromo(userId: number, body: unknown) {
   }
 }
 
-// PATCH sebagian: field yang tak dikirim memakai nilai tersimpan (pola ubahPromo admin)
+/**
+ * Mengubah sebagian isi promo toko (PATCH): kolom yang tidak dikirim memakai nilai yang tersimpan, lalu hasil gabungan
+ * diperiksa ulang dengan aturan yang sama seperti saat dibuat. Kuota tidak boleh diturunkan di bawah jumlah yang sudah
+ * terpakai (`used_count`). Bila promo berubah dari nonaktif menjadi aktif, pemfavorit menu toko diberi notifikasi
+ * (dengan syarat yang sama seperti saat dibuat).
+ * @param userId id pengguna penjual dari token login
+ * @param idRaw  id promo dari alamat URL (belum tentu angka)
+ * @param body   isi permintaan mentah berisi kolom yang mau diubah
+ * @returns baris promo setelah diubah
+ * @throws 400 isian tidak valid, 404 promo tidak ada atau milik toko lain, 409 kode sudah dipakai promo lain
+ */
 export async function updateMerchantPromo(userId: number, idRaw: unknown, body: unknown) {
   const merchantId = await getMerchantId(userId);
   const input = toObject(body);
@@ -81,9 +122,11 @@ export async function updateMerchantPromo(userId: number, idRaw: unknown, body: 
   const isPublic = publikDari(input);
   try {
     const { after, activated } = await dalamTransaksi(async (conn) => {
+      // 1. Kunci promo milik toko ini. Jenis gratis biaya layanan yang sudah ada boleh tetap; yang dilarang hanya
+      //    mengganti jenis lain menjadi gratis biaya layanan.
       const before = await lockMerchantPromo(conn, merchantId, idRaw);
-      // C2: promo toko lama "free_service_fee" tetap berlaku & bisa diubah; yang dilarang hanya mengganti jenis ke sana
       if ("type" in input && input.type !== before.type) rejectFreeServiceFee(input.type);
+      // 2. Gabungkan nilai tersimpan dengan kolom yang dikirim, lalu periksa ulang semuanya.
       const merged = {
         ...Object.fromEntries(
           FIELD.map((field) => [
@@ -101,6 +144,7 @@ export async function updateMerchantPromo(userId: number, idRaw: unknown, body: 
       }
       if (isActive !== undefined) updated.is_active = isActive;
       if (isPublic !== undefined) updated.is_public = isPublic;
+      // 3. Simpan hanya kolom yang nilainya benar-benar berubah.
       const previous = withBool(before) as Record<string, unknown>;
       const columns = Object.keys(updated).filter((column) => nilai(updated[column]) !== nilai(previous[column]));
       if (columns.length) {
@@ -112,6 +156,7 @@ export async function updateMerchantPromo(userId: number, idRaw: unknown, body: 
       const [[after]] = await conn.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [before.id]);
       return { after, activated: !previous.is_active && Boolean(after.is_active) };
     });
+    // 4. Kabari pemfavorit hanya bila promo baru saja dinyalakan.
     if (activated) await kabariPromoToko(after);
     return withBool(after);
   } catch (error) {
@@ -120,6 +165,14 @@ export async function updateMerchantPromo(userId: number, idRaw: unknown, body: 
   }
 }
 
+/**
+ * Menghapus promo toko yang belum pernah dipakai di pesanan. Promo yang sudah dipakai cukup dinonaktifkan, supaya
+ * riwayat potongan di pesanan lama tetap punya promonya.
+ * @param userId id pengguna penjual dari token login
+ * @param idRaw  id promo dari alamat URL
+ * @returns `{ id }` promo yang dihapus
+ * @throws 404 promo tidak ada atau milik toko lain, 409 promo sudah pernah dipakai
+ */
 export async function deleteMerchantPromo(userId: number, idRaw: unknown) {
   const merchantId = await getMerchantId(userId);
   return dalamTransaksi(async (conn) => {
