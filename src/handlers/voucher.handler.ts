@@ -2,7 +2,7 @@ import { Request, RequestHandler } from "express";
 import { voucherSayaSchema } from "../dto/voucher.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { jam } from "../services/katalog.service";
+import { jam } from "../services/catalog.service";
 import { klaimVoucher, voucherPlatform, voucherSaya } from "../services/voucher.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;

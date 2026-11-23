@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import type { VoucherSayaQuery } from "../dto/voucher.dto";
 import { AppError } from "../utils/errors";
-import { jam } from "./katalog.service";
+import { jam } from "./catalog.service";
 
 // Voucher (rancangan 2026-11-16): promo publik tampil di halaman toko / daftar voucher platform dan bisa diklaim ke
 // "Voucher Saya". Klaim tidak mengurangi kuota; kuota berkurang saat pesanan dibuat (rebutan di checkout).

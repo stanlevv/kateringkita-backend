@@ -6,7 +6,7 @@ import { meta } from "./routes/meta";
 import { admin } from "./routes/admin";
 import { adminAccess } from "./middleware/admin-access";
 import { merchant } from "./routes/merchant";
-import { katalog } from "./routes/katalog";
+import { katalog } from "./routes/catalog";
 import { table } from "./routes/table";
 import { order } from "./routes/order";
 import { notifikasi } from "./routes/notifikasi";

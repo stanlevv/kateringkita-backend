@@ -11,11 +11,11 @@ import {
   simpanFavoritTokoHandler,
   rekomendasiHandler,
   ulasanMenuHandler,
-} from "../handlers/katalog.handler";
+} from "../handlers/catalog.handler";
 import { klaimVoucherHandler, voucherPlatformHandler, voucherSayaHandler } from "../handlers/voucher.handler";
 import { bannerPublikHandler } from "../handlers/banner.handler";
 import { popupPublikHandler } from "../handlers/popup.handler";
-import { rekomendasiSchema } from "../dto/rekomendasi.dto";
+import { rekomendasiSchema } from "../dto/recommendation.dto";
 import { optionalAuth, requireAuth, requireRole } from "../middleware/auth";
 import { assistantLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";

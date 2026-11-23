@@ -7,7 +7,7 @@ import { env } from "../../src/config/env";
 import { migrate } from "../../src/scripts/migrate";
 import { loginLimiter } from "../../src/middleware/rate-limiter";
 import { hariIniWib } from "../../src/services/merchant-kuota.service";
-import { jam } from "../../src/services/katalog.service";
+import { jam } from "../../src/services/catalog.service";
 import { resetTestDatabase } from "./db";
 
 export const login = async (identifier: string) =>

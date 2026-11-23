@@ -4,7 +4,7 @@ import { sedangBuka } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
 import { hariIniWib } from "./merchant-kuota.service";
 import { galeri, menuId, menuTidakAda } from "./merchant-menu.service";
-import { Halaman, KatalogQuery } from "../dto/katalog.dto";
+import { Halaman, KatalogQuery } from "../dto/catalog.dto";
 import { voucherToko } from "./voucher.service";
 
 // Katalog publik (C-05, C-06). Hanya SELECT: tidak ada UPDATE/FOR UPDATE di modul ini (R-12).

@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
-import { kataKunci } from "../src/services/rekomendasi.service";
+import { kataKunci } from "../src/services/recommendation.service";
 import { AppError } from "../src/utils/errors";
 import { BOCOR, bekukanJam, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
 

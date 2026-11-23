@@ -1,5 +1,5 @@
 import { Request, RequestHandler } from "express";
-import { halamanSchema, katalogQuerySchema } from "../dto/katalog.dto";
+import { halamanSchema, katalogQuerySchema } from "../dto/catalog.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import {
@@ -9,9 +9,9 @@ import {
   hapusFavoritToko,
   simpanFavorit,
   simpanFavoritToko,
-} from "../services/katalog-favorit.service";
-import { daftarKatalog, detailMenu, profilToko, ulasanMenu } from "../services/katalog.service";
-import { rekomendasi } from "../services/rekomendasi.service";
+} from "../services/catalog-favorite.service";
+import { daftarKatalog, detailMenu, profilToko, ulasanMenu } from "../services/catalog.service";
+import { rekomendasi } from "../services/recommendation.service";
 
 // D14: is_favorite hanya untuk sesi pembeli; tanpa token/peran lain → null
 const pembeli = (req: Request) => {

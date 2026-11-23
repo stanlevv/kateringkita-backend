@@ -17,8 +17,8 @@ import {
   titikTemuToko,
   tokoId,
   tokoTidakAda,
-} from "./katalog.service";
-import { Halaman } from "../dto/katalog.dto";
+} from "./catalog.service";
+import { Halaman } from "../dto/catalog.dto";
 
 // Favorit pembeli (C-19, D13). Baris favorit menu yang tersembunyi tidak dihapus: muncul lagi bila menu/toko aktif lagi.
 

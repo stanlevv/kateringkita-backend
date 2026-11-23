@@ -1,9 +1,9 @@
 import { RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
-import { RekomendasiInput } from "../dto/rekomendasi.dto";
+import { RekomendasiInput } from "../dto/recommendation.dto";
 import { ai } from "./ai.service";
-import { BUKA, DARI, JOIN_FAVORIT, KOLOM_KARTU, MenuCard, SISA, TAMPIL, jam, jamWib, kartu } from "./katalog.service";
+import { BUKA, DARI, JOIN_FAVORIT, KOLOM_KARTU, MenuCard, SISA, TAMPIL, jam, jamWib, kartu } from "./catalog.service";
 import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { simpanHasil } from "./hasil-ai.service";

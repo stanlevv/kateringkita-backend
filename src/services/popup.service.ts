@@ -4,7 +4,7 @@ import { PopupInput, UbahPopup, popupSchema, ubahPopupSchema } from "../dto/popu
 import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { rapikan } from "./banner.service";
-import { jam } from "./katalog.service";
+import { jam } from "./catalog.service";
 import { VoucherKartu, voucherTersedia } from "./voucher.service";
 
 // Pop-up promo saat aplikasi mobile dibuka (rancangan voucher 2026-11-16 §5.5). Hanya admin. Yang tayang = aktif terbaru

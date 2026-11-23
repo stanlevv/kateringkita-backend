@@ -9,7 +9,7 @@ import db from "../config/db";
 import { env } from "../config/env";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
-import { jam, jamWib, SISA } from "./katalog.service";
+import { jam, jamWib, SISA } from "./catalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import {
   PricedCart,

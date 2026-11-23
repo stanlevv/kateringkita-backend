@@ -6,7 +6,7 @@ import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { rentangHariWib } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
-import { SISA, tokoBuka } from "./katalog.service";
+import { SISA, tokoBuka } from "./catalog.service";
 import { segarkanKuota } from "./merchant-kuota.service";
 import { QuoteInput } from "../dto/order.dto";
 

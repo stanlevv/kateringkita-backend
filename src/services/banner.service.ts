@@ -14,7 +14,7 @@ import {
 import { AppError } from "../utils/errors";
 import { PRESIGN_SECONDS } from "../utils/r2";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
-import { jam } from "./katalog.service";
+import { jam } from "./catalog.service";
 import { idToko } from "./merchant-menu.service";
 import { validateImageUrl } from "./upload.service";
 import { VoucherKartu, voucherTersedia } from "./voucher.service";

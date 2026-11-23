@@ -8,7 +8,7 @@ import { AppError } from "../utils/errors";
 import { TableOrderInput, UpdateTableInput } from "../dto/table.dto";
 import { dalamTransaksi } from "./admin-audit.service";
 import { asalSah, bukaSnap, KOLOM_SNAP, URL_BAYAR } from "./pembayaran-va.service";
-import { DARI, jam, JOIN_FAVORIT, kartu, KOLOM_KARTU, TAMPIL, tokoBuka, TOKO_TAMPIL } from "./katalog.service";
+import { DARI, jam, JOIN_FAVORIT, kartu, KOLOM_KARTU, TAMPIL, tokoBuka, TOKO_TAMPIL } from "./catalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import { idToko } from "./merchant-menu.service";
 import { loadCart, validateCart } from "./order-cart.service";

@@ -2,7 +2,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { PengumumanInput } from "../dto/admin.dto";
 import { catat, dalamTransaksi } from "./admin-audit.service";
-import { TOKO_TAMPIL } from "./katalog.service";
+import { TOKO_TAMPIL } from "./catalog.service";
 
 // Broadcast: pengumuman admin → notifikasi tipe "info" ke semua pengguna aktif sesuai peran (admin tidak ikut)
 export async function kirimPengumuman(adminId: number, p: PengumumanInput) {
