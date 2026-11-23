@@ -23,6 +23,7 @@ const pemilik = (id: number, aktif: boolean) =>
 const KUNCI = [
   "business_name",
   "close_time",
+  "cover_url",
   "description",
   "id",
   "is_favorite",
