@@ -80,7 +80,7 @@ export const codeGenerator = {
   random: (): string => Array.from({ length: 4 }, () => ALPHABET[randomInt(32)]).join(""),
 };
 /**
- * Membuat kode pesanan berbentuk `KK-YYYYMMDD-XXXX`, contoh `KK-20261124-7QX2`.
+ * Membuat kode pesanan berbentuk `KK-YYYYMMDD-XXXX`: tanggal pesan lalu 4 karakter acak.
  * @param date tanggal hari ini menurut jam Indonesia barat (WIB), format `YYYY-MM-DD`
  * @returns kode pesanan baru; belum tentu unik, keunikan dicek saat disimpan (lihat {@link insertOrder})
  */
