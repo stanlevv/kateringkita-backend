@@ -11,7 +11,7 @@ let penjual: Actor;
 let penjualB: Actor;
 let pembeli: Actor;
 let pembeliB: Actor;
-const sistem: Actor = { jenis: "system" };
+const sistem: Actor = { kind: "system" };
 
 const BERUBAH = "Pesanan sudah berubah status.";
 const HABIS = "Batas waktu pesanan sudah habis.";
@@ -43,11 +43,11 @@ beforeAll(async () => {
   s = await siapCheckout();
   const id = async (email: string) =>
     Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
-  penjual = { jenis: "merchant", userId: await id("siti@mail.com"), merchantId: s.idA };
-  penjualB = { jenis: "merchant", userId: await id("andi@mail.com"), merchantId: s.idB };
-  pembeli = { jenis: "customer", userId: await id("budi@mail.com") };
+  penjual = { kind: "merchant", userId: await id("siti@mail.com"), merchantId: s.idA };
+  penjualB = { kind: "merchant", userId: await id("andi@mail.com"), merchantId: s.idB };
+  pembeli = { kind: "customer", userId: await id("budi@mail.com") };
   await pembeliBaru(1);
-  pembeliB = { jenis: "customer", userId: await id("pembeli1@mail.com") };
+  pembeliB = { kind: "customer", userId: await id("pembeli1@mail.com") };
 });
 // batas 3 holding per pembeli & stok menu dikembalikan agar tiap test mulai bersih
 afterEach(async () => {

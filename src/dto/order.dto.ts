@@ -11,7 +11,7 @@ const NAME_MSG = "Nama 1–150 karakter.";
 const PHONE_MSG = "Nomor HP harus diawali 08 dan berisi 10–13 angka.";
 const PICKUP_TIME_MSG = "Waktu ambil tidak valid.";
 const VOUCHER_CODE_MSG = "Kode voucher 1–30 karakter.";
-const id = (message: string) => z.number({ error: message }).int(message).min(1, message);
+const idField = (message: string) => z.number({ error: message }).int(message).min(1, message);
 // teks opsional: trim, kosong → null
 const optionalText = (message: string, max: number) =>
   z
@@ -19,7 +19,7 @@ const optionalText = (message: string, max: number) =>
     .trim()
     .max(max, message)
     .nullish()
-    .transform((s) => s || null);
+    .transform((text) => text || null);
 
 /**
  * Body `POST /orders/quote` sekaligus dasar body checkout: 1–20 baris menu (qty 1–1000, maks 10 opsi per baris),
@@ -32,15 +32,18 @@ export const quoteSchema = z.object(
       .array(
         z.object(
           {
-            menu_id: id("Menu tidak tersedia."),
+            menu_id: idField("Menu tidak tersedia."),
             qty: z.number({ error: QTY_MSG }).int(QTY_MSG).min(1, QTY_MSG).max(1000, QTY_MSG),
             // galat per elemen dilaporkan di option_ids; diurutkan & unik agar hash idempotensi stabil (D6)
             option_ids: z
               .array(z.unknown(), { error: OPTIONS_MSG })
               .max(10, OPTIONS_MSG)
-              .refine((a) => a.every((n) => Number.isInteger(n) && (n as number) >= 1), OPTIONS_MSG)
+              .refine(
+                (values) => values.every((value) => Number.isInteger(value) && (value as number) >= 1),
+                OPTIONS_MSG,
+              )
               .default([])
-              .transform((a) => [...new Set(a as number[])].sort((x, y) => x - y)),
+              .transform((values) => [...new Set(values as number[])].sort((left, right) => left - right)),
           },
           { error: ITEMS_MSG },
         ),
@@ -48,7 +51,7 @@ export const quoteSchema = z.object(
       )
       .min(1, ITEMS_MSG)
       .max(20, ITEMS_MSG),
-    pickup_point_id: id("Pilih titik temu."),
+    pickup_point_id: idField("Pilih titik temu."),
     note: optionalText("Catatan maksimal 255 karakter.", 255),
     promo_code: optionalText("Kode promo maksimal 30 karakter.", 30),
     // voucher: maks 1 toko + 1 platform (aturan slot dicek di applyVouchers); promo_code lama digabung oleh parseVoucherCodes
@@ -65,11 +68,11 @@ export const quoteSchema = z.object(
       .trim()
       .regex(/^(08\d{8,11})?$/, PHONE_MSG)
       .nullish()
-      .transform((s) => s || null),
+      .transform((text) => text || null),
     pickup_at: z.iso
       .datetime({ offset: true, error: PICKUP_TIME_MSG })
       .nullish()
-      .transform((s) => s ?? null),
+      .transform((text) => text ?? null),
   },
   { error: "Data pesanan tidak valid." },
 );
@@ -95,7 +98,7 @@ export const payOnlineSchema = z.object({ kembali: z.url({ error: "Alamat kembal
 /** Header `Idempotency-Key` checkout (D6): wajib UUID, disimpan huruf kecil agar kiriman ulang dikenali sama. */
 export const idempotencyKeySchema = z
   .uuid({ error: "Muat ulang aplikasi lalu coba lagi." })
-  .transform((s) => s.toLowerCase());
+  .transform((key) => key.toLowerCase());
 
 /** Data quote yang sudah lolos {@link quoteSchema} (opsi sudah unik dan terurut, teks kosong menjadi null). */
 export type QuoteInput = z.infer<typeof quoteSchema>;
@@ -111,13 +114,13 @@ export const reasonSchema = z.object({
     .trim()
     .max(255, REASON_MSG)
     .nullish()
-    .transform((s) => s || null),
+    .transform((text) => text || null),
 });
 /**
  * D8: body yang bukan objek (kosong, teks, array) dianggap `{}` agar skema yang semua field-nya opsional tetap lolos.
  * Dipakai juga oleh handler notifikasi dan tiket.
  */
-export const bodyObject = (b: unknown) => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
+export const bodyObject = (body: unknown) => (body && typeof body === "object" && !Array.isArray(body) ? body : {});
 
 // F07 D10–D12: query daftar pesanan (pembeli & penjual)
 const PAGE_MSG = "Halaman tidak valid.";
@@ -132,7 +135,7 @@ export const listQueryBase = {
     .trim()
     .max(50, SEARCH_MSG)
     .optional()
-    .transform((s) => s || undefined),
+    .transform((text) => text || undefined),
   updated_since: z.iso.datetime({ offset: true, error: "Waktu tidak valid." }).optional(),
   page: z.coerce.number({ error: PAGE_MSG }).int(PAGE_MSG).min(1, PAGE_MSG).default(1),
   limit: z.coerce.number({ error: PAGE_MSG }).int(PAGE_MSG).min(1, PAGE_MSG).max(100, PAGE_MSG).default(20),
@@ -155,7 +158,7 @@ export const reviewSchema = z.object(
       .array(
         z.object(
           {
-            menu_id: id("Menu tidak ada di pesanan ini."),
+            menu_id: idField("Menu tidak ada di pesanan ini."),
             rating: z.number({ error: RATING_MSG }).int(RATING_MSG).min(1, RATING_MSG).max(5, RATING_MSG),
             comment: optionalText("Komentar maksimal 500 karakter.", 500),
           },

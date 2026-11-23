@@ -48,6 +48,6 @@ export const updateTableSchema = z
     },
     { error: "Data meja tidak valid." },
   )
-  .refine((o) => Object.keys(o).length > 0, "Tidak ada perubahan.");
+  .refine((changes) => Object.keys(changes).length > 0, "Tidak ada perubahan.");
 /** Perubahan meja yang sudah lolos {@link updateTableSchema}. */
 export type UpdateTableInput = z.infer<typeof updateTableSchema>;

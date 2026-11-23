@@ -25,16 +25,16 @@ export async function releaseStock(
     [orderId],
   );
   const isCancel = outcome === "batal";
-  for (const r of rows) {
-    const qty = Number(r.qty);
+  for (const row of rows) {
+    const qty = Number(row.qty);
     // perubahan porsi terjual: +qty (terjual), −qty (batal), 0 (kembali)
-    const d = outcome === "terjual" ? qty : isCancel ? -qty : 0;
+    const soldChange = outcome === "terjual" ? qty : isCancel ? -qty : 0;
     await conn.query(
       `UPDATE menus SET held_today = IF(? AND stock_date = ?, GREATEST(held_today - ?, 0), held_today),
          sold_today = IF(stock_date = ?, GREATEST(sold_today + ?, 0), sold_today),
          sold_total = GREATEST(sold_total + ?, 0), updated_at = updated_at
        WHERE id = ?`,
-      [!isCancel, r.stock_date, qty, r.stock_date, d, d, r.menu_id],
+      [!isCancel, row.stock_date, qty, row.stock_date, soldChange, soldChange, row.menu_id],
     );
   }
 }

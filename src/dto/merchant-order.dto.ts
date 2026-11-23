@@ -5,7 +5,7 @@ import { listQueryBase } from "./order.dto";
 import { Status } from "../services/order-status.service";
 
 // F07 D12: query GET /merchant/orders
-const STATUS: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
+const VALID_STATUSES: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
 const INVALID_STATUS_MSG = "Status tidak dikenal.";
 /**
  * Query daftar pesanan toko: `status` berisi status dipisah koma (kosong = semua, status tak dikenal → 400),
@@ -16,8 +16,8 @@ export const merchantOrdersQuerySchema = z.object({
   status: z
     .string({ error: INVALID_STATUS_MSG })
     .optional()
-    .transform((s) => (s ? s.split(",").map((x) => x.trim()) : []) as Status[])
-    .refine((a) => a.every((x) => STATUS.includes(x)), INVALID_STATUS_MSG),
+    .transform((text) => (text ? text.split(",").map((status) => status.trim()) : []) as Status[])
+    .refine((statuses) => statuses.every((status) => VALID_STATUSES.includes(status)), INVALID_STATUS_MSG),
   date: z.iso.date({ error: "Tanggal tidak valid." }).optional(),
   ...listQueryBase,
 });

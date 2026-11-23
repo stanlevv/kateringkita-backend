@@ -32,32 +32,36 @@ import { Status, transitionOrder } from "./order-status.service";
  * @throws AppError 400 VALIDATION_ERROR, 409 MERCHANT_UNAVAILABLE / MERCHANT_CLOSED, 422 PROMO_INVALID
  */
 export async function quote(userId: number, data: QuoteInput) {
-  const ms = jam.sekarang();
-  const h = validateCart(await loadCart(db, data, { segarkan: false, hari: hariIniWib(new Date(ms)), ms }), data, ms);
-  const v = await applyVouchers(db, h, parseVoucherCodes(data), userId, ms);
+  const nowMs = jam.sekarang();
+  const cart = validateCart(
+    await loadCart(db, data, { refresh: false, day: hariIniWib(new Date(nowMs)), nowMs }),
+    data,
+    nowMs,
+  );
+  const vouchers = await applyVouchers(db, cart, parseVoucherCodes(data), userId, nowMs);
   return {
     // mapper eksplisit (R-11): hpp tidak keluar
-    items: h.baris.map((b) => ({
-      menu_id: b.menu_id,
-      menu_name: b.menu_name,
-      qty: b.qty,
-      unit_price: b.unit_price,
-      options: b.options,
-      line_total: b.line_total,
-      available: b.available,
+    items: cart.lines.map((line) => ({
+      menu_id: line.menu_id,
+      menu_name: line.menu_name,
+      qty: line.qty,
+      unit_price: line.unit_price,
+      options: line.options,
+      line_total: line.line_total,
+      available: line.available,
     })),
-    subtotal: h.subtotal,
-    discount: h.discount,
-    merchant_discount: h.merchant_discount,
-    platform_discount: h.platform_discount,
-    service_fee: h.service_fee,
-    total: h.total,
-    vouchers_applied: appliedVouchers(h, v),
-    warnings: h.kurang.map((k) => ({
+    subtotal: cart.subtotal,
+    discount: cart.discount,
+    merchant_discount: cart.merchant_discount,
+    platform_discount: cart.platform_discount,
+    service_fee: cart.service_fee,
+    total: cart.total,
+    vouchers_applied: appliedVouchers(cart, vouchers),
+    warnings: cart.shortages.map((shortage) => ({
       code: "OUT_OF_STOCK",
-      menu_id: k.menu_id,
-      available: k.available,
-      message: `Sisa ${k.menu_name} tinggal ${k.available} ${k.unit_label}.`,
+      menu_id: shortage.menu_id,
+      available: shortage.available,
+      message: `Sisa ${shortage.menu_name} tinggal ${shortage.available} ${shortage.unit_label}.`,
     })),
   };
 }
@@ -65,12 +69,14 @@ export async function quote(userId: number, data: QuoteInput) {
 // D7: base32 Crockford; `acak` diganti test untuk memaksa tabrakan
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /** Pembangkit 4 karakter acak kode pesanan; dibungkus objek agar `acak` bisa diganti test. */
-export const codeGenerator = { acak: (): string => Array.from({ length: 4 }, () => ALPHABET[randomInt(32)]).join("") };
+export const codeGenerator = {
+  random: (): string => Array.from({ length: 4 }, () => ALPHABET[randomInt(32)]).join(""),
+};
 /** Kode pesanan `KK-YYYYMMDD-XXXX` dari tanggal WIB `YYYY-MM-DD` dan 4 karakter acak (D7). */
-export const generateOrderCode = (date: string) => `KK-${date.replace(/-/g, "")}-${codeGenerator.acak()}`;
+export const generateOrderCode = (date: string) => `KK-${date.replace(/-/g, "")}-${codeGenerator.random()}`;
 
 const orderNotFound = () => new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
-const dup = (e: unknown) => (e as { code?: string } | null)?.code === "ER_DUP_ENTRY";
+const isDuplicateKey = (error: unknown) => (error as { code?: string } | null)?.code === "ER_DUP_ENTRY";
 
 // AUD-31/32: porsi yang boleh ditahan sekaligus, agar satu akun atau satu meja QR tidak memborong sisa stok toko
 /** Batas porsi tertahan (pesanan holding) per pembeli (AUD-31). */
@@ -78,28 +84,29 @@ export const MAX_CUSTOMER_PORTIONS = 20;
 /** Batas porsi tertahan per meja QR (AUD-32). */
 export const MAX_TABLE_PORTIONS = 30;
 /** Jumlah porsi (total `qty`) dari daftar baris. */
-export const totalPortions = (items: { qty: number }[]) => items.reduce((s, i) => s + i.qty, 0);
+export const totalPortions = (items: { qty: number }[]) => items.reduce((sum, item) => sum + item.qty, 0);
 /**
  * Total porsi yang sedang ditahan pesanan holding yang belum lewat waktu milik satu pembeli atau satu meja.
  * Baca berkunci (FOR UPDATE) seperti hitungan pesanan menunggu: data terbaru, dan pemanggil sudah serial per pembeli/meja.
  *
  * @param column kolom pemilik: `customer_id` atau `table_id`
- * @param id id pembeli atau meja
+ * @param ownerId id pembeli atau meja
  */
 export async function getHeldPortions(
   conn: PoolConnection,
   column: "customer_id" | "table_id",
-  id: number,
+  ownerId: number,
 ): Promise<number> {
-  const [[r]] = await conn.query<RowDataPacket[]>(
+  const [[row]] = await conn.query<RowDataPacket[]>(
     `SELECT COALESCE(SUM(i.qty), 0) AS porsi FROM orders o JOIN order_items i ON i.order_id = o.id
      WHERE o.${column} = ? AND o.status = 'holding' AND o.hold_until > UTC_TIMESTAMP() FOR UPDATE`,
-    [id],
+    [ownerId],
   );
-  return Number(r.porsi);
+  return Number(row.porsi);
 }
 // D7: hanya duplikat pada kunci unik orders.code yang berarti tabrakan kode (MySQL 8 "orders.code", lama/TiDB "code")
-const isCodeCollision = (e: unknown) => dup(e) && /for key '(orders\.)?code'/.test(String((e as Error).message));
+const isCodeCollision = (error: unknown) =>
+  isDuplicateKey(error) && /for key '(orders\.)?code'/.test(String((error as Error).message));
 const CLAIM_EXISTS = Symbol("klaim");
 
 /** Galat 409 OUT_OF_STOCK dengan pesan sisa porsi per baris (`items.<index>.qty`) untuk tiap kekurangan stok. */
@@ -109,7 +116,10 @@ export const outOfStockError = (shortages: Shortage[]) =>
     "OUT_OF_STOCK",
     "Sisa porsi tidak cukup.",
     Object.fromEntries(
-      shortages.map((k) => [`items.${k.index}.qty`, [`Sisa ${Math.max(k.available, 0)} ${k.unit_label}.`]]),
+      shortages.map((shortage) => [
+        `items.${shortage.index}.qty`,
+        [`Sisa ${Math.max(shortage.available, 0)} ${shortage.unit_label}.`],
+      ]),
     ),
   );
 
@@ -131,10 +141,10 @@ export async function insertOrder(
   for (let i = 0; ; i++) {
     const code = generateOrderCode(date);
     try {
-      const [r] = await conn.query<ResultSetHeader>(sql, buildParams(code));
-      return { orderId: r.insertId, code };
-    } catch (e) {
-      if (!isCodeCollision(e)) throw e;
+      const [result] = await conn.query<ResultSetHeader>(sql, buildParams(code));
+      return { orderId: result.insertId, code };
+    } catch (error) {
+      if (!isCodeCollision(error)) throw error;
       if (i === 4) throw new Error("Kode pesanan bentrok 5 kali.");
     }
   }
@@ -149,38 +159,43 @@ export async function insertOrder(
  *
  * @throws AppError 409 OUT_OF_STOCK dengan sisa terbaru bila satu menu tidak cukup; pemanggil me-rollback transaksi
  */
-export async function holdStockAndInsertItems(conn: PoolConnection, orderId: number, h: PricedCart, stockDate: string) {
-  const perMenu = new Map<number, number>();
-  for (const b of h.baris) perMenu.set(b.menu_id, (perMenu.get(b.menu_id) ?? 0) + b.qty);
-  for (const [mid, qty] of [...perMenu].sort((a, b) => a[0] - b[0])) {
-    const [r] = await conn.query<ResultSetHeader>(
+export async function holdStockAndInsertItems(
+  conn: PoolConnection,
+  orderId: number,
+  cart: PricedCart,
+  stockDate: string,
+) {
+  const qtyByMenu = new Map<number, number>();
+  for (const line of cart.lines) qtyByMenu.set(line.menu_id, (qtyByMenu.get(line.menu_id) ?? 0) + line.qty);
+  for (const [menuId, qty] of [...qtyByMenu].sort((left, right) => left[0] - right[0])) {
+    const [result] = await conn.query<ResultSetHeader>(
       `UPDATE menus SET held_today = held_today + ?, updated_at = updated_at
        WHERE id = ? AND deleted_at IS NULL AND is_active AND stock_date = ? AND quota_today - sold_today - held_today >= ?`,
-      [qty, mid, stockDate, qty],
+      [qty, menuId, stockDate, qty],
     );
-    if (r.affectedRows === 0) {
+    if (result.affectedRows === 0) {
       // sisa terbaru untuk pesan galat (baca berkunci = data terbaru, bukan snapshot); seluruh transaksi lalu di-rollback
-      const [[m]] = await conn.query<RowDataPacket[]>(
+      const [[menu]] = await conn.query<RowDataPacket[]>(
         `SELECT ${SISA} AS available FROM menus x WHERE id = ? FOR UPDATE`,
-        [stockDate, mid],
+        [stockDate, menuId],
       );
-      const i = h.baris.findIndex((x) => x.menu_id === mid);
-      throw outOfStockError([{ ...h.baris[i], index: i, available: Number(m.available) }]);
+      const lineIndex = cart.lines.findIndex((line) => line.menu_id === menuId);
+      throw outOfStockError([{ ...cart.lines[lineIndex], index: lineIndex, available: Number(menu.available) }]);
     }
   }
   // R-05: salinan nama, harga, hpp, opsi
   await conn.query(
     "INSERT INTO order_items (order_id, menu_id, menu_name, unit_price, hpp, qty, options, line_total) VALUES ?",
     [
-      h.baris.map((b) => [
+      cart.lines.map((line) => [
         orderId,
-        b.menu_id,
-        b.menu_name,
-        b.unit_price,
-        b.hpp,
-        b.qty,
-        JSON.stringify(b.options),
-        b.line_total,
+        line.menu_id,
+        line.menu_name,
+        line.unit_price,
+        line.hpp,
+        line.qty,
+        JSON.stringify(line.options),
+        line.line_total,
       ]),
     ],
   );
@@ -210,9 +225,10 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
       // Kunci baris pembeli lebih dulu: checkout satu pembeli jadi serial sehingga batas 3 holding (D11) tidak bisa dilampaui
       // request paralel. Harus sebelum INSERT klaim: FK klaim → users mengambil kunci bersama, dan dua transaksi yang sama-sama
       // memegangnya lalu meminta FOR UPDATE akan deadlock.
-      const [[u]] = await conn.query<RowDataPacket[]>("SELECT full_name, phone FROM users WHERE id = ? FOR UPDATE", [
-        userId,
-      ]);
+      const [[buyer]] = await conn.query<RowDataPacket[]>(
+        "SELECT full_name, phone FROM users WHERE id = ? FOR UPDATE",
+        [userId],
+      );
       // shortcut: order_idempotency tidak dibersihkan; hapus baris > 7 hari di job harian F08 bila tabel > 1 juta baris
       try {
         await conn.query("INSERT INTO order_idempotency (customer_id, idem_key, request_hash) VALUES (?, ?, ?)", [
@@ -220,23 +236,23 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
           idempotencyKey,
           hash,
         ]);
-      } catch (e) {
-        if (dup(e)) throw CLAIM_EXISTS;
-        throw e;
+      } catch (error) {
+        if (isDuplicateKey(error)) throw CLAIM_EXISTS;
+        throw error;
       }
       // baca berkunci = data terbaru (TiDB: baca biasa memakai snapshot awal transaksi). Tanpa gap lock: transaksi ini READ COMMITTED.
       // shortcut: hold lewat waktu tetap memakan stok sampai sapuan berikutnya (≤ 30 dtk, D1 F08); kurangi interval bila keluhan stok "habis" palsu
-      const [[n]] = await conn.query<RowDataPacket[]>(
+      const [[holdingCount]] = await conn.query<RowDataPacket[]>(
         "SELECT COUNT(*) AS n FROM orders WHERE customer_id = ? AND status = 'holding' AND hold_until > UTC_TIMESTAMP() FOR UPDATE",
         [userId],
       );
-      if (Number(n.n) >= 3)
+      if (Number(holdingCount.n) >= 3)
         throw new AppError(409, "CONFLICT", "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu.");
 
-      const ms = jam.sekarang();
-      const today = hariIniWib(new Date(ms));
-      const h = validateCart(await loadCart(conn, data, { segarkan: true, hari: today, ms }), data, ms);
-      if (h.kurang.length) throw outOfStockError(h.kurang);
+      const nowMs = jam.sekarang();
+      const today = hariIniWib(new Date(nowMs));
+      const cart = validateCart(await loadCart(conn, data, { refresh: true, day: today, nowMs }), data, nowMs);
+      if (cart.shortages.length) throw outOfStockError(cart.shortages);
       // AUD-31: batas 3 pesanan saja tidak cukup (satu pesanan bisa berisi ratusan porsi): batasi juga porsi yang tertahan.
       // Setelah cek stok: stok yang memang kurang tetap dijawab OUT_OF_STOCK
       if ((await getHeldPortions(conn, "customer_id", userId)) + totalPortions(data.items) > MAX_CUSTOMER_PORTIONS) {
@@ -246,18 +262,20 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
           `Maksimal ${MAX_CUSTOMER_PORTIONS} porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.`,
         );
       }
-      const v = await applyVouchers(conn, h, parseVoucherCodes(data), userId, ms, data.payment_method);
-      const usedPromos = [v.toko, v.platform].filter((p): p is RowDataPacket => p !== null).sort((a, b) => a.id - b.id);
-      for (const p of usedPromos) {
+      const vouchers = await applyVouchers(conn, cart, parseVoucherCodes(data), userId, nowMs, data.payment_method);
+      const usedPromos = [vouchers.merchantPromo, vouchers.platformPromo]
+        .filter((promo): promo is RowDataPacket => promo !== null)
+        .sort((left, right) => left.id - right.id);
+      for (const promo of usedPromos) {
         // F12: klaim kuota atomik sebelum INSERT orders (FK orders → promos mengambil kunci bersama yang lalu minta dinaikkan → deadlock).
         // Urutan kunci promos (id naik) → menus, sama dengan transisi (lepasPromo sebelum releaseStock). Satu gagal → transaksi batal semua.
         // shortcut: reset kuota harian (segarkanKuota, menus) berjalan sebelum ini pada checkout pertama hari itu; deadlock langka bila
         // bersamaan dengan batal berpromo di toko yang sama, coba ulang di klien cukup
-        const [r] = await conn.query<ResultSetHeader>(
+        const [result] = await conn.query<ResultSetHeader>(
           "UPDATE promos SET used_count = used_count + 1 WHERE id = ? AND (quota IS NULL OR used_count < quota)",
-          [p.id],
+          [promo.id],
         );
-        if (!r.affectedRows) throw promoInvalid("Kuota promo sudah habis.");
+        if (!result.affectedRows) throw promoInvalid("Kuota promo sudah habis.");
       }
       // F26: semua non-tunai lewat Midtrans
       if (data.payment_method !== "cod" && !env.MIDTRANS_SERVER_KEY) {
@@ -268,7 +286,7 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
         );
       }
 
-      const { orderId, code: c } = await insertOrder(
+      const { orderId, code: createdCode } = await insertOrder(
         conn,
         today,
         `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, status, customer_name, customer_phone, note, subtotal,
@@ -278,34 +296,34 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
         (orderCode) => [
           orderCode,
           userId,
-          h.merchant.id,
+          cart.merchant.id,
           data.pickup_point_id,
-          data.customer_name ?? u.full_name,
-          data.customer_phone ?? u.phone,
+          data.customer_name ?? buyer.full_name,
+          data.customer_phone ?? buyer.phone,
           data.note,
-          h.subtotal,
-          h.discount,
-          v.toko?.id ?? null,
-          h.merchant_discount,
-          v.platform?.id ?? null,
-          h.platform_discount,
-          h.service_fee,
-          h.total,
+          cart.subtotal,
+          cart.discount,
+          vouchers.merchantPromo?.id ?? null,
+          cart.merchant_discount,
+          vouchers.platformPromo?.id ?? null,
+          cart.platform_discount,
+          cart.service_fee,
+          cart.total,
           data.payment_method,
-          h.merchant.hold_minutes,
+          cart.merchant.hold_minutes,
           today,
           data.pickup_at ? new Date(data.pickup_at) : null,
         ],
       );
-      await holdStockAndInsertItems(conn, orderId, h, today);
+      await holdStockAndInsertItems(conn, orderId, cart, today);
       // F12: dikembalikan bila pesanan batal/kedaluwarsa (transisi); satu baris per voucher
-      for (const [p, amount] of [
-        [v.toko, h.merchant_discount],
-        [v.platform, h.platform_discount],
+      for (const [promo, amount] of [
+        [vouchers.merchantPromo, cart.merchant_discount],
+        [vouchers.platformPromo, cart.platform_discount],
       ] as const) {
-        if (p)
+        if (promo)
           await conn.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, ?)", [
-            p.id,
+            promo.id,
             orderId,
             userId,
             amount,
@@ -320,20 +338,20 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
         userId,
         idempotencyKey,
       ]);
-      return c;
+      return createdCode;
     }, "READ COMMITTED");
-  } catch (e) {
-    if (e !== CLAIM_EXISTS) throw e;
+  } catch (error) {
+    if (error !== CLAIM_EXISTS) throw error;
     // D6: request kembar menunggu klaim pertama commit → pesanan yang sama bila isi sama
-    const [[r]] = await db.query<RowDataPacket[]>(
+    const [[claim]] = await db.query<RowDataPacket[]>(
       `SELECT k.request_hash, o.code FROM order_idempotency k LEFT JOIN orders o ON o.id = k.order_id
        WHERE k.customer_id = ? AND k.idem_key = ?`,
       [userId, idempotencyKey],
     );
-    if (!r || r.request_hash !== hash || !r.code) {
+    if (!claim || claim.request_hash !== hash || !claim.code) {
       throw new AppError(409, "CONFLICT", "Pesanan ini sudah dikirim dengan isi berbeda. Muat ulang lalu coba lagi.");
     }
-    code = r.code;
+    code = claim.code;
   }
   return getMyOrder(userId, code);
 }
@@ -364,51 +382,51 @@ export type Item = {
  * @returns peta id pesanan → item (urut id item); pesanan tanpa item tidak ada di peta
  */
 export async function loadOrderItems(ids: number[]): Promise<Map<number, Item[]>> {
-  const per = new Map<number, Item[]>();
-  if (!ids.length) return per;
+  const itemsByOrder = new Map<number, Item[]>();
+  if (!ids.length) return itemsByOrder;
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT order_id, menu_id, menu_name, qty, unit_price, options, line_total FROM order_items WHERE order_id IN (?) ORDER BY id",
     [ids],
   );
-  for (const i of rows) {
-    const list = per.get(i.order_id) ?? per.set(i.order_id, []).get(i.order_id)!;
+  for (const row of rows) {
+    const list = itemsByOrder.get(row.order_id) ?? itemsByOrder.set(row.order_id, []).get(row.order_id)!;
     list.push({
-      menu_id: i.menu_id,
-      menu_name: i.menu_name,
-      qty: i.qty,
-      unit_price: i.unit_price,
-      options: i.options ?? [],
-      line_total: i.line_total,
+      menu_id: row.menu_id,
+      menu_name: row.menu_name,
+      qty: row.qty,
+      unit_price: row.unit_price,
+      options: row.options ?? [],
+      line_total: row.line_total,
     });
   }
-  return per;
+  return itemsByOrder;
 }
 
 /**
  * Bagian respons yang sama untuk pesanan pembeli dan penjual (D13), dari baris yang memuat {@link ORDER_COLUMNS}.
  * hold_until/seconds_left null bila bukan holding. Mapper eksplisit: kolom lain tidak ikut keluar (R-11).
  */
-export const mapOrderBase = (o: RowDataPacket, items: Item[]) => {
-  const holding = o.status === "holding";
+export const mapOrderBase = (order: RowDataPacket, items: Item[]) => {
+  const holding = order.status === "holding";
   return {
-    code: o.code,
-    status: o.status,
-    payment_method: o.payment_method,
-    payment_status: o.payment_status,
-    hold_until: holding ? o.hold_until : null,
-    seconds_left: holding ? Number(o.seconds_left) : null,
-    pickup_point: { id: o.pickup_point_id, name: o.p_name },
+    code: order.code,
+    status: order.status,
+    payment_method: order.payment_method,
+    payment_status: order.payment_status,
+    hold_until: holding ? order.hold_until : null,
+    seconds_left: holding ? Number(order.seconds_left) : null,
+    pickup_point: { id: order.pickup_point_id, name: order.p_name },
     items,
-    subtotal: o.subtotal,
-    discount: o.discount,
-    service_fee: o.service_fee,
-    total: o.total,
-    note: o.note,
-    pickup_at: o.pickup_at,
-    cancel_reason: o.cancel_reason,
-    cancelled_by: o.cancelled_by,
-    created_at: o.created_at,
-    updated_at: o.updated_at,
+    subtotal: order.subtotal,
+    discount: order.discount,
+    service_fee: order.service_fee,
+    total: order.total,
+    note: order.note,
+    pickup_at: order.pickup_at,
+    cancel_reason: order.cancel_reason,
+    cancelled_by: order.cancelled_by,
+    created_at: order.created_at,
+    updated_at: order.updated_at,
   };
 };
 
@@ -417,21 +435,22 @@ export const mapOrderBase = (o: RowDataPacket, items: Item[]) => {
  * `can_cancel`, `can_complete`, `can_review` agar aplikasi tidak menebak aturan sendiri.
  * D2: holding yang lewat waktu tidak bisa dibatalkan; confirmed hanya bisa dibatalkan bila tunai.
  */
-export const mapCustomerOrder = (o: RowDataPacket, items: Item[]) => ({
-  ...mapOrderBase(o, items),
-  merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number },
+export const mapCustomerOrder = (order: RowDataPacket, items: Item[]) => ({
+  ...mapOrderBase(order, items),
+  merchant: { id: order.merchant_id, business_name: order.business_name, wa_number: order.wa_number },
   can_cancel:
-    (o.status === "holding" && Number(o.seconds_left) > 0) || (o.status === "confirmed" && o.payment_method === "cod"),
+    (order.status === "holding" && Number(order.seconds_left) > 0) ||
+    (order.status === "confirmed" && order.payment_method === "cod"),
   // F13: masih ada menu yang belum diulas
-  can_complete: o.status === "ready",
-  can_review: o.status === "completed" && Number(o.belum_diulas) > 0,
+  can_complete: order.status === "ready",
+  can_review: order.status === "completed" && Number(order.belum_diulas) > 0,
 });
 
 /**
  * Pola LIKE "mengandung `q`" dengan % _ \ di-escape. Dipakai juga moderasi dan tiket admin.
  * Pemanggil membandingkan LOWER(kolom) LIKE LOWER(?) karena TiDB bawaan utf8mb4_bin (peka huruf).
  */
-export const likePattern = (q: string) => `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+export const likePattern = (search: string) => `%${search.replace(/[\\%_]/g, "\\$&")}%`;
 
 /**
  * Ambil satu halaman pesanan untuk daftar pembeli dan penjual.
@@ -447,24 +466,24 @@ export async function paginateOrders<T>(
   selectFrom: string,
   where: string[],
   args: unknown[],
-  f: { page: number; limit: number; updated_since?: string },
-  mapRow: (o: RowDataPacket, items: Item[]) => T,
+  filter: { page: number; limit: number; updated_since?: string },
+  mapRow: (row: RowDataPacket, items: Item[]) => T,
 ) {
-  const orderBy = f.updated_since ? "o.updated_at ASC, o.id ASC" : "o.created_at DESC, o.id DESC";
-  const w = where.join(" AND ");
-  const [[n]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM orders o WHERE ${w}`, args);
+  const orderBy = filter.updated_since ? "o.updated_at ASC, o.id ASC" : "o.created_at DESC, o.id DESC";
+  const whereSql = where.join(" AND ");
+  const [[countRow]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM orders o WHERE ${whereSql}`, args);
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${selectFrom} WHERE ${w} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
-    [...args, f.limit, (f.page - 1) * f.limit],
+    `SELECT ${selectFrom} WHERE ${whereSql} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+    [...args, filter.limit, (filter.page - 1) * filter.limit],
   );
-  const items = await loadOrderItems(rows.map((o) => o.id));
+  const items = await loadOrderItems(rows.map((row) => row.id));
   return {
-    data: rows.map((o) => mapRow(o, items.get(o.id) ?? [])),
-    meta: { page: f.page, limit: f.limit, total: Number(n.n) },
+    data: rows.map((row) => mapRow(row, items.get(row.id) ?? [])),
+    meta: { page: filter.page, limit: filter.limit, total: Number(countRow.n) },
   };
 }
 
-const TAB: Record<MyOrdersQuery["tab"], Status[]> = {
+const STATUSES_BY_TAB: Record<MyOrdersQuery["tab"], Status[]> = {
   active: ["holding", "confirmed", "cooking", "ready"],
   completed: ["completed"],
   cancelled: ["cancelled", "expired"],
@@ -476,23 +495,23 @@ const TAB: Record<MyOrdersQuery["tab"], Status[]> = {
  *
  * @returns `{ data, meta }` seperti {@link paginateOrders}, tiap baris berbentuk {@link mapCustomerOrder}
  */
-export async function listMyOrders(userId: number, f: MyOrdersQuery) {
+export async function listMyOrders(userId: number, filter: MyOrdersQuery) {
   const where = ["o.customer_id = ?"];
   const args: unknown[] = [userId];
-  if (f.updated_since) {
+  if (filter.updated_since) {
     where.push("o.updated_at >= ?");
-    args.push(new Date(f.updated_since));
+    args.push(new Date(filter.updated_since));
   } else {
     where.push("o.status IN (?)");
-    args.push(TAB[f.tab]);
+    args.push(STATUSES_BY_TAB[filter.tab]);
   }
-  if (f.q) {
+  if (filter.q) {
     where.push(
       "(LOWER(o.code) LIKE LOWER(?) OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND LOWER(i.menu_name) LIKE LOWER(?)))",
     );
-    args.push(likePattern(f.q), likePattern(f.q));
+    args.push(likePattern(filter.q), likePattern(filter.q));
   }
-  return paginateOrders(CUSTOMER_ORDER_SELECT, where, args, f, mapCustomerOrder);
+  return paginateOrders(CUSTOMER_ORDER_SELECT, where, args, filter, mapCustomerOrder);
 }
 
 /**
@@ -506,44 +525,49 @@ export async function listMyOrders(userId: number, f: MyOrdersQuery) {
  * @throws AppError 404 NOT_FOUND bila pesanan tidak ada atau milik pembeli lain
  */
 export async function getMyOrder(userId: number, code: string) {
-  const [[o]] = await db.query<RowDataPacket[]>(
+  const [[order]] = await db.query<RowDataPacket[]>(
     `SELECT ${CUSTOMER_ORDER_SELECT} WHERE o.code = ? AND o.customer_id = ?`,
     [code, userId],
   );
-  if (!o) throw orderNotFound();
-  const items = await loadOrderItems([o.id]);
-  const payment = { method: o.payment_method, status: o.payment_status, amount: o.total };
-  if (o.payment_method === "online") {
+  if (!order) throw orderNotFound();
+  const items = await loadOrderItems([order.id]);
+  const payment = { method: order.payment_method, status: order.payment_status, amount: order.total };
+  if (order.payment_method === "online") {
     // F26: halaman bayar Snap; null sampai POST /orders/:code/online, dan setelah lunas/tidak menunggu bayar lagi
     // QRIS di aplikasi: null sampai POST /orders/:code/qris; redirect_url baris qris = gambar QR Midtrans
-    const [[p]] = await db.query<RowDataPacket[]>(
+    const [[snapPayment]] = await db.query<RowDataPacket[]>(
       "SELECT redirect_url FROM payments WHERE order_id = ? AND method = 'online' ORDER BY id DESC LIMIT 1",
-      [o.id],
+      [order.id],
     );
-    const [[q]] = await db.query<RowDataPacket[]>(
+    const [[qrisPayment]] = await db.query<RowDataPacket[]>(
       "SELECT qr_string, redirect_url, expires_at FROM payments WHERE order_id = ? AND method = 'qris' ORDER BY id DESC LIMIT 1",
-      [o.id],
+      [order.id],
     );
-    const awaitingPayment = o.status === "holding" && o.payment_status !== "paid";
+    const awaitingPayment = order.status === "holding" && order.payment_status !== "paid";
     return {
-      ...mapCustomerOrder(o, items.get(o.id) ?? []),
+      ...mapCustomerOrder(order, items.get(order.id) ?? []),
       payment: {
         ...payment,
-        payment_url: awaitingPayment ? (p?.redirect_url ?? null) : null,
+        payment_url: awaitingPayment ? (snapPayment?.redirect_url ?? null) : null,
         qris:
-          awaitingPayment && q ? { qr_string: q.qr_string, qr_url: q.redirect_url, expires_at: q.expires_at } : null,
+          awaitingPayment && qrisPayment
+            ? { qr_string: qrisPayment.qr_string, qr_url: qrisPayment.redirect_url, expires_at: qrisPayment.expires_at }
+            : null,
       },
     };
   }
-  if (o.payment_method !== "va") return { ...mapCustomerOrder(o, items.get(o.id) ?? []), payment };
+  if (order.payment_method !== "va") return { ...mapCustomerOrder(order, items.get(order.id) ?? []), payment };
   // F10: VA null sampai pembeli memilih bank lewat POST /orders/:code/va
-  const [[va]] = await db.query<RowDataPacket[]>(
+  const [[vaPayment]] = await db.query<RowDataPacket[]>(
     "SELECT bank, va_number, expires_at FROM payments WHERE order_id = ? AND method = 'va' ORDER BY id DESC LIMIT 1",
-    [o.id],
+    [order.id],
   );
   return {
-    ...mapCustomerOrder(o, items.get(o.id) ?? []),
-    payment: { ...payment, va: va ? { bank: va.bank, va_number: va.va_number, expires_at: va.expires_at } : null },
+    ...mapCustomerOrder(order, items.get(order.id) ?? []),
+    payment: {
+      ...payment,
+      va: vaPayment ? { bank: vaPayment.bank, va_number: vaPayment.va_number, expires_at: vaPayment.expires_at } : null,
+    },
   };
 }
 
@@ -554,7 +578,7 @@ const transitionMyOrder = async (
   action: "cancel" | "complete",
   reason: string | null = null,
 ) => {
-  await dalamTransaksi((c) => transitionOrder(c, code, action, { jenis: "customer", userId }, reason));
+  await dalamTransaksi((conn) => transitionOrder(conn, code, action, { kind: "customer", userId }, reason));
   return getMyOrder(userId, code);
 };
 /**
@@ -592,7 +616,7 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
  * Format sama dengan fe/lib/wa-template.ts (Rp 30.000, HH.MM WIB / Secepatnya, Tunai); tanggal ambil ditulis
  * hanya bila bukan hari ini (WIB).
  */
-export function buildWaValues(o: {
+export function buildWaValues(order: {
   code: string;
   customer_name: string;
   business_name: string;
@@ -604,31 +628,31 @@ export function buildWaValues(o: {
   note: string | null;
 }): Record<string, string> {
   return {
-    kode: o.code,
-    nama: o.customer_name,
-    toko: o.business_name,
-    menu: o.items.map((i) => `${i.qty}x ${i.menu_name}`).join(", "),
-    total: `Rp ${o.total.toLocaleString("id-ID")}`,
-    titik_temu: o.titik_temu,
-    waktu_ambil: o.pickup_at
-      ? `${pickupDayPrefix(o.pickup_at)}${jamWib(o.pickup_at.getTime()).slice(0, 5).replace(":", ".")} WIB`
+    kode: order.code,
+    nama: order.customer_name,
+    toko: order.business_name,
+    menu: order.items.map((item) => `${item.qty}x ${item.menu_name}`).join(", "),
+    total: `Rp ${order.total.toLocaleString("id-ID")}`,
+    titik_temu: order.titik_temu,
+    waktu_ambil: order.pickup_at
+      ? `${pickupDayPrefix(order.pickup_at)}${jamWib(order.pickup_at.getTime()).slice(0, 5).replace(":", ".")} WIB`
       : "Secepatnya",
-    metode_bayar: PAYMENT_METHOD_LABELS[o.payment_method] ?? o.payment_method,
-    catatan: o.note ?? "",
+    metode_bayar: PAYMENT_METHOD_LABELS[order.payment_method] ?? order.payment_method,
+    catatan: order.note ?? "",
   };
 }
 
 const wibDateFormat = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" });
 // "3 November " bila hari ambil (WIB) bukan hari ini
-const pickupDayPrefix = (d: Date) =>
-  hariIniWib(d) === hariIniWib(new Date(jam.sekarang())) ? "" : `${wibDateFormat.format(d)} `;
+const pickupDayPrefix = (date: Date) =>
+  hariIniWib(date) === hariIniWib(new Date(jam.sekarang())) ? "" : `${wibDateFormat.format(date)} `;
 
 /**
  * Isi templat WhatsApp: `{nama}` diganti `values.nama`.
  * Placeholder dikenal diganti, yang tidak dikenal dibiarkan (sama dengan fe renderTemplate).
  */
 export const render = (template: string, values: Record<string, string>) =>
-  template.replace(/\{[^{}\n]+\}/g, (k) => values[k.slice(1, -1)] ?? k);
+  template.replace(/\{[^{}\n]+\}/g, (placeholder) => values[placeholder.slice(1, -1)] ?? placeholder);
 
 /**
  * Tautan `https://wa.me/<nomor>?text=<pesan>`.
@@ -645,23 +669,23 @@ export const waLink = (phone: string, text: string) =>
  * @throws AppError 404 NOT_FOUND bila pesanan tidak ada atau bukan milik pembeli
  */
 export async function getMyOrderWhatsapp(userId: number, code: string) {
-  const [[o]] = await db.query<RowDataPacket[]>(
+  const [[order]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.customer_name, o.total, o.pickup_at, o.payment_method, o.note, m.business_name, m.wa_number,
        p.name AS titik_temu
      FROM orders o JOIN merchants m ON m.id = o.merchant_id JOIN pickup_points p ON p.id = o.pickup_point_id
      WHERE o.code = ? AND o.customer_id = ?`,
     [code, userId],
   );
-  if (!o) throw orderNotFound();
+  if (!order) throw orderNotFound();
   const [items] = await db.query<RowDataPacket[]>(
     "SELECT qty, menu_name FROM order_items WHERE order_id = ? ORDER BY id",
-    [o.id],
+    [order.id],
   );
   const message = render(
-    CUSTOMER_WA_TEMPLATE + (o.note ? "\nCatatan: {catatan}" : ""),
-    buildWaValues({ ...o, items } as Parameters<typeof buildWaValues>[0]),
+    CUSTOMER_WA_TEMPLATE + (order.note ? "\nCatatan: {catatan}" : ""),
+    buildWaValues({ ...order, items } as Parameters<typeof buildWaValues>[0]),
   );
-  return { wa_number: o.wa_number, message, url: waLink(o.wa_number, message) };
+  return { wa_number: order.wa_number, message, url: waLink(order.wa_number, message) };
 }
 
 /**
@@ -672,20 +696,20 @@ export async function getMyOrderWhatsapp(userId: number, code: string) {
  * @throws AppError 404 NOT_FOUND bila pesanan bukan milik pembeli; galat quote (menu tidak tersedia, toko tutup, dll.)
  */
 export async function reorder(userId: number, code: string) {
-  const [[o]] = await db.query<RowDataPacket[]>(
+  const [[order]] = await db.query<RowDataPacket[]>(
     "SELECT id, pickup_point_id, note FROM orders WHERE code = ? AND customer_id = ?",
     [code, userId],
   );
-  if (!o) throw orderNotFound();
-  const items = (await loadOrderItems([o.id])).get(o.id) ?? [];
+  if (!order) throw orderNotFound();
+  const items = (await loadOrderItems([order.id])).get(order.id) ?? [];
   const request = quoteSchema.parse({
-    items: items.map((i) => ({
-      menu_id: i.menu_id,
-      qty: i.qty,
-      option_ids: (i.options as { id: number }[]).map((x) => x.id),
+    items: items.map((item) => ({
+      menu_id: item.menu_id,
+      qty: item.qty,
+      option_ids: (item.options as { id: number }[]).map((option) => option.id),
     })),
-    pickup_point_id: o.pickup_point_id,
-    note: o.note,
+    pickup_point_id: order.pickup_point_id,
+    note: order.note,
   });
   return { request, quote: await quote(userId, request) };
 }

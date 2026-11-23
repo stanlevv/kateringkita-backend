@@ -13,23 +13,23 @@ import {
 } from "../services/table.service";
 
 // F21 pesan dari meja. Body sudah divalidasi skema di rute.
-const uid = (req: Request) => (req as AuthedRequest).auth.userId;
+const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
 // token tamu dikirim lewat header agar tidak tercatat di log URL
 const getGuestToken = (req: Request) => req.get("x-guest-token") ?? "";
 
 /** `GET /merchant/tables`: daftar meja milik toko penjual yang login. */
 export const listTablesHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await listTables(uid(req)) });
+  res.json({ data: await listTables(getUserId(req)) });
 };
 
 /** `POST /merchant/tables`: buat meja baru beserta token QR-nya, dibalas 201. */
 export const createTableHandler: RequestHandler = async (req, res) => {
-  res.status(201).json({ data: await createTable(uid(req), req.body.label) });
+  res.status(201).json({ data: await createTable(getUserId(req), req.body.label) });
 };
 
 /** `PATCH /merchant/tables/:id`: ubah nama/status meja atau ganti token QR. */
 export const updateTableHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await updateTable(uid(req), req.params.id, req.body) });
+  res.json({ data: await updateTable(getUserId(req), req.params.id, req.body) });
 };
 
 /** `GET /tables/:token`: menu toko untuk tamu yang memindai QR meja. */

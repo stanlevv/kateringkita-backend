@@ -91,7 +91,7 @@ describe("GET /me/notifications (D13)", () => {
   test("notifikasi dari transisi nyata ikut tampil", async () => {
     const code = await pesanDulu(s.tCust, s.menu);
     await dalamTransaksi((c) =>
-      transitionOrder(c, code, "confirm", { jenis: "merchant", userId: siti, merchantId: s.idA }),
+      transitionOrder(c, code, "confirm", { kind: "merchant", userId: siti, merchantId: s.idA }),
     );
     const r = await get().expect(200);
     expect(r.body.data[0]).toMatchObject({

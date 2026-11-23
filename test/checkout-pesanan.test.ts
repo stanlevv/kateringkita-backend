@@ -241,10 +241,10 @@ test("D11: 3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async ()
 
 test("D7: kode bentrok → buat ulang; selalu bentrok → 500 tanpa sisa", async () => {
   const hari = hariIniWib().replace(/-/g, "");
-  vi.spyOn(codeGenerator, "acak").mockReturnValueOnce("AAAA").mockReturnValueOnce("AAAA").mockReturnValueOnce("BBBB");
+  vi.spyOn(codeGenerator, "random").mockReturnValueOnce("AAAA").mockReturnValueOnce("AAAA").mockReturnValueOnce("BBBB");
   expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-AAAA`);
   expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-BBBB`);
-  vi.spyOn(codeGenerator, "acak").mockReturnValue("AAAA");
+  vi.spyOn(codeGenerator, "random").mockReturnValue("AAAA");
   const k = randomUUID();
   const r = await pesan(isi({}, { qty: 1 }), k).expect(500);
   expect(r.body.error.code).toBe("INTERNAL_ERROR");
@@ -281,7 +281,7 @@ describe.skipIf(process.env.DATABASE_URL?.includes("tidbcloud.com"))("galat di t
   test("duplikat pada kunci selain orders.code bukan tabrakan kode → tidak dicoba ulang", async () => {
     await db.query(`CREATE TRIGGER uji_gagal BEFORE INSERT ON orders FOR EACH ROW
       SIGNAL SQLSTATE '23000' SET MESSAGE_TEXT = "Duplicate entry 'x' for key 'orders.lain'", MYSQL_ERRNO = 1062`);
-    const acak = vi.spyOn(codeGenerator, "acak");
+    const acak = vi.spyOn(codeGenerator, "random");
     const r = await pesan(isi());
     expect(r.status).not.toBe(201);
     expect(acak).toHaveBeenCalledTimes(1);

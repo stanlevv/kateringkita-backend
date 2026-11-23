@@ -161,7 +161,7 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
     if (baru === "paid") {
       // urutan kunci sama dengan transisi lain (users → orders → menus), payments terakhir
       // lunas setelah hold habis/batal → 409 ditelan, payments tetap lunas → muncul di daftar refund admin (F26)
-      await transitionOrder(conn, code, "pay", { jenis: "system" }).catch((e: unknown) => {
+      await transitionOrder(conn, code, "pay", { kind: "system" }).catch((e: unknown) => {
         if (!(e instanceof AppError) || e.status !== 409) throw e;
         console.error(`VA ${code} lunas tetapi pesanan tidak bisa dikonfirmasi: ${e.message}`);
       });

@@ -14,7 +14,7 @@ let penjualB: Actor;
 let pembeli: Actor;
 let budi: number;
 let siti: number;
-const sistem: Actor = { jenis: "system" };
+const sistem: Actor = { kind: "system" };
 const TOKO = "Dapur Siti";
 
 const jalan = (code: string, aksi: OrderAction, aktor: Actor, reason?: string | null) =>
@@ -37,9 +37,9 @@ beforeAll(async () => {
     Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
   budi = await id("budi@mail.com");
   siti = await id("siti@mail.com");
-  penjual = { jenis: "merchant", userId: siti, merchantId: s.idA };
-  penjualB = { jenis: "merchant", userId: await id("andi@mail.com"), merchantId: s.idB };
-  pembeli = { jenis: "customer", userId: budi };
+  penjual = { kind: "merchant", userId: siti, merchantId: s.idA };
+  penjualB = { kind: "merchant", userId: await id("andi@mail.com"), merchantId: s.idB };
+  pembeli = { kind: "customer", userId: budi };
 });
 afterEach(async () => {
   await db.query("UPDATE orders SET status = 'expired' WHERE status = 'holding'");
