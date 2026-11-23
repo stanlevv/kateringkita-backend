@@ -1,11 +1,21 @@
+// Isi file: notifikasi in-app, yaitu pesan pendek yang tampil di menu Notifikasi aplikasi (bukan SMS atau email),
+// disimpan di tabel `notifications`. File ini membuat notifikasi perubahan status pesanan, menampilkan daftar
+// notifikasi, dan menandai notifikasi sudah dibaca. Alurnya routes/notification.ts → handlers/notification.handler.ts
+// → file ini → database; order-status.service memanggil createOrderNotification saat penjual atau sistem mengubah
+// status pesanan.
+// Tanda sudah dibaca = kolom `read_at` berisi waktu notifikasi dibaca; NULL berarti belum dibaca.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import db from "../config/db";
 import type { Status } from "./order-status.service";
 import type { ListNotificationsQuery, MarkAsReadInput } from "../dto/notification.dto";
 
-// F08 (C-21; D8, D12): teks notifikasi pembeli per status tujuan; status tanpa entri tidak dinotifikasi
+// Isian templat notifikasi pesanan: kode pesanan, nama toko, dan alasan penolakan (null bila tidak ada).
 type OrderNotificationFields = { code: string; merchantName: string; reason: string | null };
+/**
+ * Templat judul dan isi notifikasi untuk pembeli, satu per status tujuan pesanan. Status yang tidak ada di sini
+ * (misalnya `holding` dan `completed`) tidak dikirimi notifikasi.
+ */
 export const ORDER_NOTIFICATION_TEMPLATE: Partial<
   Record<Status, (details: OrderNotificationFields) => { title: string; body: string }>
 > = {
@@ -31,16 +41,27 @@ export const ORDER_NOTIFICATION_TEMPLATE: Partial<
   }),
 };
 
-// Dipanggil di dalam transaksi transisi (D10), setelah users pembeli dikunci (D11)
+/**
+ * Menyimpan notifikasi perubahan status pesanan untuk pembelinya. Dipanggil di dalam transaksi perubahan status
+ * (order-status.service), setelah baris pembeli di tabel `users` dikunci, supaya notifikasi ikut batal bila
+ * perubahan status batal. Isi notifikasi dipotong menjadi paling banyak 255 karakter.
+ * @param conn     koneksi di dalam transaksi pemanggil
+ * @param order    pesanan yang berubah: id pembeli (null untuk pesanan meja tanpa akun), id toko, dan kode pesanan
+ * @param toStatus status tujuan pesanan
+ * @param reason   alasan penolakan dari penjual, atau null
+ * @returns tidak ada; tidak menyimpan apa pun bila status tujuan tidak punya templat atau pesanan tidak punya pembeli
+ */
 export async function createOrderNotification(
   conn: Pick<PoolConnection, "query">,
   order: { customer_id: number | null; merchant_id: number; code: string },
   toStatus: Status,
   reason: string | null,
 ): Promise<void> {
+  // 1. Pilih templat untuk status tujuan. Pesanan meja dibuat tamu tanpa akun, jadi tidak ada penerima; tamu
+  //    memantau status lewat halaman pesanannya.
   const template = ORDER_NOTIFICATION_TEMPLATE[toStatus];
-  // F21: pesanan meja tanpa akun; tamu memantau status lewat halaman pesanannya
   if (!template || !order.customer_id) return;
+  // 2. Isi templat dengan nama toko, lalu simpan notifikasi bertipe `order_status` untuk pembeli.
   const [[merchant]] = await conn.query<RowDataPacket[]>("SELECT business_name FROM merchants WHERE id = ?", [
     order.merchant_id,
   ]);
@@ -51,6 +72,7 @@ export async function createOrderNotification(
   );
 }
 
+// Jumlah semua notifikasi pengguna yang belum dibaca, tanpa filter apa pun (angka penanda di aplikasi).
 const countUnread = async (userId: number) =>
   Number(
     (
@@ -60,11 +82,20 @@ const countUnread = async (userId: number) =>
     )[0][0].n,
   );
 
-// D13: total mengikuti filter (unread, type); unread_count selalu seluruh yang belum dibaca, tidak terpengaruh filter/halaman
-// shortcut: notifikasi tidak pernah dihapus; tambah hapus yang sudah dibaca > 90 hari ke job harian bila tabel > 1 juta baris
-// shortcut: filter type tanpa indeks sendiri (cukup user_id dari idx_notif_user); tambah indeks (user_id, type, created_at)
-// bila notifikasi per pengguna > 10.000
+// shortcut: notifikasi tidak pernah dihapus; tambah hapus yang sudah dibaca > 90 hari ke job harian bila tabel
+// > 1 juta baris
+// shortcut: filter type tanpa indeks sendiri (cukup user_id dari idx_notif_user); tambah indeks
+// (user_id, type, created_at) bila notifikasi per pengguna > 10.000
+/**
+ * Menampilkan notifikasi milik pengguna yang login, terbaru dulu, per halaman. Semua peran boleh memanggil dan hanya
+ * melihat notifikasinya sendiri; pengguna yang belum pernah dikirimi notifikasi mendapat daftar kosong.
+ * @param userId id pengguna yang login
+ * @param query  filter `unread` ("true" = hanya yang belum dibaca), `type` (tab Pesanan/Promo/Info), `page`, `limit`
+ * @returns `data` = notifikasi di halaman itu; `meta.total` = jumlah yang cocok dengan filter;
+ *   `meta.unread_count` = semua yang belum dibaca, tidak terpengaruh filter maupun halaman
+ */
 export async function listNotifications(userId: number, query: ListNotificationsQuery) {
+  // 1. Susun syarat WHERE: selalu milik pengguna ini, ditambah filter yang diisi.
   const where = ["user_id = ?"];
   const args: unknown[] = [userId];
   if (query.unread === "true") where.push("read_at IS NULL");
@@ -72,6 +103,7 @@ export async function listNotifications(userId: number, query: ListNotifications
     where.push("type = ?");
     args.push(query.type);
   }
+  // 2. Ambil satu halaman notifikasi dan hitung totalnya dengan syarat yang sama.
   const whereSql = where.join(" AND ");
   const [data] = await db.query<RowDataPacket[]>(
     `SELECT id, type, title, body, data, read_at, created_at FROM notifications WHERE ${whereSql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
@@ -81,13 +113,20 @@ export async function listNotifications(userId: number, query: ListNotifications
     `SELECT COUNT(*) AS n FROM notifications WHERE ${whereSql}`,
     args,
   );
+  // 3. Tambahkan jumlah belum dibaca keseluruhan untuk angka penanda di aplikasi.
   return {
     data,
     meta: { page: query.page, limit: query.limit, total: Number(totalRow.n), unread_count: await countUnread(userId) },
   };
 }
 
-// D14: id milik orang lain/tak dikenal diabaikan; read_at lama tidak tertimpa
+/**
+ * Menandai notifikasi sudah dibaca: sebagian (`ids`) atau semuanya (`all`). Id milik orang lain atau yang tidak
+ * dikenal diabaikan tanpa galat, dan waktu baca notifikasi yang sudah dibaca tidak ditimpa.
+ * @param userId id pengguna yang login
+ * @param body   isi permintaan yang sudah lolos markAsReadSchema: `ids` atau `all: true`
+ * @returns jumlah notifikasi yang masih belum dibaca setelah ditandai
+ */
 export async function markAsRead(userId: number, body: MarkAsReadInput): Promise<{ unread_count: number }> {
   await db.query(
     `UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = ? AND read_at IS NULL${body.ids ? " AND id IN (?)" : ""}`,
