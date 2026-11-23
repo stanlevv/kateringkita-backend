@@ -23,6 +23,12 @@ export const kontakCsSchema = z.object({
   wa_number: z.string({ error: "Nomor WA tidak valid." }).trim().regex(/^(08\d{8,11})?$/, "Nomor WA harus diawali 08 dan 10–13 digit."),
 });
 
+// F27 mode pemeliharaan; pesan "" = pesan bawaan
+export const pemeliharaanSchema = z.object({
+  aktif: z.boolean({ error: "Pilih nyala atau mati." }),
+  pesan: z.string({ error: "Pesan tidak valid." }).trim().max(200, "Pesan maksimal 200 karakter.").default(""),
+});
+
 // Fase 1 kelola admin
 const adminLevel = z.enum(["super", "ops", "support"], { error: "Pilih tingkat admin." });
 export const buatAdminSchema = z.object({ full_name: fullName, phone, admin_level: adminLevel });

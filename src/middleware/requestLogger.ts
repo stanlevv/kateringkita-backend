@@ -25,6 +25,7 @@ export const catatLogServer: RequestHandler = (req, res, next) => {
   res.on('finish', () => {
     const ms = Date.now() - start;
     if (res.statusCode < 500 && ms <= LAMBAT_MS) return;
+    if (res.locals.pemeliharaan) return; // F27: 503 pemeliharaan disengaja, bukan galat server
     catatLog({
       requestId: String(res.getHeader('X-Request-Id') ?? '') || null,
       level: res.statusCode >= 500 ? 'error' : 'slow',

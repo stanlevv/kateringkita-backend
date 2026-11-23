@@ -1,11 +1,11 @@
 import { RequestHandler, Router } from "express";
-import { buatAdminSchema, hapusFotoSchema, kontakCsSchema, levelAdminSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
+import { buatAdminSchema, hapusFotoSchema, kontakCsSchema, levelAdminSchema, pemeliharaanSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
 import {
   aksiPenjualHandler, ambilBiayaHandler, antrianVerifikasiHandler, buatMasterHandler, buatPromoHandler, daftarLogHandler,
   daftarMasterHandler, daftarPenjualHandler, daftarPromoHandler, detailPenjualHandler, idParam, ringkasanHandler,
   setAktifMasterHandler, setAktifPromoHandler, ubahBiayaHandler, ubahMasterHandler, ubahPromoHandler,
   daftarMenuAdminHandler, daftarUlasanAdminHandler, hapusFotoMenuHandler, kirimPengumumanHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
-  ubahKontakCsHandler, daftarAdminHandler, buatAdminHandler, ubahLevelAdminHandler, setAktifAdminHandler, resetSandiAdminHandler,
+  ubahKontakCsHandler, ubahPemeliharaanHandler, daftarAdminHandler, buatAdminHandler, ubahLevelAdminHandler, setAktifAdminHandler, resetSandiAdminHandler,
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { verifikasiAiSchema } from "../dto/hasil-ai.dto";
@@ -72,6 +72,7 @@ toggle("/promos/:id", setAktifPromoHandler);
 admin.get("/settings", ambilBiayaHandler);
 admin.put("/settings/service-fee", ubahBiayaHandler);
 admin.put("/settings/cs-contact", validate(kontakCsSchema), ubahKontakCsHandler);
+admin.put("/settings/maintenance", validate(pemeliharaanSchema), ubahPemeliharaanHandler);
 admin.post("/broadcasts", validate(pengumumanSchema), kirimPengumumanHandler);
 admin.get("/summary", ringkasanHandler);
 
