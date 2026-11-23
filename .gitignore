@@ -25,3 +25,6 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Dokumen kerja agen AI (tidak ikut repo)
+docs/superpowers/
