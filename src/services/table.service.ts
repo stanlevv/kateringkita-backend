@@ -233,7 +233,7 @@ export async function getTableMenu(token: string) {
 export async function createTableOrder(token: string, data: TableOrderInput) {
   const table = await getActiveTable(token);
   const guestToken = randomBytes(24).toString("base64url");
-  // Transaksi memakai tingkat isolasi READ COMMITTED (argumen terakhir dalamTransaksi): setiap baca melihat data
+  // Transaksi memakai tingkat isolasi READ COMMITTED (argumen terakhir withTransaction): setiap baca melihat data
   // terbaru yang sudah disimpan, dan penghitungan pesanan tidak mengunci "celah" di indeks. Alasannya dijelaskan di
   // createOrder (order.service).
   const code = await withTransaction(async (conn) => {

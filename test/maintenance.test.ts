@@ -69,7 +69,7 @@ describe("saat nyala", () => {
     await cek(await request(app).get("/api/v1/menus"));
     await cek(await request(app).get("/api/v1/tables/abc"));
     await cek(await request(app).post("/api/v1/auth/customer/register").send({}));
-    await new Promise((resolve) => setTimeout(resolve, 200)); // catatLog berjalan setelah respons selesai
+    await new Promise((resolve) => setTimeout(resolve, 200)); // saveServerLog berjalan setelah respons selesai
     const [[{ n: count }]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM server_logs WHERE status = 503");
     expect(count).toBe(0);
   });

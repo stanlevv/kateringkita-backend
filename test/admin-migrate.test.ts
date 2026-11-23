@@ -20,19 +20,19 @@ describe("migrasi 002_admin (A-05)", () => {
     fs.copyFileSync(path.join(MIGRATIONS, "001_init.sql"), path.join(dir, "001_init.sql"));
     await migrate(url, dir);
     const conn = await mysql.createConnection(url);
-    const [u] = await conn.query<mysql.ResultSetHeader>(
+    const [userResult] = await conn.query<mysql.ResultSetHeader>(
       "INSERT INTO users (role, full_name, phone, password_hash) VALUES ('merchant','Lama','081200000001','x')",
     );
-    const [m] = await conn.query<mysql.ResultSetHeader>(
+    const [merchantResult] = await conn.query<mysql.ResultSetHeader>(
       "INSERT INTO merchants (user_id, merchant_type_id, business_name, slug, address, wa_number) VALUES (?,1,'Toko Lama','toko-lama','Jl. A','081200000001')",
-      [u.insertId],
+      [userResult.insertId],
     );
-    lamaId = m.insertId;
+    lamaId = merchantResult.insertId;
     await conn.end();
     expect(await migrate(url)).toEqual(
       fs
         .readdirSync(MIGRATIONS)
-        .filter((f) => f.endsWith(".sql"))
+        .filter((file) => file.endsWith(".sql"))
         .sort()
         .slice(1),
     );
@@ -52,8 +52,8 @@ describe("migrasi 002_admin (A-05)", () => {
          OR (TABLE_NAME='merchant_types' AND COLUMN_NAME IN ('is_active','sort_order'))
          OR TABLE_NAME='admin_audit_logs')`,
     );
-    const names = cols.map((r) => `${r.t}.${r.c}`);
-    for (const n of [
+    const names = cols.map((column) => `${column.t}.${column.c}`);
+    for (const columnName of [
       "merchants.verification_status",
       "merchants.verification_note",
       "merchants.suspended_at",
@@ -70,7 +70,7 @@ describe("migrasi 002_admin (A-05)", () => {
       "admin_audit_logs.after_json",
       "admin_audit_logs.created_at",
     ])
-      expect(names).toContain(n);
+      expect(names).toContain(columnName);
   });
 
   test("merchant_types.sort_order lama = id", async () => {
@@ -78,10 +78,10 @@ describe("migrasi 002_admin (A-05)", () => {
     expect(rows[0].n).toBe(0);
   });
 
-  test("penjual sebelum 002 → verified dengan verified_at (K2)", async () => {
-    const [r] = await query("SELECT verification_status s, verified_at v FROM merchants WHERE id = ?", [lamaId]);
-    expect(r.s).toBe("verified");
-    expect(r.v).not.toBeNull();
+  test("penjual sebelum 002 → verified dengan verified_at", async () => {
+    const [merchant] = await query("SELECT verification_status s, verified_at v FROM merchants WHERE id = ?", [lamaId]);
+    expect(merchant.s).toBe("verified");
+    expect(merchant.v).not.toBeNull();
   });
 
   test("penjual yang daftar setelah 002 → pending", async () => {
@@ -93,8 +93,10 @@ describe("migrasi 002_admin (A-05)", () => {
       merchant_type_id: 1,
       address: "Jl. B",
     });
-    const [r] = await query("SELECT verification_status s, verified_at v FROM merchants WHERE id = ?", [merchant.id]);
-    expect(r.s).toBe("pending");
-    expect(r.v).toBeNull();
+    const [merchantRow] = await query("SELECT verification_status s, verified_at v FROM merchants WHERE id = ?", [
+      merchant.id,
+    ]);
+    expect(merchantRow.s).toBe("pending");
+    expect(merchantRow.v).toBeNull();
   });
 });

@@ -44,7 +44,7 @@ export const requestLogger: RequestHandler = (req, res, next) => {
 };
 
 /**
- * Menyimpan request yang gagal di server (status 5xx) atau lambat (lebih dari `LAMBAT_MS`) ke tabel server_logs untuk
+ * Menyimpan request yang gagal di server (status 5xx) atau lambat (lebih dari `SLOW_REQUEST_MS`) ke tabel server_logs untuk
  * dashboard admin. Pesan galatnya diambil dari `res.locals.errorSummary` yang diisi errorHandler. 503 karena mode
  * pemeliharaan dilewati karena disengaja, bukan galat server. Penyimpanan berjalan tanpa ditunggu, dan kegagalannya
  * diabaikan supaya tidak mengganggu respons.

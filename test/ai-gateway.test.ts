@@ -10,27 +10,27 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { decrypt } from "../src/utils/crypto";
 import { login, prepareMerchants } from "./helpers/merchant";
 
-// F22 AI gateway: penyedia dikelola admin, key terenkripsi & tak pernah keluar, fallback berurutan dengan istirahat
-let s: Awaited<ReturnType<typeof prepareMerchants>>;
-let tAdmin = "";
+// AI gateway: penyedia dikelola admin, key terenkripsi & tak pernah keluar, fallback berurutan dengan istirahat
+let setup: Awaited<ReturnType<typeof prepareMerchants>>;
+let adminToken = "";
 const URL_GROQ = "https://api.groq.com/openai/v1/chat/completions";
 const URL_OR = "https://openrouter.ai/api/v1/chat/completions";
 const URL_NIM = "https://integrate.api.nvidia.com/v1/chat/completions";
-const api = (path = "", t = tAdmin) => ({
-  get: () => request(app).get(`/api/v1/admin/ai-providers${path}`).set("Authorization", `Bearer ${t}`),
-  post: (b?: unknown) =>
+const api = (path = "", token = adminToken) => ({
+  get: () => request(app).get(`/api/v1/admin/ai-providers${path}`).set("Authorization", `Bearer ${token}`),
+  post: (body?: unknown) =>
     request(app)
       .post(`/api/v1/admin/ai-providers${path}`)
-      .set("Authorization", `Bearer ${t}`)
-      .send(b as object),
-  patch: (b: unknown) =>
+      .set("Authorization", `Bearer ${token}`)
+      .send(body as object),
+  patch: (body: unknown) =>
     request(app)
       .patch(`/api/v1/admin/ai-providers${path}`)
-      .set("Authorization", `Bearer ${t}`)
-      .send(b as object),
-  delete: () => request(app).delete(`/api/v1/admin/ai-providers${path}`).set("Authorization", `Bearer ${t}`),
+      .set("Authorization", `Bearer ${token}`)
+      .send(body as object),
+  delete: () => request(app).delete(`/api/v1/admin/ai-providers${path}`).set("Authorization", `Bearer ${token}`),
 });
-const tambah = (o: Record<string, unknown>) =>
+const tambah = (overrides: Record<string, unknown>) =>
   api()
     .post({
       provider: "groq",
@@ -38,7 +38,7 @@ const tambah = (o: Record<string, unknown>) =>
       model: "llama-3.3-70b-versatile",
       api_key: "gsk_rahasia_1234567890ABCD",
       priority: 1,
-      ...o,
+      ...overrides,
     })
     .expect(201);
 const openai = (teks: string) => new Response(JSON.stringify({ choices: [{ message: { content: teks } }] }));
@@ -53,9 +53,9 @@ const baris = async (id: number) =>
   )[0];
 
 beforeAll(async () => {
-  s = await prepareMerchants();
+  setup = await prepareMerchants();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
-  tAdmin = await login("081300000009");
+  adminToken = await login("081300000009");
 });
 afterEach(async () => {
   vi.unstubAllGlobals();
@@ -65,8 +65,8 @@ afterEach(async () => {
 
 describe("admin mengelola penyedia AI", () => {
   test("key hanya 4 karakter terakhir, tersimpan terenkripsi, log tanpa key; validasi; penjual 403", async () => {
-    const r = await tambah({ label: "  Groq gratis " });
-    expect(r.body.data).toMatchObject({
+    const res = await tambah({ label: "  Groq gratis " });
+    expect(res.body.data).toMatchObject({
       provider: "groq",
       provider_name: "Groq",
       label: "Groq gratis",
@@ -75,18 +75,18 @@ describe("admin mengelola penyedia AI", () => {
       is_active: true,
       last_error: null,
     });
-    expect(JSON.stringify(r.body)).not.toContain("rahasia");
-    const b = await baris(r.body.data.id);
-    expect(b.api_key_enc).not.toContain("rahasia");
-    expect(decrypt(b.api_key_enc)).toBe("gsk_rahasia_1234567890ABCD");
+    expect(JSON.stringify(res.body)).not.toContain("rahasia");
+    const row = await baris(res.body.data.id);
+    expect(row.api_key_enc).not.toContain("rahasia");
+    expect(decrypt(row.api_key_enc)).toBe("gsk_rahasia_1234567890ABCD");
     const [[log]] = await db.query<any[]>(
       "SELECT action, after_json FROM admin_audit_logs WHERE target_type = 'ai_provider'",
     );
     expect(log.action).toBe("ai.create");
     expect(JSON.stringify(log.after_json)).not.toContain("rahasia");
-    const v = await api().post({ provider: "openai", label: "", model: "a b", api_key: "pendek" }).expect(400);
-    expect(Object.keys(v.body.error.fields).sort()).toEqual(["api_key", "label", "model", "provider"]);
-    await api("", s.tokenA).get().expect(403);
+    const invalidRes = await api().post({ provider: "openai", label: "", model: "a b", api_key: "pendek" }).expect(400);
+    expect(Object.keys(invalidRes.body.error.fields).sort()).toEqual(["api_key", "label", "model", "provider"]);
+    await api("", setup.tokenA).get().expect(403);
     expect((await api().get().expect(200)).body.data).toMatchObject({
       providers: [{ key_hint: "ABCD" }],
       env_gemini: null,
@@ -104,22 +104,22 @@ describe("admin mengelola penyedia AI", () => {
       message: "API key ditolak (401).",
     });
     expect(Number((await baris(id)).sisa)).toBeGreaterThan(590);
-    const u = (await api(`/${id}`).patch({ api_key: "gsk_kunci_baru_6789" }).expect(200)).body.data;
-    expect(u).toMatchObject({ key_hint: "6789", last_error: null, cooldown_until: null });
+    const updated = (await api(`/${id}`).patch({ api_key: "gsk_kunci_baru_6789" }).expect(200)).body.data;
+    expect(updated).toMatchObject({ key_hint: "6789", last_error: null, cooldown_until: null });
     await api(`/${id}`).delete().expect(204);
     await api("/9999").delete().expect(404);
     const [aksi] = await db.query<any[]>(
       "SELECT action FROM admin_audit_logs WHERE target_type = 'ai_provider' AND target_id = ? ORDER BY id",
       [String(id)],
     );
-    expect((aksi as any[]).map((a) => a.action)).toEqual(["ai.create", "ai.update", "ai.delete"]);
+    expect((aksi as any[]).map((entry) => entry.action)).toEqual(["ai.create", "ai.update", "ai.delete"]);
   });
 });
 
 describe("gateway & fallback", () => {
   test("Groq kena 429 → istirahat sesuai Retry-After → OpenRouter menjawab; berikutnya langsung ke OpenRouter", async () => {
     const groq = (await tambah({ priority: 1 })).body.data.id;
-    const or = (
+    const openRouterId = (
       await tambah({
         provider: "openrouter",
         label: "OR",
@@ -135,7 +135,7 @@ describe("gateway & fallback", () => {
     );
     vi.stubGlobal("fetch", fetch);
     expect(await ai.ask("sistem", "pesan", { feature: "asisten" })).toBe("Halo dari OR");
-    expect(fetch.mock.calls.map((c) => c[0])).toEqual([URL_GROQ, URL_OR]);
+    expect(fetch.mock.calls.map((call) => call[0])).toEqual([URL_GROQ, URL_OR]);
     const init = fetch.mock.calls[1][1] as unknown as RequestInit & { headers: Record<string, string> };
     expect(init.headers.Authorization).toBe("Bearer sk-or-12345678");
     expect(JSON.parse(init.body as string)).toMatchObject({
@@ -145,10 +145,10 @@ describe("gateway & fallback", () => {
         { role: "user", content: "pesan" },
       ],
     });
-    const g = await baris(groq);
-    expect(g.last_error).toBe("Kuota/batas pemakaian habis (429).");
-    expect(Number(g.sisa)).toBeGreaterThan(100);
-    expect((await baris(or)).last_ok_at).not.toBeNull();
+    const groqRow = await baris(groq);
+    expect(groqRow.last_error).toBe("Kuota/batas pemakaian habis (429).");
+    expect(Number(groqRow.sisa)).toBeGreaterThan(100);
+    expect((await baris(openRouterId)).last_ok_at).not.toBeNull();
     fetch.mockClear();
     expect(await ai.ask("s", "p", { feature: "asisten" })).toBe("Halo dari OR");
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -158,7 +158,7 @@ describe("gateway & fallback", () => {
       (
         await request(app)
           .post("/api/v1/merchant/assistant")
-          .set("Authorization", `Bearer ${s.tokenA}`)
+          .set("Authorization", `Bearer ${setup.tokenA}`)
           .send({ question: "halo" })
           .expect(200)
       ).body.data.answer,
@@ -184,7 +184,7 @@ describe("gateway & fallback", () => {
     );
     vi.stubGlobal("fetch", fetch);
     expect(await ai.ask("s", "p", { feature: "asisten" })).toBe("Halo env");
-    expect(fetch.mock.calls.map((c) => c[0])).toEqual([
+    expect(fetch.mock.calls.map((call) => call[0])).toEqual([
       URL_NIM,
       `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`,
     ]);
@@ -193,14 +193,14 @@ describe("gateway & fallback", () => {
   });
 });
 
-describe("pemakaian AI (F25)", () => {
-  const pakai = (qs = "", t = tAdmin) =>
-    request(app).get(`/api/v1/admin/ai-usage${qs}`).set("Authorization", `Bearer ${t}`);
+describe("pemakaian AI", () => {
+  const pakai = (query = "", token = adminToken) =>
+    request(app).get(`/api/v1/admin/ai-usage${query}`).set("Authorization", `Bearer ${token}`);
 
   test("tiap percobaan tercatat (gagal & berhasil + token); uji koneksi = fitur uji; ringkasan admin", async () => {
     await db.query("DELETE FROM ai_usage");
     await tambah({ priority: 1 });
-    const or = (
+    const openRouterId = (
       await tambah({
         provider: "openrouter",
         label: "OR",
@@ -226,7 +226,7 @@ describe("pemakaian AI (F25)", () => {
     const [rows] = await db.query<any[]>(
       "SELECT provider, label, fitur, ok, prompt_tokens, completion_tokens, total_tokens, error, user_id, latency_ms FROM ai_usage ORDER BY provider",
     );
-    expect(rows.map(({ latency_ms, ...r }: any) => ({ ...r, ms: latency_ms >= 0 }))).toEqual([
+    expect(rows.map(({ latency_ms, ...rest }: any) => ({ ...rest, hasLatency: latency_ms >= 0 }))).toEqual([
       {
         provider: "groq",
         label: "Groq",
@@ -237,7 +237,7 @@ describe("pemakaian AI (F25)", () => {
         total_tokens: null,
         error: "Kuota/batas pemakaian habis (429).",
         user_id: 42,
-        ms: true,
+        hasLatency: true,
       },
       {
         provider: "openrouter",
@@ -249,7 +249,7 @@ describe("pemakaian AI (F25)", () => {
         total_tokens: 150,
         error: null,
         user_id: 42,
-        ms: true,
+        hasLatency: true,
       },
     ]);
     // total kosong dari penyedia → prompt + completion
@@ -265,32 +265,34 @@ describe("pemakaian AI (F25)", () => {
       ),
     );
     await request(app)
-      .post(`/api/v1/admin/ai-providers/${or}/test`)
-      .set("Authorization", `Bearer ${tAdmin}`)
+      .post(`/api/v1/admin/ai-providers/${openRouterId}/test`)
+      .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
     const [[uji]] = await db.query<any[]>("SELECT fitur, total_tokens, user_id FROM ai_usage WHERE fitur = 'uji'");
     expect(uji).toEqual({ fitur: "uji", total_tokens: 8, user_id: null });
 
-    const d = (await pakai("?days=7").expect(200)).body.data;
-    expect(d.hari).toBe(7);
-    expect(d.ringkas).toMatchObject({ panggilan: 3, gagal: 1, token: 158, token_masuk: 127, token_keluar: 31 });
-    expect(d.per_penyedia.map((p: any) => [p.label, p.panggilan, p.gagal, p.token])).toEqual([
+    const usage = (await pakai("?days=7").expect(200)).body.data;
+    expect(usage.hari).toBe(7);
+    expect(usage.ringkas).toMatchObject({ panggilan: 3, gagal: 1, token: 158, token_masuk: 127, token_keluar: 31 });
+    expect(
+      usage.per_penyedia.map((provider: any) => [provider.label, provider.panggilan, provider.gagal, provider.token]),
+    ).toEqual([
       ["OR", 2, 0, 158],
       ["Groq", 1, 1, 0],
     ]);
-    expect(d.per_fitur.map((f: any) => [f.fitur, f.panggilan, f.token])).toEqual([
+    expect(usage.per_fitur.map((feature: any) => [feature.fitur, feature.panggilan, feature.token])).toEqual([
       ["rekomendasi", 2, 150],
       ["uji", 1, 8],
     ]);
-    expect(d.per_hari).toHaveLength(7);
-    expect(d.per_hari.at(-1)).toEqual({ tanggal: getWibDate(), panggilan: 3, gagal: 1, token: 158 });
-    expect(d.per_hari.slice(0, 6).every((h: any) => h.panggilan === 0)).toBe(true);
-    expect(d.gagal_terakhir).toMatchObject([
+    expect(usage.per_hari).toHaveLength(7);
+    expect(usage.per_hari.at(-1)).toEqual({ tanggal: getWibDate(), panggilan: 3, gagal: 1, token: 158 });
+    expect(usage.per_hari.slice(0, 6).every((day: any) => day.panggilan === 0)).toBe(true);
+    expect(usage.gagal_terakhir).toMatchObject([
       { label: "Groq", fitur: "rekomendasi", error: "Kuota/batas pemakaian habis (429)." },
     ]);
     expect((await pakai("?days=abc").expect(200)).body.data.per_hari).toHaveLength(7);
     expect((await pakai("?days=30").expect(200)).body.data.per_hari).toHaveLength(30);
-    await pakai("", s.tokenA).expect(403);
+    await pakai("", setup.tokenA).expect(403);
   });
 
   test("Gemini: token dari usageMetadata", async () => {
@@ -310,10 +312,10 @@ describe("pemakaian AI (F25)", () => {
       ),
     );
     expect(await ai.ask("s", "p", { feature: "asisten", userId: 7 })).toBe("Hai");
-    const [[r]] = await db.query<any[]>(
+    const [[row]] = await db.query<any[]>(
       "SELECT provider_id, provider, label, prompt_tokens, completion_tokens, total_tokens FROM ai_usage",
     );
-    expect(r).toEqual({
+    expect(row).toEqual({
       provider_id: id,
       provider: "gemini",
       label: "Gemini",

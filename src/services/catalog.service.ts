@@ -41,7 +41,7 @@ export const clock = { now: () => Date.now() };
 
 /**
  * Mengubah waktu menjadi jam WIB berbentuk `HH:MM:00`. Detik selalu `00` supaya perbandingannya per menit, sama dengan
- * `sedangBuka()`.
+ * `isOpenAt()`.
  * @param timestampMs waktu dalam milidetik sejak 1 Januari 1970 UTC
  * @returns jam WIB, contoh `"10:05:00"`
  */
@@ -55,7 +55,7 @@ export const MENU_VISIBLE = `x.is_active AND x.deleted_at IS NULL AND ${MERCHANT
 
 /**
  * Syarat SQL toko sedang buka: saklar buka toko menyala dan jam WIB sekarang ada di dalam jam bukanya. Aturannya sama
- * dengan `sedangBuka()`: tepat di jam tutup dianggap sudah tutup. Bila jam buka lebih besar dari jam tutup (contoh
+ * dengan `isOpenAt()`: tepat di jam tutup dianggap sudah tutup. Bila jam buka lebih besar dari jam tutup (contoh
  * 18:00–02:00), jam buka melewati tengah malam, jadi toko buka bila sekarang ≥ jam buka atau sekarang < jam tutup.
  * Butuh 4 parameter, keempatnya jam WIB sekarang dari {@link toWibTime}.
  */
@@ -95,7 +95,7 @@ const badge = (available: number, preorder: boolean): MenuCard["badge"] =>
   available <= 0 ? "sold_out" : preorder ? "preorder" : available <= 10 ? "low_stock" : "available";
 
 /**
- * Mengecek apakah toko sedang buka: saklar buka menyala dan waktu sekarang di dalam jam buka (aturan `sedangBuka()`,
+ * Mengecek apakah toko sedang buka: saklar buka menyala dan waktu sekarang di dalam jam buka (aturan `isOpenAt()`,
  * sama dengan {@link MERCHANT_OPEN} di SQL).
  * @param row   baris database berisi `is_open`, `open_time`, dan `close_time` toko
  * @param nowMs waktu sekarang dalam milidetik (dari {@link clock})

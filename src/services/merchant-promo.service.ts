@@ -17,7 +17,7 @@ import {
 import { getMerchantId } from "./merchant-menu.service";
 import { notifyMerchantPromo } from "./admin-announcement.service";
 
-// Aturan isian sama dengan promo platform (dicek `rapikan` di admin-promo.service): jenis `percent` (potongan persen,
+// Aturan isian sama dengan promo platform (dicek `parsePromoInput` di admin-promo.service): jenis `percent` (potongan persen,
 // boleh diberi batas `max_discount`), `fixed` (potongan rupiah tetap), `min_subtotal` (minimal belanja), `quota`
 // (jumlah pemakaian total untuk semua pembeli; kosong = tanpa batas), dan `per_user_limit` (jatah pakai per pembeli).
 // Kode promo unik di seluruh tabel promos. Bedanya dengan promo admin: kode boleh diubah, status lewat PATCH
@@ -38,7 +38,7 @@ function readIsActive(body: Record<string, unknown>): boolean | undefined {
 
 // Mengunci satu promo milik toko ini (FOR UPDATE = baris dikunci sampai transaksi selesai, supaya dua perubahan tidak
 // saling timpa); promo toko lain dianggap tidak ada (404). merchantId berasal dari database (bilangan bulat), jadi
-// aman disisipkan ke klausa where milik kunci().
+// aman disisipkan ke klausa where milik lockRow().
 const lockMerchantPromo = (conn: Parameters<typeof lockRow>[0], merchantId: number, idRaw: unknown) =>
   lockRow(conn, "promos", idRaw, { where: `merchant_id = ${Number(merchantId)}`, notFound: "Promo tidak ditemukan." });
 
@@ -100,7 +100,7 @@ export async function createMerchantPromo(userId: number, body: unknown) {
         isPublic,
       ],
     );
-    // 3. Kabari pemfavorit menu toko. kabariPromoToko sendiri yang memeriksa promo aktif, publik, belum berakhir,
+    // 3. Kabari pemfavorit menu toko. notifyMerchantPromo sendiri yang memeriksa promo aktif, publik, belum berakhir,
     //    dan tokonya tampil di katalog.
     const [[row]] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [insertResult.insertId]);
     await notifyMerchantPromo(row);

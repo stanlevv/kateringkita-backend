@@ -8,23 +8,23 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { createAdmin } from "../src/scripts/create-admin";
 import { login, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F20: GET /admin/finance — rekap pesanan completed per toko, diskon dipisah toko vs platform
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
-let tAdmin: string;
-const H = (t: string) => ({ Authorization: `Bearer ${t}` });
+// GET /admin/finance — rekap pesanan completed per toko, diskon dipisah toko vs platform
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
+let adminToken: string;
+const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
 const hariIni = getWibDate();
 const selesai = async (code: string) => {
-  for (const a of ["confirm", "cook", "ready", "complete"])
-    await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set(H(s.tokenA)).expect(200);
+  for (const action of ["confirm", "cook", "ready", "complete"])
+    await request(app).post(`/api/v1/merchant/orders/${code}/${action}`).set(authHeader(setup.tokenA)).expect(200);
 };
-// voucher platform hanya untuk non-tunai (C1): pesanan VA ditandai lunas lewat SQL sebelum diproses penjual
+// voucher platform hanya untuk non-tunai: pesanan VA ditandai lunas lewat SQL sebelum diproses penjual
 const pesanPromo = async (promo_code: string, payment_method = "cod") => {
   const code = (
     await request(app)
       .post("/api/v1/orders")
-      .set(H(s.customerToken))
+      .set(authHeader(setup.customerToken))
       .set("Idempotency-Key", randomUUID())
-      .send({ items: [{ menu_id: s.menu, qty: 1 }], pickup_point_id: 1, payment_method, promo_code })
+      .send({ items: [{ menu_id: setup.menu, qty: 1 }], pickup_point_id: 1, payment_method, promo_code })
       .expect(201)
   ).body.data.code;
   if (payment_method !== "cod") await db.query("UPDATE orders SET payment_status = 'paid' WHERE code = ?", [code]);
@@ -32,13 +32,13 @@ const pesanPromo = async (promo_code: string, payment_method = "cod") => {
 };
 
 beforeAll(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
-  tAdmin = await login("081300000009");
+  adminToken = await login("081300000009");
   await db.query("UPDATE app_settings SET setting_value = '1000' WHERE setting_key = 'service_fee'");
   await request(app)
     .post("/api/v1/merchant/promos")
-    .set(H(s.tokenA))
+    .set(authHeader(setup.tokenA))
     .send({
       code: "TOKO2K",
       type: "fixed",
@@ -55,7 +55,7 @@ beforeAll(async () => {
   env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
   await selesai(await pesanPromo("GRATIS", "va"));
   env.MIDTRANS_SERVER_KEY = undefined;
-  await placeOrder(s.customerToken, s.menu); // holding: tidak dihitung
+  await placeOrder(setup.customerToken, setup.menu); // holding: tidak dihitung
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -63,7 +63,10 @@ afterAll(() => {
 
 describe("rekap keuangan", () => {
   test("per toko + total; diskon toko vs platform; hanya completed", async () => {
-    const r = await request(app).get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`).set(H(tAdmin)).expect(200);
+    const res = await request(app)
+      .get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`)
+      .set(authHeader(adminToken))
+      .expect(200);
     const baris = {
       orders: 2,
       subtotal: 30000,
@@ -74,15 +77,18 @@ describe("rekap keuangan", () => {
       merchant_net: 28000,
       platform_net: 1000,
     };
-    expect(r.body.data).toEqual({
-      rows: [{ merchant_id: s.idA, business_name: "Dapur Siti", ...baris }],
+    expect(res.body.data).toEqual({
+      rows: [{ merchant_id: setup.idA, business_name: "Dapur Siti", ...baris }],
       totals: baris,
     });
   });
 
   test("rentang tanpa transaksi → kosong; validasi; hanya admin", async () => {
-    const r = await request(app).get("/api/v1/admin/finance?from=2020-01-01&to=2020-01-31").set(H(tAdmin)).expect(200);
-    expect(r.body.data).toEqual({
+    const res = await request(app)
+      .get("/api/v1/admin/finance?from=2020-01-01&to=2020-01-31")
+      .set(authHeader(adminToken))
+      .expect(200);
+    expect(res.body.data).toEqual({
       rows: [],
       totals: {
         orders: 0,
@@ -96,9 +102,16 @@ describe("rekap keuangan", () => {
       },
     });
     expect(
-      (await request(app).get("/api/v1/admin/finance?from=2026-01-01&to=2026-12-31").set(H(tAdmin)).expect(400)).body
-        .error.fields.to,
+      (
+        await request(app)
+          .get("/api/v1/admin/finance?from=2026-01-01&to=2026-12-31")
+          .set(authHeader(adminToken))
+          .expect(400)
+      ).body.error.fields.to,
     ).toEqual(["Rentang maksimal 92 hari."]);
-    await request(app).get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`).set(H(s.tokenA)).expect(403);
+    await request(app)
+      .get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`)
+      .set(authHeader(setup.tokenA))
+      .expect(403);
   });
 });

@@ -10,24 +10,24 @@ import { resetTestDatabase } from "./helpers/db";
 
 let token: string;
 let merchantIds: number[] = [];
-const A = () => ({ Authorization: `Bearer ${token}` });
-const T = Date.parse("2026-05-10T05:00:00Z"); // 12:00 WIB, tetap
-const utc = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
+const authHeader = () => ({ Authorization: `Bearer ${token}` });
+const FIXED_NOW = Date.parse("2026-05-10T05:00:00Z"); // 12:00 WIB, tetap
+const utc = (date: Date) => date.toISOString().slice(0, 19).replace("T", " ");
 
-test("rentangHariWib: 00:00 WIB = 17:00 UTC hari sebelumnya", () => {
-  const r = getWibDayRange(Date.parse("2026-05-10T20:00:00Z")); // 11 Mei 03:00 WIB
-  expect(r.from.toISOString()).toBe("2026-05-10T17:00:00.000Z");
-  expect(r.to.toISOString()).toBe("2026-05-11T17:00:00.000Z");
-  const s = getWibDayRange(Date.parse("2026-05-10T16:59:00Z")); // 10 Mei 23:59 WIB
-  expect(s.from.toISOString()).toBe("2026-05-09T17:00:00.000Z");
+test("getWibDayRange: 00:00 WIB = 17:00 UTC hari sebelumnya", () => {
+  const range = getWibDayRange(Date.parse("2026-05-10T20:00:00Z")); // 11 Mei 03:00 WIB
+  expect(range.from.toISOString()).toBe("2026-05-10T17:00:00.000Z");
+  expect(range.to.toISOString()).toBe("2026-05-11T17:00:00.000Z");
+  const lateRange = getWibDayRange(Date.parse("2026-05-10T16:59:00Z")); // 10 Mei 23:59 WIB
+  expect(lateRange.from.toISOString()).toBe("2026-05-09T17:00:00.000Z");
 });
 
-test("sedangBuka: jam WIB, lewat tengah malam", () => {
-  const t = Date.parse("2026-05-10T03:00:00Z"); // 10:00 WIB
-  expect(isOpenAt(t, "07:00:00", "16:00:00")).toBe(true);
-  expect(isOpenAt(t, "11:00:00", "16:00:00")).toBe(false);
-  expect(isOpenAt(t, "22:00:00", "11:00:00")).toBe(true);
-  expect(isOpenAt(t, "10:30:00", "02:00:00")).toBe(false);
+test("isOpenAt: jam WIB, lewat tengah malam", () => {
+  const morning = Date.parse("2026-05-10T03:00:00Z"); // 10:00 WIB
+  expect(isOpenAt(morning, "07:00:00", "16:00:00")).toBe(true);
+  expect(isOpenAt(morning, "11:00:00", "16:00:00")).toBe(false);
+  expect(isOpenAt(morning, "22:00:00", "11:00:00")).toBe(true);
+  expect(isOpenAt(morning, "10:30:00", "02:00:00")).toBe(false);
   const malam = Date.parse("2026-05-09T18:00:00Z"); // 01:00 WIB
   expect(isOpenAt(malam, "18:00:00", "02:00:00")).toBe(true);
   expect(isOpenAt(malam, "18:00:00", "00:30:00")).toBe(false);
@@ -42,21 +42,21 @@ beforeAll(async () => {
       .post("/api/v1/auth/login")
       .send({ identifier: "081300000009", password: "rahasia123", client: "web" })
   ).body.data.token;
-  for (const [i, n] of ["Siti", "Andi", "Budi"].entries()) {
+  for (const [i, ownerName] of ["Siti", "Andi", "Budi"].entries()) {
     await request(app)
       .post("/api/v1/auth/merchant/register")
       .send({
-        full_name: n,
-        email: `${n}@mail.com`,
+        full_name: ownerName,
+        email: `${ownerName}@mail.com`,
         phone: `08121111222${i}`,
         password: "rahasia123",
-        business_name: `Dapur ${n}`,
+        business_name: `Dapur ${ownerName}`,
         merchant_type_id: 1,
         address: "Jl. Mawar 1",
       })
       .expect(201);
   }
-  merchantIds = ((await db.query<any[]>("SELECT id FROM merchants ORDER BY id"))[0] as any[]).map((r) => r.id);
+  merchantIds = ((await db.query<any[]>("SELECT id FROM merchants ORDER BY id"))[0] as any[]).map((row) => row.id);
   // jam buka lebar; waktu ringkasan dibekukan (T) sehingga tidak bergantung jam uji
   await db.query(
     "UPDATE merchants SET verification_status='verified', open_time='00:00:00', close_time='23:59:00', is_open=1 WHERE id=?",
@@ -71,29 +71,29 @@ beforeAll(async () => {
     "INSERT INTO users (role, full_name, phone, password_hash) VALUES ('customer','Pembeli','081355550000','x')",
   );
   const cid = cust.insertId;
-  const o = async (code: string, status: string, total: number, createdAt: Date, holdUntil: Date) =>
+  const insertOrder = async (code: string, status: string, total: number, createdAt: Date, holdUntil: Date) =>
     db.query(
       "INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, status, customer_name, customer_phone, subtotal, total, payment_method, hold_until, created_at) VALUES (?, ?, ?, 1, ?, 'P', '081355550000', ?, ?, 'cod', ?, ?)",
       [code, cid, merchantIds[0], status, total, total, utc(holdUntil), utc(createdAt)],
     );
-  const now = new Date(T);
-  const long = new Date(T + 3600e3);
-  await o("KK-T-0001", "completed", 30000, now, long);
-  await o("KK-T-0002", "completed", 20000, now, long);
-  await o("KK-T-0003", "completed", 99999, new Date(T - 3 * 86400e3), long); // bukan hari ini
-  await o("KK-T-0004", "cancelled", 5000, now, long);
-  await o("KK-T-0005", "holding", 7000, now, new Date(T + 30e3)); // segera habis
-  await o("KK-T-0006", "holding", 7000, now, long);
-  await o("KK-T-0007", "holding", 7000, now, new Date(T - 30e3)); // sudah lewat
+  const now = new Date(FIXED_NOW);
+  const long = new Date(FIXED_NOW + 3600e3);
+  await insertOrder("KK-T-0001", "completed", 30000, now, long);
+  await insertOrder("KK-T-0002", "completed", 20000, now, long);
+  await insertOrder("KK-T-0003", "completed", 99999, new Date(FIXED_NOW - 3 * 86400e3), long); // bukan hari ini
+  await insertOrder("KK-T-0004", "cancelled", 5000, now, long);
+  await insertOrder("KK-T-0005", "holding", 7000, now, new Date(FIXED_NOW + 30e3)); // segera habis
+  await insertOrder("KK-T-0006", "holding", 7000, now, long);
+  await insertOrder("KK-T-0007", "holding", 7000, now, new Date(FIXED_NOW - 30e3)); // sudah lewat
 });
 
 test("ringkasan", async () => {
   await db.query(
     "INSERT INTO admin_audit_logs (admin_user_id, action, target_type, target_id) SELECT id, 'x.y', 'merchant', '1' FROM users WHERE role='admin'",
   );
-  await request(app).get("/api/v1/admin/summary").set(A()).expect(200);
-  const r = JSON.parse(JSON.stringify(await getAdminSummary(T)));
-  expect(r.orders_today).toEqual({
+  await request(app).get("/api/v1/admin/summary").set(authHeader()).expect(200);
+  const summary = JSON.parse(JSON.stringify(await getAdminSummary(FIXED_NOW)));
+  expect(summary.orders_today).toEqual({
     holding: 3,
     confirmed: 0,
     cooking: 0,
@@ -102,9 +102,9 @@ test("ringkasan", async () => {
     cancelled: 1,
     expired: 0,
   });
-  expect(r.revenue_today).toBe(50000);
-  expect(r.merchants).toEqual({ pending: 1, needs_fix: 0, verified: 1, suspended: 1, open_now: 1 });
-  expect(r.holding_expiring_soon).toBe(1);
-  expect(r.recent_logs).toHaveLength(1);
-  expect(r.recent_logs[0].admin_name).toBe("Admin Uji");
+  expect(summary.revenue_today).toBe(50000);
+  expect(summary.merchants).toEqual({ pending: 1, needs_fix: 0, verified: 1, suspended: 1, open_now: 1 });
+  expect(summary.holding_expiring_soon).toBe(1);
+  expect(summary.recent_logs).toHaveLength(1);
+  expect(summary.recent_logs[0].admin_name).toBe("Admin Uji");
 });

@@ -80,7 +80,7 @@ test("D2: toko tutup (saklar atau jam) tidak tampil; rentang lewat tengah malam 
   expect(await ids()).toEqual([esTeh]);
   await db.query("UPDATE merchants SET open_time = '22:00:00', close_time = '11:00:00' WHERE id = ?", [idA]);
   expect(await ids()).toEqual([ayam, esTeh]);
-  // tepat jam tutup = tutup (sama dengan sedangBuka)
+  // tepat jam tutup = tutup (sama dengan isOpenAt)
   await db.query("UPDATE merchants SET open_time = '07:00:00', close_time = '10:00:00' WHERE id = ?", [idA]);
   expect(await ids()).toEqual([esTeh]);
 });

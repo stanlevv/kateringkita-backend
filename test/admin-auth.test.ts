@@ -18,8 +18,8 @@ let customerToken: string;
 const login = (identifier: string, client: "web" | "mobile" = "web") =>
   request(app).post("/api/v1/auth/login").send({ identifier, password: "rahasia123", client });
 const sessionCount = async () => {
-  const [r] = await db.query<any[]>("SELECT COUNT(*) AS n FROM auth_sessions");
-  return Number(r[0].n);
+  const [rows] = await db.query<any[]>("SELECT COUNT(*) AS n FROM auth_sessions");
+  return Number(rows[0].n);
 };
 
 beforeAll(async () => {
@@ -48,23 +48,23 @@ beforeAll(async () => {
 });
 
 test("admin web login → 200 role admin", async () => {
-  const r = await login("081300000009").expect(200);
-  expect(r.body.data.user.role).toBe("admin");
+  const res = await login("081300000009").expect(200);
+  expect(res.body.data.user.role).toBe("admin");
 });
 
 test("admin mobile → 401 generik, tanpa sesi baru", async () => {
   const before = await sessionCount();
-  const r = await login("081300000009", "mobile").expect(401);
-  expect(r.body.error).toMatchObject({ code: "UNAUTHENTICATED", message: GENERIC });
+  const res = await login("081300000009", "mobile").expect(401);
+  expect(res.body.error).toMatchObject({ code: "UNAUTHENTICATED", message: GENERIC });
   expect(await sessionCount()).toBe(before);
 });
 
 test("penjual web tetap 200; /me berisi verification_status pending", async () => {
   await login("siti@mail.com").expect(200);
-  const r = await request(app).get("/api/v1/me").set("Authorization", `Bearer ${merchantToken}`).expect(200);
-  expect(r.body.data.merchant.verification_status).toBe("pending");
-  expect(r.body.data.merchant.verification_note).toBeNull();
-  expect(r.body.data.merchant.suspended_reason).toBeNull();
+  const res = await request(app).get("/api/v1/me").set("Authorization", `Bearer ${merchantToken}`).expect(200);
+  expect(res.body.data.merchant.verification_status).toBe("pending");
+  expect(res.body.data.merchant.verification_note).toBeNull();
+  expect(res.body.data.merchant.suspended_reason).toBeNull();
 });
 
 test("audit-logs: 401 tanpa token, 403 penjual & pembeli, 200 admin", async () => {
@@ -72,9 +72,9 @@ test("audit-logs: 401 tanpa token, 403 penjual & pembeli, 200 admin", async () =
   await request(app).get(url).expect(401);
   await request(app).get(url).set("Authorization", `Bearer ${merchantToken}`).expect(403);
   await request(app).get(url).set("Authorization", `Bearer ${customerToken}`).expect(403);
-  const r = await request(app).get(url).set("Authorization", `Bearer ${adminToken}`).expect(200);
-  expect(r.body.data).toEqual([]);
-  expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 0 });
+  const res = await request(app).get(url).set("Authorization", `Bearer ${adminToken}`).expect(200);
+  expect(res.body.data).toEqual([]);
+  expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 0 });
 });
 
 test("path admin tak dikenal: 401 tanpa token, 403 penjual, 404 admin", async () => {
@@ -85,11 +85,11 @@ test("path admin tak dikenal: 401 tanpa token, 403 penjual, 404 admin", async ()
 });
 
 test("limit dibatasi 100", async () => {
-  const r = await request(app)
+  const res = await request(app)
     .get("/api/v1/admin/audit-logs?limit=9999")
     .set("Authorization", `Bearer ${adminToken}`)
     .expect(200);
-  expect(r.body.meta.limit).toBe(100);
+  expect(res.body.meta.limit).toBe(100);
 });
 
 test("admin+mobile: satu bcrypt.compare, body sama dengan sandi salah", async () => {
@@ -112,8 +112,8 @@ test("catat tersimpan & terbaca sebagai objek; rollback tidak meninggalkan baris
   await recordAudit(conn, { adminId, action: "uji.rollback", targetType: "merchant", targetId: 1, before: { a: 1 } });
   await conn.rollback();
   conn.release();
-  let r = await request(app).get("/api/v1/admin/audit-logs").set("Authorization", `Bearer ${adminToken}`).expect(200);
-  expect(r.body.data).toEqual([]);
+  let res = await request(app).get("/api/v1/admin/audit-logs").set("Authorization", `Bearer ${adminToken}`).expect(200);
+  expect(res.body.data).toEqual([]);
 
   await recordAudit(db, {
     adminId,
@@ -124,9 +124,9 @@ test("catat tersimpan & terbaca sebagai objek; rollback tidak meninggalkan baris
     before: { a: 1 },
     after: { a: 2 },
   });
-  r = await request(app).get("/api/v1/admin/audit-logs").set("Authorization", `Bearer ${adminToken}`).expect(200);
-  expect(r.body.data).toHaveLength(1);
-  expect(r.body.data[0]).toMatchObject({
+  res = await request(app).get("/api/v1/admin/audit-logs").set("Authorization", `Bearer ${adminToken}`).expect(200);
+  expect(res.body.data).toHaveLength(1);
+  expect(res.body.data[0]).toMatchObject({
     admin_name: "Admin Uji",
     action: "uji.simpan",
     target_id: "7",
@@ -134,19 +134,21 @@ test("catat tersimpan & terbaca sebagai objek; rollback tidak meninggalkan baris
     before: { a: 1 },
     after: { a: 2 },
   });
-  expect(r.body.meta.total).toBe(1);
+  expect(res.body.meta.total).toBe(1);
 });
 
 test("rute tulis admin: token penjual → 403 tanpa baris log (review akhir A6)", async () => {
-  const [[{ n }]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs");
-  const [[m]] = await db.query<any[]>("SELECT id, verification_status FROM merchants LIMIT 1");
+  const [[{ n: logCount }]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs");
+  const [[merchant]] = await db.query<any[]>("SELECT id, verification_status FROM merchants LIMIT 1");
   await request(app)
-    .post(`/api/v1/admin/merchants/${m.id}/suspend`)
+    .post(`/api/v1/admin/merchants/${merchant.id}/suspend`)
     .set("Authorization", `Bearer ${merchantToken}`)
     .send({ reason: "coba" })
     .expect(403);
   const [[after]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs");
-  expect(after.n).toBe(n);
-  const [[m2]] = await db.query<any[]>("SELECT verification_status FROM merchants WHERE id = ?", [m.id]);
-  expect(m2.verification_status).toBe(m.verification_status);
+  expect(after.n).toBe(logCount);
+  const [[merchantAfter]] = await db.query<any[]>("SELECT verification_status FROM merchants WHERE id = ?", [
+    merchant.id,
+  ]);
+  expect(merchantAfter.verification_status).toBe(merchant.verification_status);
 });

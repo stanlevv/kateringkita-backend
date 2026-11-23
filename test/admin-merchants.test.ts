@@ -11,9 +11,10 @@ import { resetTestDatabase } from "./helpers/db";
 let adminToken: string;
 let sitiId: number;
 let andiId: number;
-const A = () => ({ Authorization: `Bearer ${adminToken}` });
-const get = (u: string) => request(app).get(`/api/v1/admin${u}`).set(A());
-const post = (u: string, b: object = {}) => request(app).post(`/api/v1/admin${u}`).set(A()).send(b);
+const authHeader = () => ({ Authorization: `Bearer ${adminToken}` });
+const get = (path: string) => request(app).get(`/api/v1/admin${path}`).set(authHeader());
+const post = (path: string, body: object = {}) =>
+  request(app).post(`/api/v1/admin${path}`).set(authHeader()).send(body);
 const logCount = async () =>
   Number(((await db.query<any[]>("SELECT COUNT(*) n FROM admin_audit_logs"))[0] as any[])[0].n);
 const merchantRow = async (id: number) =>
@@ -50,16 +51,16 @@ beforeAll(async () => {
 });
 
 test("checklist penjual baru: tanpa menu & titik temu", async () => {
-  const r = await get(`/merchants/${sitiId}`).expect(200);
-  expect(r.body.data.checklist).toMatchObject({
+  const res = await get(`/merchants/${sitiId}`).expect(200);
+  expect(res.body.data.checklist).toMatchObject({
     active_menu: false,
     pickup_point: false,
     menu_with_photo: false,
     address: true,
   });
-  expect(typeof r.body.data.checklist.wa_valid).toBe("boolean");
-  expect(r.body.data.owner).toMatchObject({ full_name: "Siti", phone: "081298765432", email: "siti@mail.com" });
-  expect(r.body.data.recent_logs).toEqual([]);
+  expect(typeof res.body.data.checklist.wa_valid).toBe("boolean");
+  expect(res.body.data.owner).toMatchObject({ full_name: "Siti", phone: "081298765432", email: "siti@mail.com" });
+  expect(res.body.data.recent_logs).toEqual([]);
 });
 
 test("checklist terisi setelah ada menu berfoto & titik temu; wa_valid regex", async () => {
@@ -69,8 +70,8 @@ test("checklist terisi setelah ada menu berfoto & titik temu; wa_valid regex", a
     [sitiId],
   );
   await db.query("UPDATE merchants SET wa_number='08123456789' WHERE id=?", [sitiId]);
-  let c = (await get(`/merchants/${sitiId}`).expect(200)).body.data.checklist;
-  expect(c).toEqual({
+  let checklist = (await get(`/merchants/${sitiId}`).expect(200)).body.data.checklist;
+  expect(checklist).toEqual({
     wa_valid: true,
     address: true,
     pickup_point: true,
@@ -79,56 +80,59 @@ test("checklist terisi setelah ada menu berfoto & titik temu; wa_valid regex", a
     opening_hours: true,
   });
   await db.query("UPDATE merchants SET wa_number='+6281' WHERE id=?", [sitiId]);
-  c = (await get(`/merchants/${sitiId}`).expect(200)).body.data.checklist;
-  expect(c.wa_valid).toBe(false);
+  checklist = (await get(`/merchants/${sitiId}`).expect(200)).body.data.checklist;
+  expect(checklist.wa_valid).toBe(false);
   await db.query("UPDATE merchants SET wa_number='08123456789' WHERE id=?", [sitiId]);
 });
 
 test("alur pending → request-fix → verify", async () => {
-  const q0 = (await get("/verification-queue").expect(200)).body.data;
-  expect(q0.map((m: any) => m.id)).toEqual([sitiId, andiId]);
-  expect(q0[0].updated_after_note).toBe(false);
+  const queueBefore = (await get("/verification-queue").expect(200)).body.data;
+  expect(queueBefore.map((merchant: any) => merchant.id)).toEqual([sitiId, andiId]);
+  expect(queueBefore[0].updated_after_note).toBe(false);
 
   const fix = await post(`/merchants/${sitiId}/request-fix`, { reason: "  Tambah foto menu  " }).expect(200);
   expect(fix.body.data).toMatchObject({ verification_status: "needs_fix", verification_note: "Tambah foto menu" });
 
-  await new Promise((r) => setTimeout(r, 1100));
+  await new Promise((resolve) => setTimeout(resolve, 1100));
   await db.query("UPDATE merchants SET description='baru' WHERE id=?", [sitiId]);
-  const q = (await get("/verification-queue").expect(200)).body.data;
-  expect(q.find((m: any) => m.id === sitiId).updated_after_note).toBe(true);
-  expect(q.find((m: any) => m.id === andiId).updated_after_note).toBe(false);
+  const queue = (await get("/verification-queue").expect(200)).body.data;
+  expect(queue.find((merchant: any) => merchant.id === sitiId).updated_after_note).toBe(true);
+  expect(queue.find((merchant: any) => merchant.id === andiId).updated_after_note).toBe(false);
 
-  const ok = await post(`/merchants/${sitiId}/verify`).expect(200);
-  expect(ok.body.data.verification_status).toBe("verified");
-  expect(ok.body.data.verification_note).toBeNull();
+  const verified = await post(`/merchants/${sitiId}/verify`).expect(200);
+  expect(verified.body.data.verification_status).toBe("verified");
+  expect(verified.body.data.verification_note).toBeNull();
   expect((await merchantRow(sitiId)).verified_at).not.toBeNull();
-  expect(ok.body.data.recent_logs.map((l: any) => l.action)).toEqual(["merchant.verify", "merchant.request_fix"]);
-  expect(ok.body.data.recent_logs[0].admin_name).toBe("Admin Uji");
-  expect((await get("/verification-queue")).body.data.map((m: any) => m.id)).toEqual([andiId]);
+  expect(verified.body.data.recent_logs.map((log: any) => log.action)).toEqual([
+    "merchant.verify",
+    "merchant.request_fix",
+  ]);
+  expect(verified.body.data.recent_logs[0].admin_name).toBe("Admin Uji");
+  expect((await get("/verification-queue")).body.data.map((merchant: any) => merchant.id)).toEqual([andiId]);
 });
 
 test("validasi reason → 400 fields.reason; tidak ada log", async () => {
-  const n = await logCount();
+  const logCountBefore = await logCount();
   for (const reason of [undefined, "   ", "x".repeat(501)]) {
-    const r = await post(`/merchants/${andiId}/request-fix`, reason === undefined ? {} : { reason }).expect(400);
-    expect(r.body.error.fields.reason).toBeDefined();
+    const res = await post(`/merchants/${andiId}/request-fix`, reason === undefined ? {} : { reason }).expect(400);
+    expect(res.body.error.fields.reason).toBeDefined();
   }
   await post(`/merchants/${andiId}/suspend`, {}).expect(400);
-  expect(await logCount()).toBe(n);
+  expect(await logCount()).toBe(logCountBefore);
 });
 
 test("transisi tidak sah → 409, tanpa log & tanpa perubahan (Review Focus 3)", async () => {
-  const n = await logCount();
+  const logCountBefore = await logCount();
   const before = await merchantRow(andiId);
-  const r = await post(`/merchants/${andiId}/reactivate`).expect(409);
-  expect(r.body.error).toMatchObject({ code: "CONFLICT", message: "Status penjual sudah berubah." });
-  expect(await logCount()).toBe(n);
+  const res = await post(`/merchants/${andiId}/reactivate`).expect(409);
+  expect(res.body.error).toMatchObject({ code: "CONFLICT", message: "Status penjual sudah berubah." });
+  expect(await logCount()).toBe(logCountBefore);
   expect(await merchantRow(andiId)).toEqual(before);
 
   await post(`/merchants/${sitiId}/suspend`, { reason: "Melanggar aturan" }).expect(200);
   await post(`/merchants/${sitiId}/verify`).expect(409);
   await post(`/merchants/${sitiId}/request-fix`, { reason: "x" }).expect(409);
-  expect(await logCount()).toBe(n + 1);
+  expect(await logCount()).toBe(logCountBefore + 1);
 });
 
 test("suspend mengisi kolom & reactivate mengosongkannya", async () => {
@@ -139,37 +143,37 @@ test("suspend mengisi kolom & reactivate mengosongkannya", async () => {
     verified_at: null,
   });
   expect(row.suspended_at).not.toBeNull();
-  const r = await post(`/merchants/${sitiId}/reactivate`).expect(200);
-  expect(r.body.data.verification_status).toBe("verified");
+  const res = await post(`/merchants/${sitiId}/reactivate`).expect(200);
+  expect(res.body.data.verification_status).toBe("verified");
   const after = await merchantRow(sitiId);
   expect(after).toMatchObject({ suspended_at: null, suspended_reason: null });
   expect(after.verified_at).not.toBeNull();
 });
 
 test("404 untuk id tak ada", async () => {
-  const n = await logCount();
+  const logCountBefore = await logCount();
   await get("/merchants/99999").expect(404);
   await post("/merchants/99999/verify").expect(404);
   await post("/merchants/abc/verify").expect(404);
-  expect(await logCount()).toBe(n);
+  expect(await logCount()).toBe(logCountBefore);
 });
 
 test("close-today → is_open 0 + log", async () => {
-  const n = await logCount();
-  const r = await post(`/merchants/${sitiId}/close-today`).expect(200);
-  expect(r.body.data.is_open).toBe(false);
+  const logCountBefore = await logCount();
+  const res = await post(`/merchants/${sitiId}/close-today`).expect(200);
+  expect(res.body.data.is_open).toBe(false);
   expect((await merchantRow(sitiId)).is_open).toBe(0);
-  expect(await logCount()).toBe(n + 1);
-  expect(r.body.data.recent_logs[0].action).toBe("merchant.close_today");
+  expect(await logCount()).toBe(logCountBefore + 1);
+  expect(res.body.data.recent_logs[0].action).toBe("merchant.close_today");
 });
 
 test("daftar: filter status, q (nama/WA, wildcard di-escape), open, paginasi", async () => {
-  let r = await get("/merchants?status=pending").expect(200);
-  expect(r.body.data.map((m: any) => m.id)).toEqual([andiId]);
-  expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 1 });
-  r = await get("/merchants").expect(200);
-  expect(r.body.meta.total).toBe(2);
-  expect(r.body.data.find((m: any) => m.id === sitiId)).toMatchObject({
+  let res = await get("/merchants?status=pending").expect(200);
+  expect(res.body.data.map((merchant: any) => merchant.id)).toEqual([andiId]);
+  expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 1 });
+  res = await get("/merchants").expect(200);
+  expect(res.body.meta.total).toBe(2);
+  expect(res.body.data.find((merchant: any) => merchant.id === sitiId)).toMatchObject({
     owner_name: "Siti",
     menu_count: 1,
     verification_status: "verified",
@@ -177,21 +181,21 @@ test("daftar: filter status, q (nama/WA, wildcard di-escape), open, paginasi", a
   expect((await get("/merchants?q=Dapur Siti")).body.data).toHaveLength(1);
   expect((await get("/merchants?q=08123456789")).body.data).toHaveLength(1);
   expect((await get("/merchants?q=%25")).body.data).toHaveLength(0);
-  expect((await get("/merchants?open=0")).body.data.map((m: any) => m.id)).toEqual([sitiId]);
-  expect((await get("/merchants?open=1")).body.data.map((m: any) => m.id)).toEqual([andiId]);
-  r = await get("/merchants?limit=1&page=2").expect(200);
-  expect(r.body.data).toHaveLength(1);
-  expect(r.body.meta).toEqual({ page: 2, limit: 1, total: 2 });
+  expect((await get("/merchants?open=0")).body.data.map((merchant: any) => merchant.id)).toEqual([sitiId]);
+  expect((await get("/merchants?open=1")).body.data.map((merchant: any) => merchant.id)).toEqual([andiId]);
+  res = await get("/merchants?limit=1&page=2").expect(200);
+  expect(res.body.data).toHaveLength(1);
+  expect(res.body.meta).toEqual({ page: 2, limit: 1, total: 2 });
   expect((await get("/merchants?limit=9999")).body.meta.limit).toBe(100);
   await get("/merchants?status=aneh").expect(400);
 });
 
 test("detail: alamat asli tetap ada & checklist.address benar", async () => {
-  const d = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
-  expect(d.address).toBe("Jl. Mawar 1");
-  expect(d.checklist.address).toBe(true);
-  expect(d.is_open).toBe(false);
-  expect((await get("/merchants")).body.data.find((m: any) => m.id === andiId).is_open).toBe(true);
+  const detail = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
+  expect(detail.address).toBe("Jl. Mawar 1");
+  expect(detail.checklist.address).toBe(true);
+  expect(detail.is_open).toBe(false);
+  expect((await get("/merchants")).body.data.find((merchant: any) => merchant.id === andiId).is_open).toBe(true);
 });
 
 test("aksi tanpa reason mengabaikan body; suspend 500 karakter utuh; recent_logs maks 10", async () => {
@@ -221,23 +225,25 @@ test("q dengan _ dicocokkan apa adanya", async () => {
   expect((await get("/merchants?q=Dapur Siti")).body.data).toHaveLength(1);
 });
 
-// AUD-26: rekening pencairan hanya untuk admin super lewat /payouts; detail penjual terbuka untuk semua tier admin
+// rekening pencairan hanya untuk admin super lewat /payouts; detail penjual terbuka untuk semua tier admin
 test("detail penjual tidak membawa rekening pencairan", async () => {
   await db.query(
     "UPDATE merchants SET payout_bank = 'bca', payout_account_number = '0123456789', payout_account_name = 'Siti' WHERE id = ?",
     [sitiId],
   );
-  const d = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
-  expect(Object.keys(d).filter((k) => k.startsWith("payout_"))).toEqual([]);
-  expect(JSON.stringify(d)).not.toContain("0123456789");
+  const detail = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
+  expect(Object.keys(detail).filter((key) => key.startsWith("payout_"))).toEqual([]);
+  expect(JSON.stringify(detail)).not.toContain("0123456789");
 });
 
 test("detail: merchant_type_name dan menu_count", async () => {
-  const d = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
-  expect(typeof d.merchant_type_name).toBe("string");
-  expect(d.merchant_type_name.length).toBeGreaterThan(0);
-  expect(d.menu_count).toBe((await get("/merchants")).body.data.find((m: any) => m.id === sitiId).menu_count);
-  expect(d.menu_count).toBeGreaterThan(0);
+  const detail = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
+  expect(typeof detail.merchant_type_name).toBe("string");
+  expect(detail.merchant_type_name.length).toBeGreaterThan(0);
+  expect(detail.menu_count).toBe(
+    (await get("/merchants")).body.data.find((merchant: any) => merchant.id === sitiId).menu_count,
+  );
+  expect(detail.menu_count).toBeGreaterThan(0);
 });
 
 test("/me penjual ditangguhkan mengembalikan suspended_reason", async () => {
@@ -250,22 +256,22 @@ test("/me penjual ditangguhkan mengembalikan suspended_reason", async () => {
       .send({ identifier: "rina@mail.com", password: "rahasia123", client: "web" })
       .expect(200)
   ).body.data.token;
-  const me = (await request(app).get("/api/v1/me").set("Authorization", `Bearer ${token}`).expect(200)).body.data;
-  expect(me.merchant).toMatchObject({ verification_status: "suspended", suspended_reason: "Menu palsu" });
+  const profile = (await request(app).get("/api/v1/me").set("Authorization", `Bearer ${token}`).expect(200)).body.data;
+  expect(profile.merchant).toMatchObject({ verification_status: "suspended", suspended_reason: "Menu palsu" });
 });
 
 test("close-today hanya dari verified; sudah tutup → 200 tanpa log & tanpa ubah updated_at (review akhir A4)", async () => {
-  const n = await logCount();
+  const logCountBefore = await logCount();
   const andi = await merchantRow(andiId);
   await post(`/merchants/${andiId}/close-today`).expect(409);
   expect(await merchantRow(andiId)).toEqual(andi);
   const siti = await merchantRow(sitiId);
   expect(siti.is_open).toBe(0);
-  await new Promise((r) => setTimeout(r, 1100));
-  const r = await post(`/merchants/${sitiId}/close-today`).expect(200);
-  expect(r.body.data.is_open).toBe(false);
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const res = await post(`/merchants/${sitiId}/close-today`).expect(200);
+  expect(res.body.data.is_open).toBe(false);
   expect((await merchantRow(sitiId)).updated_at).toEqual(siti.updated_at);
-  expect(await logCount()).toBe(n);
+  expect(await logCount()).toBe(logCountBefore);
 });
 
 test("id tidak valid pada aksi beralasan → 404 walau body kosong (review akhir A5)", async () => {
@@ -274,7 +280,7 @@ test("id tidak valid pada aksi beralasan → 404 walau body kosong (review akhir
 });
 
 test("catat gagal setelah UPDATE → baris penjual tidak berubah (rollback) (review akhir A6)", async () => {
-  const n = await logCount();
+  const logCountBefore = await logCount();
   const before = await merchantRow(andiId);
   const err = vi.spyOn(console, "error").mockImplementation(() => {});
   const spy = vi.spyOn(audit, "recordAudit").mockRejectedValueOnce(new Error("gagal tulis log"));
@@ -282,11 +288,13 @@ test("catat gagal setelah UPDATE → baris penjual tidak berubah (rollback) (rev
   spy.mockRestore();
   err.mockRestore();
   expect(await merchantRow(andiId)).toEqual(before);
-  expect(await logCount()).toBe(n);
+  expect(await logCount()).toBe(logCountBefore);
 });
 
 // TiDB memakai utf8mb4_bin secara bawaan: pencarian harus tetap tak peka huruf (test terakhir: mengubah skema file ini)
 test("q tak peka huruf walau kolom berkolasi biner", async () => {
   await db.query("ALTER TABLE merchants MODIFY business_name VARCHAR(150) NOT NULL COLLATE utf8mb4_bin");
-  expect((await get("/merchants?q=dapur%20siti").expect(200)).body.data.map((m: any) => m.id)).toEqual([sitiId]);
+  expect((await get("/merchants?q=dapur%20siti").expect(200)).body.data.map((merchant: any) => merchant.id)).toEqual([
+    sitiId,
+  ]);
 });
