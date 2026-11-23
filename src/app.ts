@@ -1,3 +1,5 @@
+// Isi file: menyusun aplikasi Express: CORS, id request, log, mode pemeliharaan, lalu semua router di /api/v1
+// (urutan pemasangan penting), dan penanganan galat di paling akhir. Titik awal alur request → middleware → routes.
 import express, { Application } from "express";
 import cors from "cors";
 import { auth } from "./routes/auth";
@@ -35,13 +37,13 @@ if (env.NODE_ENV !== "test") {
 
 app.get("/api/v1/health", healthHandler);
 
-// F27: saat mode pemeliharaan aktif semua rute selain pengecualian (admin, login, webhook, dll.) dibalas 503
+// Mode pemeliharaan: saat aktif, semua rute selain pengecualian (admin, login, webhook, dll.) dibalas 503
 app.use(maintenanceGuard);
 
 // admin dipasang sebelum router auth; path admin tak dikenal: tanpa token 401, bukan admin 403, admin 404 (notFound)
 app.use("/api/v1/admin", requireAuth, requireRole("admin"), adminAccess, admin);
 app.use("/api/v1/merchant", requireAuth, requireRole("merchant"), merchant);
-// F21: menu & pesanan meja tanpa login
+// Router meja (QR): menu dan pesanan tamu tanpa login
 app.use("/api/v1", table);
 app.use("/api/v1", catalog);
 app.use("/api/v1", order);

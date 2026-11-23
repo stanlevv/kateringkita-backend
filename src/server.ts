@@ -1,3 +1,5 @@
+// Isi file: titik mulai server. Membaca .env, membuka port, lalu menyalakan job kedaluwarsa pesanan dan
+// pembersih log server. Aplikasinya sendiri (middleware dan router) disusun di app.ts.
 import "dotenv/config";
 import app from "./app";
 import { env } from "./config/env";
