@@ -5,9 +5,9 @@ import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { ai } from "./ai.service";
 import { simpanHasil } from "./hasil-ai.service";
-import { hariIniWib } from "./merchant-quota.service";
+import { getWibDate } from "./merchant-quota.service";
 import { ringkasanToko } from "./merchant-laporan.service";
-import { idToko } from "./merchant-menu.service";
+import { getMerchantId } from "./merchant-menu.service";
 
 // F17 asisten AI toko: konteks hanya data toko sendiri (menu + HPP + penjualan 30 hari).
 // Prompt: Role (baris 1), Constraint (baris 2-6), Output Schema JSON (baris terakhir). Keluaran divalidasi zod lalu disimpan.
@@ -66,14 +66,14 @@ async function namaTerkait(merchantId: number, userId: number): Promise<string[]
 }
 
 export async function tanyaAsisten(userId: number, question: string) {
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   if (hasInjection(question)) {
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
       question: ["Pertanyaan berisi perintah yang tidak diizinkan."],
     });
   }
   const aman = anonymize(question, { names: await namaTerkait(merchantId, userId) });
-  const hariIni = hariIniWib();
+  const hariIni = getWibDate();
   const rentang = { from: hariSebelum(hariIni, 29), to: hariIni };
   const [[toko]] = await db.query<RowDataPacket[]>(
     "SELECT business_name, daily_revenue_target FROM merchants WHERE id = ?",

@@ -6,7 +6,7 @@ import db from "../../src/config/db";
 import { env } from "../../src/config/env";
 import { migrate } from "../../src/scripts/migrate";
 import { loginLimiter } from "../../src/middleware/rate-limiter";
-import { hariIniWib } from "../../src/services/merchant-quota.service";
+import { getWibDate } from "../../src/services/merchant-quota.service";
 import { clock } from "../../src/services/catalog.service";
 import { resetTestDatabase } from "./db";
 
@@ -62,7 +62,7 @@ export async function sisipMenu(merchantId: number, o: Record<string, unknown> =
     quota_today: 20,
     sold_today: 0,
     held_today: 0,
-    stock_date: hariIniWib(),
+    stock_date: getWibDate(),
     ...o,
   };
   const [r] = await db.query<any>("INSERT INTO menus SET ?", [row]);
@@ -85,7 +85,7 @@ export const isiR2 = (on = true) =>
 export const fotoUrl = (prefix: string, ext = "png") => `${R2_UJI.R2_PUBLIC_URL}/${prefix}${randomUUID()}.${ext}`;
 
 // "Sekarang" katalog dibekukan 10:00 WIB hari ini agar test tidak bergantung jam nyata (stok tetap tanggal hari ini)
-export const bekukanJam = () => vi.spyOn(clock, "now").mockReturnValue(Date.parse(`${hariIniWib()}T10:00:00+07:00`));
+export const bekukanJam = () => vi.spyOn(clock, "now").mockReturnValue(Date.parse(`${getWibDate()}T10:00:00+07:00`));
 
 // Toko lolos R-14 (verified) dan buka 07:00–16:00, atau tutup karena jam 11:00–12:00 (relatif ke bekukanJam)
 export async function tampilkan(merchantId: number, { buka = true } = {}) {

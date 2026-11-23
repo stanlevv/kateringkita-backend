@@ -18,8 +18,8 @@ import {
   isMerchantOpen,
   MERCHANT_VISIBLE,
 } from "./catalog.service";
-import { hariIniWib } from "./merchant-quota.service";
-import { idToko } from "./merchant-menu.service";
+import { getWibDate } from "./merchant-quota.service";
+import { getMerchantId } from "./merchant-menu.service";
 import { loadCart, validateCart } from "./order-cart.service";
 import {
   outOfStockError,
@@ -69,7 +69,7 @@ const labelTakenError = () =>
 export async function listTables(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT id, label, token, is_active FROM merchant_tables WHERE merchant_id = ? ORDER BY LENGTH(label), label",
-    [await idToko(userId)],
+    [await getMerchantId(userId)],
   );
   return rows.map(mapTable);
 }
@@ -94,7 +94,7 @@ async function getTable(merchantId: number, tableId: number) {
  */
 export async function createTable(userId: number, label: string) {
   // 1. Cek batas jumlah meja toko ini.
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   const [[countRow]] = await db.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM merchant_tables WHERE merchant_id = ?",
     [merchantId],
@@ -123,7 +123,7 @@ export async function createTable(userId: number, label: string) {
  * @throws 404 meja tidak ada atau milik toko lain, 409 nama meja sudah dipakai
  */
 export async function updateTable(userId: number, rawId: unknown, input: UpdateTableInput) {
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   // 1. Pastikan meja ada dan milik toko ini.
   const tableId = Number(rawId);
   if (!Number.isInteger(tableId) || tableId < 1) throw new AppError(404, "NOT_FOUND", "Meja tidak ditemukan.");
@@ -181,7 +181,7 @@ export async function getTableMenu(token: string) {
     `SELECT ${MENU_CARD_COLUMNS}, x.description, x.min_order_qty FROM ${MENU_FROM} ${JOIN_FAVORITE}
      WHERE ${MENU_VISIBLE} AND m.id = ? AND NOT x.is_preorder
      ORDER BY c.sort_order, c.name, x.sold_total DESC, x.id`,
-    [hariIniWib(new Date(nowMs)), null, table.merchant_id],
+    [getWibDate(new Date(nowMs)), null, table.merchant_id],
   );
   // 2. Opsi tambahan yang aktif, dikelompokkan per menu (satu kueri untuk semua menu).
   const optionsByMenu = new Map<number, { id: number; name: string; extra_price: number }[]>();
@@ -248,7 +248,7 @@ export async function createTableOrder(token: string, data: TableOrderInput) {
       throw conflict("Masih ada pesanan meja ini yang menunggu pembayaran. Selesaikan dulu.");
     // 2. Periksa keranjang seperti checkout, tanpa titik temu, waktu ambil, dan voucher.
     const nowMs = clock.now();
-    const today = hariIniWib(new Date(nowMs));
+    const today = getWibDate(new Date(nowMs));
     const cartInput = { ...data, pickup_point_id: 0, promo_code: null, promo_codes: [], pickup_at: null };
     const cart = validateCart(await loadCart(conn, cartInput, { refresh: true, day: today, nowMs }), cartInput, nowMs, {
       skipPickupPoint: true,

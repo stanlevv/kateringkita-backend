@@ -3,7 +3,7 @@
 // request masuk → middleware (… → maintenanceGuard) → routes → handlers → services → database.
 import { RequestHandler } from "express";
 import { AppError } from "../utils/errors";
-import { PESAN_BAWAAN, ambilPemeliharaan } from "../services/maintenance.service";
+import { DEFAULT_MAINTENANCE_MSG, getMaintenance } from "../services/maintenance.service";
 
 // Rute yang tetap jalan saat pemeliharaan: login/logout/me/ganti sandi agar admin bisa masuk; meta/settings agar
 // aplikasi tahu statusnya; notifikasi Midtrans agar pembayaran tetap tercatat. Semua path /admin juga tetap jalan
@@ -33,10 +33,10 @@ export const maintenanceGuard: RequestHandler = async (req, res, next) => {
   if (path === "/api/v1/admin" || path.startsWith("/api/v1/admin/") || ALLOWED_ROUTES.has(`${req.method} ${path}`))
     return next();
   // 3. Baca status pemeliharaan; bila mati, lanjut seperti biasa.
-  const { aktif: active, pesan: message } = await ambilPemeliharaan();
+  const { aktif: active, pesan: message } = await getMaintenance();
   if (!active) return next();
   // 4. Bila menyala, tolak dengan 503.
   res.set("Retry-After", "300");
   res.locals.maintenance = true;
-  throw new AppError(503, "MAINTENANCE", message ?? PESAN_BAWAAN);
+  throw new AppError(503, "MAINTENANCE", message ?? DEFAULT_MAINTENANCE_MSG);
 };

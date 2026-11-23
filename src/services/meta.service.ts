@@ -2,7 +2,7 @@
 // pengaturan umum. Alurnya routes/meta.ts → handlers/meta.handler.ts → file ini → database.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { ambilPemeliharaan } from "./maintenance.service";
+import { getMaintenance } from "./maintenance.service";
 
 /**
  * Daftar jenis usaha yang masih aktif, untuk pilihan saat penjual mendaftar.
@@ -41,7 +41,7 @@ export async function listPickupPoints() {
  * Pengaturan umum yang boleh dibaca semua orang. Nilainya disimpan di tabel app_settings sebagai pasangan kunci-nilai
  * (`setting_key`, `setting_value`), dan hanya tiga kunci yang dibaca di sini.
  * @returns biaya layanan (angka), zona waktu, nomor WhatsApp layanan pelanggan (`null` bila kosong), dan status mode
- *          pemeliharaan `{ aktif, pesan }` dari pemeliharaan.service
+ *          pemeliharaan `{ aktif, pesan }` dari maintenance.service
  */
 export async function getSettings() {
   const [rows] = await db.query<RowDataPacket[]>(
@@ -52,6 +52,6 @@ export async function getSettings() {
     service_fee: Number(settings.service_fee),
     timezone: settings.timezone,
     cs_whatsapp: settings.cs_whatsapp || null,
-    maintenance: await ambilPemeliharaan(),
+    maintenance: await getMaintenance(),
   };
 }

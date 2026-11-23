@@ -1,7 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { jumlahHari, Rentang } from "../dto/merchant-laporan.dto";
-import { idToko } from "./merchant-menu.service";
+import { getMerchantId } from "./merchant-menu.service";
 
 // F09 laporan toko (LP-N1..N4): hanya pesanan completed, dihitung per completed_at; tanggal WIB → rentang UTC [from, to).
 // shortcut: diskon promo tidak mengurangi omzet laporan toko; upgrade bila penjual minta laba bersih (rincian diskon di F20)
@@ -34,7 +34,7 @@ export async function ringkasanToko(merchantId: number, r: Rentang) {
 }
 
 export async function ringkasanLaporan(userId: number, r: Rentang) {
-  return ringkasanToko(await idToko(userId), r);
+  return ringkasanToko(await getMerchantId(userId), r);
 }
 
 // LP-N2: jam WIB yang ada transaksinya saja, urut jam (sama dengan fe/lib/laporan.ts#perJam)
@@ -42,7 +42,7 @@ export async function laporanPerJam(userId: number, date: string) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT HOUR(o.completed_at + INTERVAL 7 HOUR) AS hour, COUNT(DISTINCT o.id) AS orders, SUM(i.qty) AS portions, SUM(i.line_total) AS revenue
      ${SELESAI} GROUP BY hour ORDER BY hour`,
-    [await idToko(userId), ...rentangUtc({ from: date, to: date })],
+    [await getMerchantId(userId), ...rentangUtc({ from: date, to: date })],
   );
   return rows.map((x) => ({
     hour: Number(x.hour),
@@ -59,7 +59,7 @@ export async function laporanTransaksi(userId: number, r: Rentang) {
     `SELECT o.code, o.created_at, o.completed_at, o.customer_name, o.payment_method, o.status,
        i.menu_name, i.qty, i.line_total, i.hpp * i.qty AS hpp_total
      ${SELESAI} ORDER BY o.completed_at DESC, i.id`,
-    [await idToko(userId), ...rentangUtc(r)],
+    [await getMerchantId(userId), ...rentangUtc(r)],
   );
   return rows.map((x) => ({
     code: x.code,

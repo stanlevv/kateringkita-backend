@@ -10,7 +10,7 @@ import { env } from "../config/env";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { clock, toWibTime, REMAINING_STOCK } from "./catalog.service";
-import { hariIniWib } from "./merchant-quota.service";
+import { getWibDate } from "./merchant-quota.service";
 import {
   PricedCart,
   Shortage,
@@ -36,7 +36,7 @@ export async function quote(userId: number, data: QuoteInput) {
   const nowMs = clock.now();
   // 1. Ambil keranjang lalu cek: toko buka, menu masih dijual, stok cukup.
   const cart = validateCart(
-    await loadCart(db, data, { refresh: false, day: hariIniWib(new Date(nowMs)), nowMs }),
+    await loadCart(db, data, { refresh: false, day: getWibDate(new Date(nowMs)), nowMs }),
     data,
     nowMs,
   );
@@ -310,7 +310,7 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
 
       // 4. Ambil keranjang (sekalian reset kuota harian bila sudah ganti hari) lalu cek aturan dan stoknya.
       const nowMs = clock.now();
-      const today = hariIniWib(new Date(nowMs));
+      const today = getWibDate(new Date(nowMs));
       const cart = validateCart(await loadCart(conn, data, { refresh: true, day: today, nowMs }), data, nowMs);
       if (cart.shortages.length) throw outOfStockError(cart.shortages);
       // 5. Batas 3 pesanan saja tidak cukup, karena satu pesanan bisa berisi ratusan porsi: batasi juga total porsi
@@ -754,7 +754,7 @@ export function buildWaValues(order: {
 const wibDateFormat = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" });
 // Awalan tanggal seperti "3 November " bila hari ambil (WIB) bukan hari ini; kosong bila hari ini.
 const pickupDayPrefix = (date: Date) =>
-  hariIniWib(date) === hariIniWib(new Date(clock.now())) ? "" : `${wibDateFormat.format(date)} `;
+  getWibDate(date) === getWibDate(new Date(clock.now())) ? "" : `${wibDateFormat.format(date)} `;
 
 /**
  * Mengisi templat WhatsApp: setiap `{nama}` diganti `values.nama`. Tempat kosong yang tidak dikenal dibiarkan apa

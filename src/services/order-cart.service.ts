@@ -1,13 +1,13 @@
 // Isi file: logika keranjang yang dipakai bersama oleh quote, checkout pembeli, dan pesanan meja: ambil data menu
 // dan toko, periksa aturan, hitung harga, lalu pasang voucher. Dipanggil order.service dan table.service (lapisan
 // services, di antara handlers dan database). File ini hampir tidak menulis ke database; satu-satunya tulisan adalah
-// reset kuota harian menu (lewat segarkanKuota) saat loadCart dipanggil dengan `refresh: true` oleh checkout.
+// reset kuota harian menu (lewat refreshDailyQuota) saat loadCart dipanggil dengan `refresh: true` oleh checkout.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { rentangHariWib } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
 import { REMAINING_STOCK, isMerchantOpen } from "./catalog.service";
-import { segarkanKuota } from "./merchant-quota.service";
+import { refreshDailyQuota } from "./merchant-quota.service";
 import { QuoteInput } from "../dto/order.dto";
 
 // Apa saja yang bisa menjalankan kueri: koneksi biasa (quote) atau koneksi di dalam transaksi (checkout). Transaksi =
@@ -78,7 +78,7 @@ export async function loadCart(
     const [merchantRows] = await conn.query<RowDataPacket[]>("SELECT DISTINCT merchant_id FROM menus WHERE id IN (?)", [
       menuIds,
     ]);
-    if (merchantRows.length === 1) await segarkanKuota(conn, merchantRows[0].merchant_id, options.day);
+    if (merchantRows.length === 1) await refreshDailyQuota(conn, merchantRows[0].merchant_id, options.day);
   }
   // 2. Ambil menu beserta sisa stoknya untuk tanggal `day`, lalu opsi tambahannya.
   const [menus] = await conn.query<RowDataPacket[]>(

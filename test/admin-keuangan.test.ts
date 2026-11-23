@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { createAdmin } from "../src/scripts/create-admin";
 import { login, pesanDulu, siapCheckout } from "./helpers/toko";
 
@@ -12,7 +12,7 @@ import { login, pesanDulu, siapCheckout } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 let tAdmin: string;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-const hariIni = hariIniWib();
+const hariIni = getWibDate();
 const selesai = async (code: string) => {
   for (const a of ["confirm", "cook", "ready", "complete"])
     await request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set(H(s.tA)).expect(200);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hariIniWib } from "../services/merchant-quota.service";
+import { getWibDate } from "../services/merchant-quota.service";
 
 // F09 (LP-E1): pesan sama dengan fe/lib/laporan.ts#cekRentang
 const MAKS_HARI = 92;
@@ -8,9 +8,9 @@ export const jumlahHari = (from: string, to: string) => Math.round((Date.parse(t
 // superRefine tetap jalan walau format satu field gagal; field itu sudah punya pesannya sendiri
 const sah = (...d: string[]) => d.every((x) => tanggal.safeParse(x).success);
 
-// YYYY-MM-DD terurut leksikal, jadi `d > hariIniWib()` cukup
+// YYYY-MM-DD terurut leksikal, jadi `d > getWibDate()` cukup
 const cekTidakLewat = (ctx: z.RefinementCtx, field: string, d: string) => {
-  if (sah(d) && d > hariIniWib())
+  if (sah(d) && d > getWibDate())
     ctx.addIssue({ code: "custom", path: [field], message: "Tanggal tidak boleh melewati hari ini." });
 };
 

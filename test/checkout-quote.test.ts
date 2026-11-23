@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { menuRow, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
 
 // F06 Task 2: POST /orders/quote (C-09, R-07, R-13, R-14, D1–D3, D10, D13)
@@ -29,7 +29,7 @@ const tolak409 = async (body: unknown, code: string, pesan: string) => {
 };
 // Waktu WIB d hari dari "sekarang" yang dibekukan (10:00 WIB hari ini)
 const wib = (d: number, jam = "10:00") =>
-  `${hariIniWib(new Date(Date.parse(`${hariIniWib()}T10:00:00+07:00`) + d * 86400e3))}T${jam}:00+07:00`;
+  `${getWibDate(new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + d * 86400e3))}T${jam}:00+07:00`;
 
 beforeEach(async () => {
   s = await siapCheckout();

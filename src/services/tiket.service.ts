@@ -3,7 +3,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
-import { hariIniWib } from "./merchant-quota.service";
+import { getWibDate } from "./merchant-quota.service";
 import { BuatTiket, DaftarTiket } from "../dto/tiket.dto";
 
 // Tiket bantuan (CS) dua arah pembeli ↔ tim admin (migrasi 012). Sisi admin: admin-tiket.service.ts.
@@ -130,7 +130,7 @@ export async function tambahPesan(
 
 // galat duplikat hanya membatalkan pernyataan, bukan transaksi → coba kode baru, maks 5 kali (pola kode pesanan D7)
 async function sisipTiket(conn: Conn, userId: number, orderId: number | null, b: BuatTiket) {
-  const hari = hariIniWib().replace(/-/g, "");
+  const hari = getWibDate().replace(/-/g, "");
   for (let i = 0; ; i++) {
     const code = `TK-${hari}-${kodeTiket.acak()}`;
     try {

@@ -5,8 +5,8 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { sedangBuka } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
-import { hariIniWib } from "./merchant-quota.service";
-import { galeri, menuId, menuTidakAda } from "./merchant-menu.service";
+import { getWibDate } from "./merchant-quota.service";
+import { parseGallery, parseMenuId, menuNotFound } from "./merchant-menu.service";
 import { Pagination, CatalogQuery } from "../dto/catalog.dto";
 import { voucherToko } from "./voucher.service";
 
@@ -64,9 +64,10 @@ export const MERCHANT_OPEN = `m.is_open AND (CASE WHEN m.open_time <= m.close_ti
 
 /**
  * Ekspresi SQL sisa porsi menu hari ini, tanpa menulis ke database. Bila stok terakhir dicatat untuk hari sebelum hari
- * ini (atau belum pernah), kuota dianggap sudah kembali penuh (`daily_quota`), sama dengan aturan `segarkanKuota` yang
- * baru benar-benar mengatur ulang angka di database saat ada pesanan. Bila tidak, sisa = kuota hari ini − terjual −
- * ditahan pesanan yang menunggu. Hasil tidak pernah di bawah 0. Butuh 1 parameter: tanggal WIB hari ini (`YYYY-MM-DD`).
+ * ini (atau belum pernah), kuota dianggap sudah kembali penuh (`daily_quota`), sama dengan aturan `refreshDailyQuota`
+ * yang baru benar-benar mengatur ulang angka di database saat ada pesanan. Bila tidak, sisa = kuota hari ini −
+ * terjual − ditahan pesanan yang menunggu. Hasil tidak pernah di bawah 0. Butuh 1 parameter: tanggal WIB hari ini
+ * (`YYYY-MM-DD`).
  */
 export const REMAINING_STOCK = `GREATEST(CASE WHEN x.stock_date IS NULL OR x.stock_date < ? THEN x.daily_quota
   ELSE x.quota_today - x.sold_today - x.held_today END, 0)`;
@@ -150,7 +151,7 @@ const SORT_COLUMNS: Record<CatalogQuery["sort"], string> = {
 export async function listCatalog(query: CatalogQuery, userId: number | null) {
   const nowMs = clock.now();
   const wibTime = toWibTime(nowMs);
-  const today = hariIniWib(new Date(nowMs));
+  const today = getWibDate(new Date(nowMs));
   // 1. Syarat dasar: menu tampil. Tanpa filter toko ditambah syarat toko sedang buka (4 parameter jam WIB).
   const where = query.merchant ? [MENU_VISIBLE] : [MENU_VISIBLE, MERCHANT_OPEN];
   const args: unknown[] = query.merchant ? [] : [wibTime, wibTime, wibTime, wibTime];
@@ -237,16 +238,16 @@ export const getPickupPoints = async (merchantId: number): Promise<PickupPoint[]
  * @throws 404 NOT_FOUND bila id tidak valid atau menu tidak tampil
  */
 export async function getMenuDetail(rawId: unknown, userId: number | null) {
-  const id = menuId(rawId);
+  const id = parseMenuId(rawId);
   const nowMs = clock.now();
   // 1. Ambil menu beserta kolom kartu dan kolom detail.
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${MENU_CARD_COLUMNS}, x.description, x.min_order_qty, x.prep_minutes, x.preorder_days, x.gallery, m.logo_url
      FROM ${MENU_FROM} ${JOIN_FAVORITE} WHERE x.id = ? AND ${MENU_VISIBLE}`,
-    [hariIniWib(new Date(nowMs)), userId, id],
+    [getWibDate(new Date(nowMs)), userId, id],
   );
   const row = rows[0];
-  if (!row) throw menuTidakAda();
+  if (!row) throw menuNotFound();
   // 2. Ambil opsi tambahan yang aktif dan titik temu toko secara bersamaan.
   const [[options], pickupPoints] = await Promise.all([
     db.query<RowDataPacket[]>(
@@ -260,7 +261,7 @@ export async function getMenuDetail(rawId: unknown, userId: number | null) {
   return {
     ...card,
     description: row.description,
-    gallery: galeri(row.gallery),
+    gallery: parseGallery(row.gallery),
     options: options.map((option) => ({ id: option.id, name: option.name, extra_price: option.extra_price })),
     min_order_qty: row.min_order_qty,
     prep_minutes: row.prep_minutes,
@@ -285,13 +286,13 @@ export async function getMenuDetail(rawId: unknown, userId: number | null) {
  * @throws 404 NOT_FOUND bila id tidak valid atau menu tidak tampil
  */
 export async function listMenuReviews(rawId: unknown, pagination: Pagination) {
-  const id = menuId(rawId);
+  const id = parseMenuId(rawId);
   // 1. Pastikan menunya tampil.
   const [existingMenus] = await db.query<RowDataPacket[]>(
     `SELECT x.id FROM ${MENU_FROM} WHERE x.id = ? AND ${MENU_VISIBLE}`,
     [id],
   );
-  if (!existingMenus[0]) throw menuTidakAda();
+  if (!existingMenus[0]) throw menuNotFound();
   // 2. Ambil satu halaman ulasan yang tidak disembunyikan.
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT r.rating, r.comment, u.full_name, r.created_at FROM reviews r JOIN users u ON u.id = r.customer_id

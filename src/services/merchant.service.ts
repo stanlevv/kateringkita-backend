@@ -13,47 +13,47 @@ export async function getProfile(userId: number) {
      FROM merchants m JOIN merchant_types t ON t.id = m.merchant_type_id WHERE m.user_id = ?`,
     [userId],
   );
-  const m = rows[0];
-  if (!m) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
-  const [pts] = await db.query<RowDataPacket[]>(
+  const merchant = rows[0];
+  if (!merchant) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
+  const [pickupPoints] = await db.query<RowDataPacket[]>(
     `SELECT mp.pickup_point_id AS id FROM merchant_pickup_points mp JOIN pickup_points p ON p.id = mp.pickup_point_id
      WHERE mp.merchant_id = ? AND p.is_active ORDER BY mp.pickup_point_id`,
-    [m.id],
+    [merchant.id],
   );
   return {
-    business_name: m.business_name,
-    description: m.description,
-    address: m.address,
-    wa_number: m.wa_number,
-    logo_url: m.logo_url,
-    cover_url: m.cover_url,
-    merchant_type: { id: m.type_id, name: m.type_name },
-    service_mode: m.service_mode,
-    is_open: Boolean(m.is_open),
-    open_time: m.open_time,
-    close_time: m.close_time,
-    hold_minutes: m.hold_minutes,
-    daily_revenue_target: m.daily_revenue_target,
-    wa_template: m.wa_template,
-    pickup_point_ids: pts.map((p) => p.id as number),
+    business_name: merchant.business_name,
+    description: merchant.description,
+    address: merchant.address,
+    wa_number: merchant.wa_number,
+    logo_url: merchant.logo_url,
+    cover_url: merchant.cover_url,
+    merchant_type: { id: merchant.type_id, name: merchant.type_name },
+    service_mode: merchant.service_mode,
+    is_open: Boolean(merchant.is_open),
+    open_time: merchant.open_time,
+    close_time: merchant.close_time,
+    hold_minutes: merchant.hold_minutes,
+    daily_revenue_target: merchant.daily_revenue_target,
+    wa_template: merchant.wa_template,
+    pickup_point_ids: pickupPoints.map((point) => point.id as number),
     // F21: pesan dari meja (QR)
-    dine_in_enabled: Boolean(m.dine_in_enabled),
+    dine_in_enabled: Boolean(merchant.dine_in_enabled),
   };
 }
 
 // updated_at sengaja tidak digeser: buka/tutup dapur bukan perbaikan data (D9)
 export async function setOpen(userId: number, isOpen: boolean): Promise<{ is_open: boolean }> {
-  const [r] = await db.query<any>("UPDATE merchants SET is_open = ?, updated_at = updated_at WHERE user_id = ?", [
+  const [result] = await db.query<any>("UPDATE merchants SET is_open = ?, updated_at = updated_at WHERE user_id = ?", [
     isOpen,
     userId,
   ]);
-  if (r.affectedRows === 0) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
+  if (result.affectedRows === 0) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
   return { is_open: isOpen };
 }
 
-const invalid = (fields: Record<string, string[]>) =>
+const validationError = (fields: Record<string, string[]>) =>
   new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
-const COLUMNS = [
+const PROFILE_COLUMNS = [
   "business_name",
   "description",
   "address",
@@ -69,64 +69,73 @@ const COLUMNS = [
 ] as const;
 
 export async function updateProfile(userId: number, input: UpdateProfileInput) {
-  const sets: Record<string, string | number | null> = {};
-  for (const c of COLUMNS) if (input[c] !== undefined) sets[c] = input[c];
-  if (input.dine_in_enabled !== undefined) sets.dine_in_enabled = input.dine_in_enabled ? 1 : 0;
-  if (sets.description === "") sets.description = null;
-  const ids =
-    input.pickup_point_ids === undefined ? undefined : [...new Set(input.pickup_point_ids)].sort((a, b) => a - b);
-  if (Object.keys(sets).length === 0 && !ids)
+  const columnValues: Record<string, string | number | null> = {};
+  for (const column of PROFILE_COLUMNS) if (input[column] !== undefined) columnValues[column] = input[column];
+  if (input.dine_in_enabled !== undefined) columnValues.dine_in_enabled = input.dine_in_enabled ? 1 : 0;
+  if (columnValues.description === "") columnValues.description = null;
+  const pickupPointIds =
+    input.pickup_point_ids === undefined
+      ? undefined
+      : [...new Set(input.pickup_point_ids)].sort((first, second) => first - second);
+  if (Object.keys(columnValues).length === 0 && !pickupPointIds)
     throw new AppError(400, "VALIDATION_ERROR", "Tidak ada data yang diubah.");
 
   await dalamTransaksi(async (conn) => {
-    let berubah = false;
+    let pickupPointsChanged = false;
     // urutan kunci: toko lalu titik temu (sama dengan cekTitikTemuTerakhir admin)
-    const [r] = await conn.query<RowDataPacket[]>(
+    const [merchantRows] = await conn.query<RowDataPacket[]>(
       "SELECT id, TIME_FORMAT(open_time, '%H:%i') AS o, TIME_FORMAT(close_time, '%H:%i') AS c, logo_url, cover_url FROM merchants WHERE user_id = ? FOR UPDATE",
       [userId],
     );
-    const m = r[0];
-    if (!m) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
-    validateImageUrl(input.logo_url, m.logo_url, `merchants/${m.id}/logo/`, "logo_url");
-    validateImageUrl(input.cover_url, m.cover_url, `merchants/${m.id}/cover/`, "cover_url");
+    const merchant = merchantRows[0];
+    if (!merchant) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
+    validateImageUrl(input.logo_url, merchant.logo_url, `merchants/${merchant.id}/logo/`, "logo_url");
+    validateImageUrl(input.cover_url, merchant.cover_url, `merchants/${merchant.id}/cover/`, "cover_url");
     // jam tutup harus setelah jam buka; yang tidak dikirim dibandingkan dengan nilai tersimpan
     if (
       (input.open_time !== undefined || input.close_time !== undefined) &&
-      (input.close_time ?? m.c) <= (input.open_time ?? m.o)
+      (input.close_time ?? merchant.c) <= (input.open_time ?? merchant.o)
     ) {
-      throw invalid({ close_time: ["Jam tutup harus setelah jam buka."] });
+      throw validationError({ close_time: ["Jam tutup harus setelah jam buka."] });
     }
-    if (ids) {
+    if (pickupPointIds) {
       // FOR UPDATE, bukan FOR SHARE: TiDB (production) menolak FOR SHARE (ER_NOT_SUPPORTED_YET)
-      const [ok] = await conn.query<RowDataPacket[]>(
+      const [activePoints] = await conn.query<RowDataPacket[]>(
         "SELECT id FROM pickup_points WHERE id IN (?) AND is_active FOR UPDATE",
-        [ids],
+        [pickupPointIds],
       );
-      if (ok.length !== ids.length) throw invalid({ pickup_point_ids: ["Titik temu tidak tersedia."] });
-      const [lama] = await conn.query<RowDataPacket[]>(
+      if (activePoints.length !== pickupPointIds.length)
+        throw validationError({ pickup_point_ids: ["Titik temu tidak tersedia."] });
+      const [savedPoints] = await conn.query<RowDataPacket[]>(
         "SELECT pickup_point_id AS id FROM merchant_pickup_points WHERE merchant_id = ? ORDER BY 1",
-        [m.id],
+        [merchant.id],
       );
       // hanya selisih yang ditulis: DELETE/INSERT seluruh set antar-penjual bisa deadlock lewat gap lock
-      const ada = new Set<number>(lama.map((l) => l.id));
-      const buang = [...ada].filter((id) => !ids.includes(id));
-      const tambah = ids.filter((id) => !ada.has(id));
-      berubah = buang.length > 0 || tambah.length > 0;
-      if (buang.length)
+      const savedIds = new Set<number>(savedPoints.map((point) => point.id));
+      const removedIds = [...savedIds].filter((id) => !pickupPointIds.includes(id));
+      const addedIds = pickupPointIds.filter((id) => !savedIds.has(id));
+      pickupPointsChanged = removedIds.length > 0 || addedIds.length > 0;
+      if (removedIds.length)
         await conn.query("DELETE FROM merchant_pickup_points WHERE merchant_id = ? AND pickup_point_id IN (?)", [
-          m.id,
-          buang,
+          merchant.id,
+          removedIds,
         ]);
-      if (tambah.length)
+      if (addedIds.length)
         await conn.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES ?", [
-          tambah.map((id) => [m.id, id]),
+          addedIds.map((id) => [merchant.id, id]),
         ]);
     }
-    const cols = Object.keys(sets);
+    const columns = Object.keys(columnValues);
     // updated_at otomatis bergeser saat kolom berubah; titik temu tanpa perubahan kolom digeser eksplisit (D9)
-    const set = [...cols.map((c) => `${c} = ?`), ...(berubah ? ["updated_at = CURRENT_TIMESTAMP"] : [])];
-    if (set.length > 0)
-      await conn.query(`UPDATE merchants SET ${set.join(", ")} WHERE id = ?`, [...cols.map((c) => sets[c]), m.id]);
+    const assignments = [
+      ...columns.map((column) => `${column} = ?`),
+      ...(pickupPointsChanged ? ["updated_at = CURRENT_TIMESTAMP"] : []),
+    ];
+    if (assignments.length > 0)
+      await conn.query(`UPDATE merchants SET ${assignments.join(", ")} WHERE id = ?`, [
+        ...columns.map((column) => columnValues[column]),
+        merchant.id,
+      ]);
   });
   return getProfile(userId);
 }

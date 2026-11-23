@@ -6,7 +6,7 @@ import { env } from "../src/config/env";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ai } from "../src/services/ai.service";
 import { bersihkanLog } from "../src/services/log-server.service";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { decrypt } from "../src/utils/crypto";
 import { login, siapkanToko } from "./helpers/toko";
 
@@ -283,7 +283,7 @@ describe("pemakaian AI (F25)", () => {
       ["uji", 1, 8],
     ]);
     expect(d.per_hari).toHaveLength(7);
-    expect(d.per_hari.at(-1)).toEqual({ tanggal: hariIniWib(), panggilan: 3, gagal: 1, token: 158 });
+    expect(d.per_hari.at(-1)).toEqual({ tanggal: getWibDate(), panggilan: 3, gagal: 1, token: 158 });
     expect(d.per_hari.slice(0, 6).every((h: any) => h.panggilan === 0)).toBe(true);
     expect(d.gagal_terakhir).toMatchObject([
       { label: "Groq", fitur: "rekomendasi", error: "Kuota/batas pemakaian habis (429)." },

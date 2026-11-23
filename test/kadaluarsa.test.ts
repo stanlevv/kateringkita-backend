@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { AppError } from "../src/utils/errors";
 import { transitionOrder } from "../src/services/order-status.service";
@@ -32,7 +32,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   bekukanJam(); // restoreAllMocks juga melepas jam katalog yang dibekukan siapCheckout
   await db.query("UPDATE orders SET status = 'expired' WHERE status = 'holding'");
-  await db.query("UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, stock_date = ?", [hariIniWib()]);
+  await db.query("UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, stock_date = ?", [getWibDate()]);
   await db.query("DELETE FROM notifications");
 });
 afterAll(() => {

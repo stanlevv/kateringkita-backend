@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { codeGenerator } from "../src/services/order.service";
 import { menuRow, pembeliBaru, siapCheckout, tampilkan } from "./helpers/toko";
 
@@ -61,7 +61,7 @@ test("201: bentuk Order + payment tunai, kode KK-tanggal WIB, harga server, tanp
   const r = await pesan(isi({ note: " Sambal dipisah ", total: 1 })).expect(201);
   const d = r.body.data;
   expect(Object.keys(d).sort()).toEqual(KUNCI_ORDER);
-  expect(d.code).toMatch(new RegExp(`^KK-${hariIniWib().replace(/-/g, "")}-[0-9A-HJKMNP-TV-Z]{4}$`));
+  expect(d.code).toMatch(new RegExp(`^KK-${getWibDate().replace(/-/g, "")}-[0-9A-HJKMNP-TV-Z]{4}$`));
   expect(d).toMatchObject({
     status: "holding",
     payment_method: "cod",
@@ -116,7 +116,7 @@ test("DB: salinan pesanan, item, log status, held_today naik; nama dari body", a
     pickup_point_id: 1,
   });
   const [[sd]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') d FROM orders WHERE id = ?", [o.id]);
-  expect(sd.d).toBe(hariIniWib());
+  expect(sd.d).toBe(getWibDate());
   const [items] = await db.query<any[]>(
     "SELECT menu_id, menu_name, unit_price, hpp, qty, options, line_total FROM order_items WHERE order_id = ?",
     [o.id],
@@ -170,7 +170,7 @@ test("stok kemarin di-reset lewat segarkanKuota sebelum hold", async () => {
     "SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') d, held_today FROM menus WHERE id = ?",
     [s.menu],
   );
-  expect(m).toEqual({ d: hariIniWib(), held_today: 2 });
+  expect(m).toEqual({ d: getWibDate(), held_today: 2 });
 });
 
 test("balapan tengah malam: menu sudah pindah ke tanggal stok lain → 409, hold tidak bocor ke hari lain", async () => {
@@ -240,7 +240,7 @@ test("D11: 3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async ()
 });
 
 test("D7: kode bentrok → buat ulang; selalu bentrok → 500 tanpa sisa", async () => {
-  const hari = hariIniWib().replace(/-/g, "");
+  const hari = getWibDate().replace(/-/g, "");
   vi.spyOn(codeGenerator, "random").mockReturnValueOnce("AAAA").mockReturnValueOnce("AAAA").mockReturnValueOnce("BBBB");
   expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-AAAA`);
   expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-BBBB`);
@@ -255,8 +255,8 @@ test("D7: kode bentrok → buat ulang; selalu bentrok → 500 tanpa sisa", async
 });
 
 test("pickup_at ikut di Order (ISO UTC)", async () => {
-  const r = await pesan(isi({ pickup_at: `${hariIniWib()}T13:30:00+07:00` })).expect(201);
-  expect(r.body.data.pickup_at).toBe(new Date(`${hariIniWib()}T13:30:00+07:00`).toISOString());
+  const r = await pesan(isi({ pickup_at: `${getWibDate()}T13:30:00+07:00` })).expect(201);
+  expect(r.body.data.pickup_at).toBe(new Date(`${getWibDate()}T13:30:00+07:00`).toISOString());
 });
 
 // Injeksi galat memakai CREATE TRIGGER; TiDB tidak punya trigger, jadi blok ini hanya jalan di MySQL

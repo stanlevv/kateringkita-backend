@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
 
 // F07 Task 3: GET /merchant/orders & /merchant/orders/:code (M-04, R-10, R-11; D9, D11–D13)
@@ -41,7 +41,7 @@ const daftar = (qs = "", token = s.tA) =>
   request(app).get(`/api/v1/merchant/orders${qs}`).set("Authorization", `Bearer ${token}`);
 const kodeDari = (r: request.Response) => r.body.data.map((o: { code: string }) => o.code).sort();
 const atur = (code: string, o: Record<string, unknown>) => db.query("UPDATE orders SET ? WHERE code = ?", [o, code]);
-const kemarin = () => new Date(Date.parse(`${hariIniWib()}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
+const kemarin = () => new Date(Date.parse(`${getWibDate()}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
 
 beforeAll(async () => {
   s = await siapCheckout();
@@ -90,11 +90,11 @@ describe("GET /merchant/orders", () => {
   });
 
   test("date = tanggal WIB created_at", async () => {
-    expect(kodeDari(await daftar(`?date=${hariIniWib()}`).expect(200))).toHaveLength(3);
+    expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).toHaveLength(3);
     await atur(k.completed, { created_at: `${kemarin()} 17:30:00` }); // hari ini 00:30 WIB
-    expect(kodeDari(await daftar(`?date=${hariIniWib()}`).expect(200))).toContain(k.completed);
+    expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).toContain(k.completed);
     await atur(k.completed, { created_at: `${kemarin()} 16:59:59` }); // kemarin 23:59:59 WIB
-    expect(kodeDari(await daftar(`?date=${hariIniWib()}`).expect(200))).not.toContain(k.completed);
+    expect(kodeDari(await daftar(`?date=${getWibDate()}`).expect(200))).not.toContain(k.completed);
     expect(kodeDari(await daftar(`?date=${kemarin()}`).expect(200))).toEqual([k.completed]);
     expect((await daftar("?date=2026-13-01").expect(400)).body.error.fields).toEqual({
       date: ["Tanggal tidak valid."],

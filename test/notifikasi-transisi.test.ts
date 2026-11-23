@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { pesanDulu, siapCheckout } from "./helpers/toko";
@@ -43,7 +43,7 @@ beforeAll(async () => {
 });
 afterEach(async () => {
   await db.query("UPDATE orders SET status = 'expired' WHERE status = 'holding'");
-  await db.query("UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, stock_date = ?", [hariIniWib()]);
+  await db.query("UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, stock_date = ?", [getWibDate()]);
   await db.query("DELETE FROM notifications");
   await db.query("UPDATE merchants SET business_name = ? WHERE id = ?", [TOKO, s.idA]);
 });

@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { menuRow, siapkanToko, sisipMenu } from "./helpers/toko";
 
 let tA: string, tB: string, idA: number, idB: number;
@@ -127,7 +127,7 @@ test("R-12: stock_date lama direset saat dibaca tanpa menggeser updated_at; toko
     "SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s, updated_at FROM menus WHERE id = ?",
     [id],
   );
-  expect(d.s).toBe(hariIniWib());
+  expect(d.s).toBe(getWibDate());
   expect(d.updated_at.toISOString()).toBe("2026-01-01T00:00:00.000Z");
   expect(await menuRow(idLainB)).toMatchObject({ quota_today: 5, sold_today: 3, held_today: 1 });
 });

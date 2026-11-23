@@ -3,7 +3,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { dalamTransaksi, kunci, withBool } from "./admin-audit.service";
 import { FIELD, kodeGanda, kodeSkema, nilai, publikDari, rapikan } from "./admin-promo.service";
-import { idToko } from "./merchant-menu.service";
+import { getMerchantId } from "./merchant-menu.service";
 import { kabariPromoToko } from "./admin-pengumuman.service";
 
 // F12 promo toko: aturan isian sama dengan promo platform (rapikan); kode unik di seluruh tabel promos.
@@ -26,7 +26,7 @@ const kunciPromoToko = (conn: Parameters<typeof kunci>[0], merchantId: number, i
 
 export async function daftarPromoToko(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE merchant_id = ? ORDER BY id DESC", [
-    await idToko(userId),
+    await getMerchantId(userId),
   ]);
   return rows.map(withBool);
 }
@@ -42,7 +42,7 @@ export async function buatPromoToko(userId: number, body: unknown) {
   const publik = publikDari(b) ?? true;
   const { code, data } = rapikan(b, 0, true);
   tanpaGratisLayanan(data.type);
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   try {
     const [ins] = await db.query<ResultSetHeader>(
       `INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at,
@@ -75,7 +75,7 @@ export async function buatPromoToko(userId: number, body: unknown) {
 
 // PATCH sebagian: field yang tak dikirim memakai nilai tersimpan (pola ubahPromo admin)
 export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknown) {
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   const b = objek(body);
   const aktif = aktifDari(b);
   const publik = publikDari(b);
@@ -118,7 +118,7 @@ export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknow
 }
 
 export async function hapusPromoToko(userId: number, idRaw: unknown) {
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   return dalamTransaksi(async (conn) => {
     const p = await kunciPromoToko(conn, merchantId, idRaw);
     if (p.used_count > 0) throw new AppError(409, "CONFLICT", "Promo sudah dipakai. Nonaktifkan saja.");

@@ -21,7 +21,7 @@ import {
 import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { simpanHasil } from "./hasil-ai.service";
-import { hariIniWib } from "./merchant-quota.service";
+import { getWibDate } from "./merchant-quota.service";
 
 // Istilah yang dipakai di file ini:
 // - RAG (retrieval-augmented generation): sebelum bertanya ke AI, server mencari dulu data yang relevan di database
@@ -145,7 +145,7 @@ type Candidate = { card: MenuCard; minQty: number; description: string | null };
 async function findCandidates(input: RecommendationInput, userId: number): Promise<Candidate[]> {
   const nowMs = clock.now();
   const wibTime = toWibTime(nowMs);
-  const today = hariIniWib(new Date(nowMs));
+  const today = getWibDate(new Date(nowMs));
   // 1. Saringan dasar. Parameter: 4 × jam WIB (toko buka) dan tanggal WIB (sisa porsi > 0).
   const where = [MENU_VISIBLE, MERCHANT_OPEN, `${REMAINING_STOCK} > 0`];
   const args: unknown[] = [wibTime, wibTime, wibTime, wibTime, today];

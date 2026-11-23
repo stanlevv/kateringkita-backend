@@ -5,7 +5,7 @@ import { AppError } from "../utils/errors";
 import { decrypt, encrypt } from "../utils/crypto";
 import type { AiInput, UbahAiInput } from "../dto/ai.dto";
 import { catat, dalamTransaksi, type Conn } from "./admin-audit.service";
-import { hariIniWib } from "./merchant-quota.service";
+import { getWibDate } from "./merchant-quota.service";
 
 // F22 AI gateway: penyedia dari DB (dikelola admin) dicoba urut prioritas; gagal (kuota/error/timeout) → istirahat sebentar
 // → penyedia berikutnya. GEMINI_API_KEY di env = cadangan terakhir (perilaku F17 lama tetap jalan tanpa isian admin).
@@ -335,7 +335,7 @@ const RATA = "ROUND(AVG(CASE WHEN ok THEN latency_ms END)) AS rata_ms";
 
 /** Ringkasan `hari` hari terakhir (WIB, termasuk hari ini): total, per penyedia, per fitur, per hari, 10 gagal terakhir. */
 export async function pemakaianAi(hari: number) {
-  const nol = Date.parse(`${hariIniWib()}T00:00:00Z`);
+  const nol = Date.parse(`${getWibDate()}T00:00:00Z`);
   const tanggal = Array.from({ length: hari }, (_, i) =>
     new Date(nol - (hari - 1 - i) * 86400e3).toISOString().slice(0, 10),
   );

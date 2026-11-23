@@ -3,8 +3,8 @@
 // disembunyikan tidak dihapus, hanya tidak tampil, dan muncul lagi saat menu atau tokonya tampil lagi.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { hariIniWib } from "./merchant-quota.service";
-import { menuId, menuTidakAda } from "./merchant-menu.service";
+import { getWibDate } from "./merchant-quota.service";
+import { parseMenuId, menuNotFound } from "./merchant-menu.service";
 import {
   MENU_FROM,
   MERCHANT_FROM,
@@ -34,12 +34,12 @@ import { Pagination } from "../dto/catalog.dto";
  * @throws 404 NOT_FOUND bila id tidak valid atau menu tidak tampil di katalog
  */
 export async function saveFavorite(userId: number, rawId: unknown): Promise<void> {
-  const id = menuId(rawId);
+  const id = parseMenuId(rawId);
   const [existingMenus] = await db.query<RowDataPacket[]>(
     `SELECT x.id FROM ${MENU_FROM} WHERE x.id = ? AND ${MENU_VISIBLE}`,
     [id],
   );
-  if (!existingMenus[0]) throw menuTidakAda();
+  if (!existingMenus[0]) throw menuNotFound();
   await db.query("INSERT IGNORE INTO favorites (user_id, menu_id) VALUES (?, ?)", [userId, id]);
 }
 
@@ -51,7 +51,7 @@ export async function saveFavorite(userId: number, rawId: unknown): Promise<void
  * @throws 404 NOT_FOUND bila id bukan bilangan bulat positif
  */
 export async function deleteFavorite(userId: number, rawId: unknown): Promise<void> {
-  await db.query("DELETE FROM favorites WHERE user_id = ? AND menu_id = ?", [userId, menuId(rawId)]);
+  await db.query("DELETE FROM favorites WHERE user_id = ? AND menu_id = ?", [userId, parseMenuId(rawId)]);
 }
 
 /**
@@ -69,7 +69,7 @@ export async function listFavorites(userId: number, pagination: Pagination) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${MENU_CARD_COLUMNS} FROM ${MENU_FROM} ${JOIN_FAVORITE} WHERE ${whereClause}
      ORDER BY f.created_at DESC, x.id DESC LIMIT ? OFFSET ?`,
-    [hariIniWib(new Date(nowMs)), userId, pagination.limit, (pagination.page - 1) * pagination.limit],
+    [getWibDate(new Date(nowMs)), userId, pagination.limit, (pagination.page - 1) * pagination.limit],
   );
   // 3. Hitung total favorit yang tampil untuk paginasi.
   const [countRows] = await db.query<RowDataPacket[]>(

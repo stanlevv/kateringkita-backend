@@ -3,7 +3,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { pembeliBaru, siapCheckout } from "./helpers/toko";
 
 // F06 Task 6: GET /orders/:code/whatsapp (C-13, D15)
@@ -50,7 +50,7 @@ test("pesan tetap bersuara pembeli, tautan wa.me 62…", async () => {
 
 test("tanpa catatan → tanpa baris Catatan; pickup_at 13:30 WIB → 13.30 WIB; templat toko tidak dipakai", async () => {
   await db.query("UPDATE merchants SET wa_template = 'Halo {nama}, pesanan {kode} diterima.' WHERE id = ?", [s.idA]);
-  const code = await pesan({ pickup_at: `${hariIniWib()}T13:30:00+07:00` });
+  const code = await pesan({ pickup_at: `${getWibDate()}T13:30:00+07:00` });
   const { message } = (await wa(code).expect(200)).body.data;
   expect(message).not.toContain("Catatan");
   expect(message).toContain("Waktu ambil: 13.30 WIB");
@@ -76,7 +76,7 @@ test("nomor WA 628… / +628… dinormalkan ke 628…", async () => {
 });
 
 test("ambil bukan hari ini → tanggal ikut ditulis", async () => {
-  const lusa = new Date(Date.parse(`${hariIniWib()}T10:00:00+07:00`) + 2 * 86400e3);
+  const lusa = new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + 2 * 86400e3);
   const code = await pesan({ pickup_at: lusa.toISOString() });
   const { message } = (await wa(code).expect(200)).body.data;
   const tgl = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" }).format(

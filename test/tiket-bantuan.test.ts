@@ -7,7 +7,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ticketLimiter } from "../src/middleware/rate-limiter";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { kodeTiket } from "../src/services/tiket.service";
 import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 
@@ -130,7 +130,7 @@ describe("POST /me/tickets", () => {
     }).expect(201);
     const d = r.body.data;
     expect(Object.keys(d).sort()).toEqual(KUNCI_DETAIL);
-    expect(d.code).toMatch(new RegExp(`^TK-${hariIniWib().replace(/-/g, "")}-[2-9A-HJ-NP-Z]{4}$`));
+    expect(d.code).toMatch(new RegExp(`^TK-${getWibDate().replace(/-/g, "")}-[2-9A-HJ-NP-Z]{4}$`));
     expect(d).toMatchObject({
       category: "pembayaran",
       subject: "VA sudah dibayar",

@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { menuRow, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F07 Task 4: POST /merchant/orders/:code/:aksi + balapan (M-04, M-08; D1, D4–D8)
@@ -35,7 +35,7 @@ beforeAll(async () => {
 });
 afterEach(async () => {
   await db.query("UPDATE orders SET status = 'expired' WHERE status = 'holding'");
-  await db.query("UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, stock_date = ?", [hariIniWib()]);
+  await db.query("UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, stock_date = ?", [getWibDate()]);
 });
 afterAll(() => {
   vi.restoreAllMocks();

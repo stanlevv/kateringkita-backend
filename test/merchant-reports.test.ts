@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-quota.service";
+import { getWibDate } from "../src/services/merchant-quota.service";
 import { rentangUtc } from "../src/services/merchant-laporan.service";
 import { pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
 
@@ -14,7 +14,7 @@ const k: Record<string, string> = {};
 const atur = (code: string, o: Record<string, unknown>) => db.query("UPDATE orders SET ? WHERE code = ?", [o, code]);
 const wib = (d: string, hms: string) => new Date(Date.parse(`${d}T${hms}+07:00`));
 const geser = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
-const HARI = hariIniWib();
+const HARI = getWibDate();
 const H = "2026-03-20"; // hari uji laporan per jam; completed_at disimpan UTC (WIB − 7 jam)
 // Hari uji tetap di masa lalu: batas WIB sama dengan "kemarin 17:30 UTC = hari ini 00:30 WIB" tanpa mencemari data hari ini
 const D = "2026-03-10";

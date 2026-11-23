@@ -3,7 +3,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { likePattern } from "./order.service";
-import { galeri } from "./merchant-menu.service";
+import { parseGallery } from "./merchant-menu.service";
 import { hitungUlangRating } from "./ulasan.service";
 
 // F19 moderasi admin: sembunyikan ulasan & turunkan menu (suspend toko sudah ada di admin-merchant F18). Semua aksi dicatat audit.
@@ -98,7 +98,7 @@ const petaMenu = (x: RowDataPacket) => ({
   name: x.name,
   price: x.price,
   image_url: x.image_url,
-  gallery: galeri(x.gallery),
+  gallery: parseGallery(x.gallery),
   is_active: Boolean(x.is_active),
   moderated: x.moderated_at !== null,
   moderated_at: x.moderated_at,
@@ -148,7 +148,7 @@ export async function moderasiMenu(adminId: number, idRaw: unknown, turun: boole
 export async function hapusFotoMenu(adminId: number, idRaw: unknown, url: string, reason: string) {
   const id = await dalamTransaksi(async (conn) => {
     const x = await kunci(conn, "menus", idRaw, { where: "deleted_at IS NULL", notFound: "Menu tidak ditemukan." });
-    const sebelum = { image_url: x.image_url as string | null, gallery: galeri(x.gallery) };
+    const sebelum = { image_url: x.image_url as string | null, gallery: parseGallery(x.gallery) };
     let sesudah: typeof sebelum;
     if (sebelum.image_url === url)
       sesudah = { image_url: sebelum.gallery[0] ?? null, gallery: sebelum.gallery.slice(1) };

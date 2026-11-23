@@ -3,7 +3,7 @@ import db from "../config/db";
 import { ReviewInput } from "../dto/order.dto";
 import { AppError } from "../utils/errors";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
-import { idToko } from "./merchant-menu.service";
+import { getMerchantId } from "./merchant-menu.service";
 
 // F13 ulasan: pembeli mengulas menu dari pesanan completed miliknya; satu ulasan per (pesanan, menu).
 
@@ -69,7 +69,7 @@ export async function daftarUlasanToko(userId: number) {
     `SELECT r.id, r.menu_id, m.name AS menu_name, u.full_name AS customer_name, r.rating, r.comment, r.created_at
      FROM reviews r JOIN menus m ON m.id = r.menu_id JOIN users u ON u.id = r.customer_id
      WHERE m.merchant_id = ? AND r.hidden_at IS NULL ORDER BY r.created_at DESC, r.id DESC`,
-    [await idToko(userId)],
+    [await getMerchantId(userId)],
   );
   return rows.map((r) => ({
     id: r.id,

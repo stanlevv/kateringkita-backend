@@ -15,7 +15,7 @@ import { AppError } from "../utils/errors";
 import { PRESIGN_SECONDS } from "../utils/r2";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { clock } from "./catalog.service";
-import { idToko } from "./merchant-menu.service";
+import { getMerchantId } from "./merchant-menu.service";
 import { validateImageUrl } from "./upload.service";
 import { VoucherKartu, voucherTersedia } from "./voucher.service";
 
@@ -113,7 +113,7 @@ export async function bannerPublik(userId: number | null): Promise<BannerPublik[
 export async function daftarBannerToko(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${KOLOM} FROM ${DARI} WHERE b.merchant_id = ? ORDER BY b.id DESC`,
-    [await idToko(userId)],
+    [await getMerchantId(userId)],
   );
   return rows.map(peta);
 }
@@ -136,7 +136,7 @@ async function cekSatuAktif(merchantId: number, kecuali: number | null) {
 }
 
 export async function buatBannerToko(userId: number, body: unknown) {
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   const d: BannerToko = rapikan(bannerTokoSchema, body, prefixToko(merchantId));
   const promoId = await cekPromoToko(merchantId, d.target, d.promo_id);
   await cekSatuAktif(merchantId, null);
@@ -150,7 +150,7 @@ export async function buatBannerToko(userId: number, body: unknown) {
 
 /** Setiap perubahan oleh penjual mengembalikan banner ke antrean persetujuan admin. */
 export async function ubahBannerToko(userId: number, idRaw: unknown, body: unknown) {
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   const id = Number(idRaw);
   const [[b]] =
     Number.isInteger(id) && id > 0
@@ -178,7 +178,7 @@ export async function ubahBannerToko(userId: number, idRaw: unknown, body: unkno
 }
 
 export async function hapusBannerToko(userId: number, idRaw: unknown) {
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   const id = Number(idRaw);
   const [r] =
     Number.isInteger(id) && id > 0

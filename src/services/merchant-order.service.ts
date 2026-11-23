@@ -19,7 +19,7 @@ import {
   render,
   waLink,
 } from "./order.service";
-import { idToko } from "./merchant-menu.service";
+import { getMerchantId } from "./merchant-menu.service";
 import { MerchantOrdersQuery } from "../dto/merchant-order.dto";
 
 // Kolom + tabel untuk pesanan versi penjual: ditambah data pembeli, meja, dan waktu tiap perubahan status. Titik temu
@@ -61,7 +61,7 @@ export const mapMerchantOrder = (order: RowDataPacket, items: Item[]) => ({
 export async function listMerchantOrders(userId: number, filter: MerchantOrdersQuery) {
   // 1. Syarat dasar: hanya pesanan toko milik penjual ini.
   const where = ["o.merchant_id = ?"];
-  const args: unknown[] = [await idToko(userId)];
+  const args: unknown[] = [await getMerchantId(userId)];
   // 2. Bila updated_since diisi, saringan status diabaikan; kalau tidak, saring status yang diminta.
   if (filter.updated_since) {
     where.push("o.updated_at >= ?");
@@ -94,7 +94,7 @@ export async function listMerchantOrders(userId: number, filter: MerchantOrdersQ
 export async function getMerchantOrder(userId: number, code: string) {
   const [[order]] = await db.query<RowDataPacket[]>(
     `SELECT ${MERCHANT_ORDER_SELECT} WHERE o.code = ? AND o.merchant_id = ?`,
-    [code, await idToko(userId)],
+    [code, await getMerchantId(userId)],
   );
   if (!order) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
   return mapMerchantOrder(order, (await loadOrderItems([order.id])).get(order.id) ?? []);
@@ -124,7 +124,7 @@ export async function transitionMerchantOrder(userId: number, code: string, acti
   if (action === "reject" && !reason) {
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { reason: ["Pilih alasan penolakan."] });
   }
-  const merchantId = await idToko(userId);
+  const merchantId = await getMerchantId(userId);
   await dalamTransaksi((conn) => transitionOrder(conn, code, action, { kind: "merchant", userId, merchantId }, reason));
   return getMerchantOrder(userId, code);
 }
@@ -159,7 +159,7 @@ export async function getMerchantOrderWhatsapp(userId: number, code: string) {
      FROM orders o JOIN merchants m ON m.id = o.merchant_id LEFT JOIN pickup_points p ON p.id = o.pickup_point_id
        LEFT JOIN merchant_tables mt ON mt.id = o.table_id
      WHERE o.code = ? AND o.merchant_id = ?`,
-    [code, await idToko(userId)],
+    [code, await getMerchantId(userId)],
   );
   if (!order) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
   // 2. Tanpa nomor pembeli tidak ada tujuan pesan. Tamu meja boleh tidak mencantumkan nomor HP.
