@@ -53,7 +53,8 @@ export async function listAdminTickets(filter: ListAdminTicketsQuery) {
     `SELECT COUNT(*) AS n FROM support_tickets t JOIN users u ON u.id = t.user_id ${whereSql}`,
     args,
   );
-  // 3. Angka di tab: seluruh tiket per status, tidak terpengaruh filter (sama seperti hitungan belum dibaca notifikasi).
+  // 3. Angka di tab: seluruh tiket per status, tidak terpengaruh filter (sama seperti hitungan belum dibaca
+  //    notifikasi).
   const [statusRows] = await db.query<RowDataPacket[]>(
     "SELECT status, COUNT(*) AS n FROM support_tickets GROUP BY status",
   );
@@ -76,9 +77,11 @@ export async function listAdminTickets(filter: ListAdminTicketsQuery) {
  * @throws 404 tiket tidak ditemukan
  */
 export async function getAdminTicket(code: string) {
+  // 1. Baca tiket tanpa batasan pemilik (null = semua pembeli), beserta pesan-pesannya.
   const loaded = await loadTicket(code, null);
   const { ticket } = loaded;
   return {
+    // 2. Nama pengirim = nama asli akun; pesan admin yang akunnya tidak ditemukan tampil sebagai nama tim.
     ...toTicketDetail(loaded, (message) => message.nama ?? (message.sender_role === "admin" ? TEAM_NAME : null)),
     customer: { id: ticket.u_id, full_name: ticket.u_name, phone: ticket.u_phone, email: ticket.u_email },
     order: ticket.order_code
