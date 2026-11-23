@@ -10,7 +10,7 @@ let aktif: number, nonaktif: number, terhapus: number, milikB: number;
 
 const get = (u: string, t = tA) => request(app).get(`/api/v1/merchant${u}`).set("Authorization", `Bearer ${t}`);
 const KUNCI = [
-  "available", "category", "daily_quota", "description", "held_today", "hpp", "id", "image_url", "is_active", "is_preorder", "margin",
+  "available", "category", "daily_quota", "description", "gallery", "held_today", "hpp", "id", "image_url", "is_active", "is_preorder", "margin",
   "min_order_qty", "name", "options", "preorder_days", "prep_minutes", "price", "quota_today", "rating_avg", "rating_count",
   "sold_today", "unit_label",
 ];

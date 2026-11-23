@@ -3,7 +3,7 @@ import db from "../config/db";
 import { sedangBuka } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
 import { hariIniWib } from "./merchant-kuota.service";
-import { menuId, menuTidakAda } from "./merchant-menu.service";
+import { galeri, menuId, menuTidakAda } from "./merchant-menu.service";
 import { Halaman, KatalogQuery } from "../dto/katalog.dto";
 import { voucherToko } from "./voucher.service";
 
@@ -130,7 +130,7 @@ export async function detailMenu(idRaw: unknown, userId: number | null) {
   const id = menuId(idRaw);
   const ms = jam.sekarang();
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${KOLOM_KARTU}, x.description, x.min_order_qty, x.prep_minutes, x.preorder_days, m.logo_url
+    `SELECT ${KOLOM_KARTU}, x.description, x.min_order_qty, x.prep_minutes, x.preorder_days, x.gallery, m.logo_url
      FROM ${DARI} ${JOIN_FAVORIT} WHERE x.id = ? AND ${TAMPIL}`,
     [hariIniWib(new Date(ms)), userId, id],
   );
@@ -142,7 +142,7 @@ export async function detailMenu(idRaw: unknown, userId: number | null) {
   ]);
   const k = kartu(r, ms);
   return {
-    ...k, description: r.description,
+    ...k, description: r.description, gallery: galeri(r.gallery),
     options: ops.map((o) => ({ id: o.id, name: o.name, extra_price: o.extra_price })),
     min_order_qty: r.min_order_qty, prep_minutes: r.prep_minutes, is_preorder: Boolean(r.is_preorder), preorder_days: r.preorder_days,
     merchant: { ...k.merchant, logo_url: r.logo_url, open_time: hhmm(r.open_time), close_time: hhmm(r.close_time), pickup_points },
@@ -182,7 +182,7 @@ export const tokoId = (idRaw: unknown): number => {
 export const DARI_TOKO = "merchants m JOIN users u ON u.id = m.user_id JOIN merchant_types t ON t.id = m.merchant_type_id";
 
 // Kolom profil toko + is_favorite; parameter: userId (LEFT JOIN merchant_favorites; null = tidak pernah cocok, D14)
-export const KOLOM_TOKO = `m.id, m.slug, m.business_name, m.description, m.logo_url, m.is_open, m.open_time, m.close_time, m.rating_avg,
+export const KOLOM_TOKO = `m.id, m.slug, m.business_name, m.description, m.logo_url, m.cover_url, m.is_open, m.open_time, m.close_time, m.rating_avg,
   m.rating_count, t.id AS t_id, t.name AS t_name, mf.user_id IS NOT NULL AS fav`;
 export const JOIN_FAVORIT_TOKO = "LEFT JOIN merchant_favorites mf ON mf.merchant_id = m.id AND mf.user_id = ?";
 
@@ -190,7 +190,7 @@ export const JOIN_FAVORIT_TOKO = "LEFT JOIN merchant_favorites mf ON mf.merchant
 // Satu bentuk untuk GET /merchants/:slug dan kartu favorit toko.
 export function profilPublik(m: RowDataPacket, ms: number, pickup_points: TitikTemu[]) {
   return {
-    id: m.id, slug: m.slug, business_name: m.business_name, description: m.description, logo_url: m.logo_url,
+    id: m.id, slug: m.slug, business_name: m.business_name, description: m.description, logo_url: m.logo_url, cover_url: m.cover_url,
     merchant_type: { id: m.t_id, name: m.t_name }, is_open: tokoBuka(m, ms),
     open_time: hhmm(m.open_time), close_time: hhmm(m.close_time), rating_avg: Number(m.rating_avg), rating_count: m.rating_count,
     pickup_points, is_favorite: Boolean(m.fav),

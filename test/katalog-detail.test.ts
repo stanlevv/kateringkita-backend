@@ -8,12 +8,12 @@ let idA: number, idB: number, slugA: string, slugB: string, menu: number;
 
 const get = (u: string) => request(app).get(`/api/v1${u}`);
 const KUNCI = [
-  "available", "badge", "category", "description", "id", "image_url", "is_favorite", "is_preorder", "merchant", "min_order_qty", "name",
+  "available", "badge", "category", "description", "gallery", "id", "image_url", "is_favorite", "is_preorder", "merchant", "min_order_qty", "name",
   "options", "preorder_days", "prep_minutes", "price", "rating_avg", "rating_count", "unit_label",
 ];
 const KUNCI_TOKO = ["business_name", "close_time", "id", "is_open", "logo_url", "open_time", "pickup_points", "slug"];
 const KUNCI_PROFIL = [
-  "business_name", "close_time", "description", "id", "is_favorite", "is_open", "logo_url", "merchant_type", "open_time", "pickup_points",
+  "business_name", "close_time", "cover_url", "description", "id", "is_favorite", "is_open", "logo_url", "merchant_type", "open_time", "pickup_points",
   "rating_avg", "rating_count", "slug", "vouchers",
 ];
 const slug = async (id: number) => ((await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [id]))[0] as any[])[0].slug as string;
@@ -113,7 +113,7 @@ test("D12: profil toko publik tanpa alamat/WA/status verifikasi", async () => {
   const r = await get(`/merchants/${slugA}`).expect(200);
   expect(Object.keys(r.body.data).sort()).toEqual(KUNCI_PROFIL);
   expect(r.body.data).toEqual({
-    id: idA, slug: slugA, business_name: "Dapur Siti", description: "Masakan rumah", logo_url: null,
+    id: idA, slug: slugA, business_name: "Dapur Siti", description: "Masakan rumah", logo_url: null, cover_url: null,
     merchant_type: { id: 1, name: "Katering Nasi Box & Harian" }, is_open: true, open_time: "07:00", close_time: "16:00",
     rating_avg: 4.25, rating_count: 8, pickup_points: [{ id: 1, name: "Gedung Vokasi UB (Lt. 2)", description: "Lobi" }], is_favorite: false, vouchers: [],
   });
