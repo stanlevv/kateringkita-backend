@@ -6,20 +6,21 @@ import { createAdmin } from "../src/scripts/create-admin";
 import { TEST_R2_ENV, photoUrl, setR2Env, login, prepareMerchants } from "./helpers/merchant";
 
 // Pop-up promo mobile (rancangan voucher 2026-11-16 §5.5): admin saja; GET /popup = pop-up aktif terbaru dalam periode.
-let s: Awaited<ReturnType<typeof prepareMerchants>>;
-let tAdmin: string, tSupport: string, promoPlat: number, promoToko: number;
-const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-const jam = (h: number) => new Date(Date.now() + h * 3600e3).toISOString();
-const isi = (o: Record<string, unknown> = {}) => ({
+let setup: Awaited<ReturnType<typeof prepareMerchants>>;
+let adminToken: string, supportToken: string, promoPlat: number, promoToko: number;
+const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
+const jam = (hours: number) => new Date(Date.now() + hours * 3600e3).toISOString();
+const isi = (overrides: Record<string, unknown> = {}) => ({
   title: "Promo akhir pekan",
   image_url: photoUrl("platform/popup/"),
   starts_at: jam(-1),
   ends_at: jam(24),
-  ...o,
+  ...overrides,
 });
-const buat = (o: Record<string, unknown> = {}, t = tAdmin) =>
-  request(app).post("/api/v1/admin/popups").set(H(t)).send(isi(o));
-const publik = (t?: string) => (t ? request(app).get("/api/v1/popup").set(H(t)) : request(app).get("/api/v1/popup"));
+const buat = (overrides: Record<string, unknown> = {}, token = adminToken) =>
+  request(app).post("/api/v1/admin/popups").set(authHeader(token)).send(isi(overrides));
+const publik = (token?: string) =>
+  token ? request(app).get("/api/v1/popup").set(authHeader(token)) : request(app).get("/api/v1/popup");
 const promo = async (merchantId: number | null, code: string) =>
   (
     await db.query<any>(
@@ -30,14 +31,14 @@ const promo = async (merchantId: number | null, code: string) =>
   )[0].insertId as number;
 
 beforeAll(async () => {
-  s = await prepareMerchants();
+  setup = await prepareMerchants();
   vi.restoreAllMocks();
   await createAdmin({ phone: "081300000009", fullName: "Admin Super", password: "rahasia123" });
   await createAdmin({ phone: "081300000011", fullName: "Admin Support", password: "rahasia123" });
   await db.query("UPDATE users SET admin_level = 'support' WHERE phone = '081300000011'");
-  [tAdmin, tSupport] = [await login("081300000009"), await login("081300000011")];
+  [adminToken, supportToken] = [await login("081300000009"), await login("081300000011")];
   promoPlat = await promo(null, "POPUPPLAT");
-  promoToko = await promo(s.idA, "POPUPTOKO");
+  promoToko = await promo(setup.idA, "POPUPTOKO");
   setR2Env();
 });
 beforeEach(async () => {
@@ -59,14 +60,18 @@ describe("GET /popup", () => {
       image_url: expect.any(String),
       promo: expect.objectContaining({ id: promoPlat, code: "POPUPPLAT", claimed: false }),
     });
-    await request(app).post(`/api/v1/me/vouchers/${promoPlat}/claim`).set(H(s.customerToken)).expect(200);
-    expect((await publik(s.customerToken)).body.data.promo.claimed).toBe(true);
+    await request(app).post(`/api/v1/me/vouchers/${promoPlat}/claim`).set(authHeader(setup.customerToken)).expect(200);
+    expect((await publik(setup.customerToken)).body.data.promo.claimed).toBe(true);
   });
 
   test("di luar periode, nonaktif, atau voucher tidak tersedia → tidak tampil", async () => {
     await buat({ starts_at: jam(2), ends_at: jam(24) }).expect(201);
     const id = (await buat().expect(201)).body.data.id;
-    await request(app).patch(`/api/v1/admin/popups/${id}`).set(H(tAdmin)).send({ is_active: false }).expect(200);
+    await request(app)
+      .patch(`/api/v1/admin/popups/${id}`)
+      .set(authHeader(adminToken))
+      .send({ is_active: false })
+      .expect(200);
     const mati = await promo(null, "POPUPMATI");
     await buat({ promo_id: mati }).expect(201);
     await db.query("UPDATE promos SET is_active = FALSE WHERE id = ?", [mati]);
@@ -76,12 +81,12 @@ describe("GET /popup", () => {
 
 describe("admin pop-up", () => {
   test("validasi: judul, gambar folder platform, periode, voucher platform saja", async () => {
-    const r = await buat({
+    const res = await buat({
       title: "ab",
       image_url: `${TEST_R2_ENV.R2_PUBLIC_URL}/merchants/1/logo/x.png`,
       ends_at: jam(-3),
     }).expect(400);
-    expect(Object.keys(r.body.error.fields).sort()).toEqual(["ends_at", "image_url", "title"]);
+    expect(Object.keys(res.body.error.fields).sort()).toEqual(["ends_at", "image_url", "title"]);
     expect((await buat({ promo_id: promoToko }).expect(400)).body.error.fields.promo_id).toEqual([
       "Pilih voucher platform.",
     ]);
@@ -89,21 +94,25 @@ describe("admin pop-up", () => {
 
   test("daftar, ubah, diaudit; support hanya melihat", async () => {
     const id = (await buat().expect(201)).body.data.id;
-    const u = await request(app)
+    const res = await request(app)
       .patch(`/api/v1/admin/popups/${id}`)
-      .set(H(tAdmin))
+      .set(authHeader(adminToken))
       .send({ title: "Judul baru", promo_id: promoPlat })
       .expect(200);
-    expect(u.body.data).toMatchObject({
+    expect(res.body.data).toMatchObject({
       title: "Judul baru",
       promo: { id: promoPlat, code: "POPUPPLAT" },
       is_active: true,
     });
-    const d = await request(app).get("/api/v1/admin/popups").set(H(tSupport)).expect(200);
-    expect(d.body.data.map((p: any) => p.id)).toEqual([id]);
-    await buat({}, tSupport).expect(403);
+    const listRes = await request(app).get("/api/v1/admin/popups").set(authHeader(supportToken)).expect(200);
+    expect(listRes.body.data.map((popup: any) => popup.id)).toEqual([id]);
+    await buat({}, supportToken).expect(403);
     const [log] = await db.query<any[]>("SELECT action FROM admin_audit_logs ORDER BY id");
-    expect(log.map((l: any) => l.action)).toEqual(["popup.create", "popup.update"]);
-    await request(app).patch("/api/v1/admin/popups/999999").set(H(tAdmin)).send({ is_active: false }).expect(404);
+    expect(log.map((entry: any) => entry.action)).toEqual(["popup.create", "popup.update"]);
+    await request(app)
+      .patch("/api/v1/admin/popups/999999")
+      .set(authHeader(adminToken))
+      .send({ is_active: false })
+      .expect(404);
   });
 });

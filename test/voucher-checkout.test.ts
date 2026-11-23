@@ -7,8 +7,8 @@ import { env } from "../src/config/env";
 import { freezeClock, prepareCheckout } from "./helpers/merchant";
 
 // Voucher: satu voucher toko + satu voucher platform per pesanan; kuota berkurang saat pesanan dibuat, kembali saat batal.
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
-type P = {
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
+type PromoOptions = {
   merchant_id?: number | null;
   code: string;
   type?: string;
@@ -19,35 +19,35 @@ type P = {
   used_count?: number;
   per_user_limit?: number;
 };
-const promo = async (p: P) => {
-  const [r] = await db.query<any>(
+const promo = async (options: PromoOptions) => {
+  const [result] = await db.query<any>(
     `INSERT INTO promos (merchant_id, code, type, value, max_discount, min_subtotal, quota, used_count, per_user_limit, starts_at, ends_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 1 DAY)`,
     [
-      p.merchant_id ?? null,
-      p.code,
-      p.type ?? "fixed",
-      p.value ?? 0,
-      p.max_discount ?? null,
-      p.min_subtotal ?? 0,
-      p.quota ?? null,
-      p.used_count ?? 0,
-      p.per_user_limit ?? 5,
+      options.merchant_id ?? null,
+      options.code,
+      options.type ?? "fixed",
+      options.value ?? 0,
+      options.max_discount ?? null,
+      options.min_subtotal ?? 0,
+      options.quota ?? null,
+      options.used_count ?? 0,
+      options.per_user_limit ?? 5,
     ],
   );
-  return r.insertId as number;
+  return result.insertId as number;
 };
 const body = (extra: Record<string, unknown>) => ({
-  items: [{ menu_id: s.menu, qty: 2 }],
+  items: [{ menu_id: setup.menu, qty: 2 }],
   pickup_point_id: 1,
   ...extra,
 }); // subtotal 30.000
 const quote = (extra: Record<string, unknown>) =>
-  request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${s.customerToken}`).send(body(extra));
+  request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${setup.customerToken}`).send(body(extra));
 const pesan = (extra: Record<string, unknown>, payment_method = "va") =>
   request(app)
     .post("/api/v1/orders")
-    .set("Authorization", `Bearer ${s.customerToken}`)
+    .set("Authorization", `Bearer ${setup.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send(body({ payment_method, ...extra }));
 const promoRow = async (id: number) =>
@@ -57,11 +57,11 @@ const order = async (code: string) =>
 
 let toko10: number, hemat3k: number;
 beforeAll(async () => {
-  s = await prepareCheckout();
-  toko10 = await promo({ merchant_id: s.idA, code: "TOKO10", type: "percent", value: 10, max_discount: 5000 });
+  setup = await prepareCheckout();
+  toko10 = await promo({ merchant_id: setup.idA, code: "TOKO10", type: "percent", value: 10, max_discount: 5000 });
   hemat3k = await promo({ code: "HEMAT3K", type: "fixed", value: 3000 });
-  await promo({ merchant_id: s.idA, code: "TOKO5", type: "fixed", value: 500 });
-  await promo({ merchant_id: s.idB, code: "LAINB", type: "fixed", value: 1000 });
+  await promo({ merchant_id: setup.idA, code: "TOKO5", type: "fixed", value: 500 });
+  await promo({ merchant_id: setup.idB, code: "LAINB", type: "fixed", value: 1000 });
 });
 beforeEach(() => {
   freezeClock();
@@ -75,18 +75,18 @@ afterEach(async () => {
 
 describe("quote dua voucher", () => {
   test("toko dihitung dari subtotal, platform dari sisa; vouchers_applied per slot", async () => {
-    const d = (await quote({ promo_codes: ["toko10", "HEMAT3K"] }).expect(200)).body.data;
-    expect(d).toMatchObject({ subtotal: 30000, merchant_discount: 3000, platform_discount: 3000, discount: 6000 });
-    expect(d.total).toBe(30000 + d.service_fee - 6000);
-    expect(d.vouchers_applied).toEqual([
+    const data = (await quote({ promo_codes: ["toko10", "HEMAT3K"] }).expect(200)).body.data;
+    expect(data).toMatchObject({ subtotal: 30000, merchant_discount: 3000, platform_discount: 3000, discount: 6000 });
+    expect(data.total).toBe(30000 + data.service_fee - 6000);
+    expect(data.vouchers_applied).toEqual([
       { id: toko10, code: "TOKO10", slot: "toko", amount: 3000 },
       { id: hemat3k, code: "HEMAT3K", slot: "platform", amount: 3000 },
     ]);
   });
 
   test("dua voucher toko, voucher toko lain, lebih dari 2 kode → 422 di promo_codes", async () => {
-    const r = await quote({ promo_codes: ["TOKO10", "TOKO5"] }).expect(422);
-    expect(r.body.error.fields.promo_codes).toEqual(["Hanya satu voucher toko per pesanan."]);
+    const res = await quote({ promo_codes: ["TOKO10", "TOKO5"] }).expect(422);
+    expect(res.body.error.fields.promo_codes).toEqual(["Hanya satu voucher toko per pesanan."]);
     expect((await quote({ promo_codes: ["LAINB"] }).expect(422)).body.error.fields.promo_codes).toEqual([
       "Kode promo tidak ditemukan.",
     ]);
@@ -106,18 +106,18 @@ describe("quote dua voucher", () => {
   });
 
   test("voucher toko ≥ subtotal + platform persen → potongan platform 0, total = biaya layanan", async () => {
-    await promo({ merchant_id: s.idA, code: "BESAR", type: "fixed", value: 50000 });
+    await promo({ merchant_id: setup.idA, code: "BESAR", type: "fixed", value: 50000 });
     await promo({ code: "PLAT10", type: "percent", value: 10 });
-    const d = (await quote({ promo_codes: ["BESAR", "PLAT10"] }).expect(200)).body.data;
-    expect(d).toMatchObject({ merchant_discount: 30000, platform_discount: 0 });
-    expect(d.total).toBe(d.service_fee);
+    const data = (await quote({ promo_codes: ["BESAR", "PLAT10"] }).expect(200)).body.data;
+    expect(data).toMatchObject({ merchant_discount: 30000, platform_discount: 0 });
+    expect(data.total).toBe(data.service_fee);
   });
 
   test("klien lama: promo_code tunggal tetap jalan; galat juga di fields.promo_code", async () => {
-    const d = (await quote({ promo_code: "hemat3k" }).expect(200)).body.data;
-    expect(d).toMatchObject({ discount: 3000, platform_discount: 3000, merchant_discount: 0 });
-    const r = await quote({ promo_code: "TIDAKADA" }).expect(422);
-    expect(r.body.error.fields).toEqual({
+    const data = (await quote({ promo_code: "hemat3k" }).expect(200)).body.data;
+    expect(data).toMatchObject({ discount: 3000, platform_discount: 3000, merchant_discount: 0 });
+    const res = await quote({ promo_code: "TIDAKADA" }).expect(422);
+    expect(res.body.error.fields).toEqual({
       promo_codes: ["Kode promo tidak ditemukan."],
       promo_code: ["Kode promo tidak ditemukan."],
     });
@@ -146,52 +146,66 @@ describe("pesanan dua voucher", () => {
       [
         { promo_id: toko10, amount: 3000 },
         { promo_id: hemat3k, amount: 3000 },
-      ].sort((a, b) => a.promo_id - b.promo_id),
+      ].sort((left, right) => left.promo_id - right.promo_id),
     );
   });
 
   test("batal mengembalikan kuota & redemption kedua voucher; voucher batas 1 bisa dipakai lagi", async () => {
-    const t1 = await promo({
-      merchant_id: s.idA,
+    const merchantPromoId = await promo({
+      merchant_id: setup.idA,
       code: "SEKALITOKO",
       type: "fixed",
       value: 1000,
       quota: 5,
       per_user_limit: 1,
     });
-    const p1 = await promo({ code: "SEKALIPLAT", type: "fixed", value: 1000, quota: 5, per_user_limit: 1 });
+    const platformPromoId = await promo({
+      code: "SEKALIPLAT",
+      type: "fixed",
+      value: 1000,
+      quota: 5,
+      per_user_limit: 1,
+    });
     const code = (await pesan({ promo_codes: ["SEKALITOKO", "SEKALIPLAT"] }).expect(201)).body.data.code;
     await request(app)
       .post(`/api/v1/orders/${code}/cancel`)
-      .set("Authorization", `Bearer ${s.customerToken}`)
+      .set("Authorization", `Bearer ${setup.customerToken}`)
       .send({})
       .expect(200);
-    expect([(await promoRow(t1)).used_count, (await promoRow(p1)).used_count]).toEqual([0, 0]);
-    const [[n]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM promo_redemptions WHERE promo_id IN (?, ?)", [
-      t1,
-      p1,
+    expect([(await promoRow(merchantPromoId)).used_count, (await promoRow(platformPromoId)).used_count]).toEqual([
+      0, 0,
     ]);
-    expect(Number(n.n)).toBe(0);
+    const [[countRow]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM promo_redemptions WHERE promo_id IN (?, ?)", [
+      merchantPromoId,
+      platformPromoId,
+    ]);
+    expect(Number(countRow.n)).toBe(0);
     await pesan({ promo_codes: ["SEKALITOKO", "SEKALIPLAT"] }).expect(201);
   });
 
   test("kuota voucher platform habis → seluruh pesanan ditolak, kuota voucher toko tidak bertambah", async () => {
-    const t = await promo({ merchant_id: s.idA, code: "TOKOAMAN", type: "fixed", value: 1000, quota: 10 });
+    const merchantPromoId = await promo({
+      merchant_id: setup.idA,
+      code: "TOKOAMAN",
+      type: "fixed",
+      value: 1000,
+      quota: 10,
+    });
     await promo({ code: "PLATHABIS", type: "fixed", value: 1000, quota: 1, used_count: 1 });
-    const r = await pesan({ promo_codes: ["TOKOAMAN", "PLATHABIS"] }).expect(422);
-    expect(r.body.error.fields.promo_codes).toEqual(["Kuota promo sudah habis."]);
-    expect((await promoRow(t)).used_count).toBe(0);
+    const res = await pesan({ promo_codes: ["TOKOAMAN", "PLATHABIS"] }).expect(422);
+    expect(res.body.error.fields.promo_codes).toEqual(["Kuota promo sudah habis."]);
+    expect((await promoRow(merchantPromoId)).used_count).toBe(0);
   });
 
   test("C1: voucher platform ditolak untuk tunai; voucher toko tetap boleh", async () => {
-    const r = await pesan({ promo_codes: ["HEMAT3K"] }, "cod").expect(422);
-    expect(r.body.error.fields.promo_codes).toEqual(["Voucher platform hanya untuk bayar non-tunai."]);
+    const res = await pesan({ promo_codes: ["HEMAT3K"] }, "cod").expect(422);
+    expect(res.body.error.fields.promo_codes).toEqual(["Voucher platform hanya untuk bayar non-tunai."]);
     await pesan({ promo_codes: ["TOKO5"] }, "cod").expect(201);
   });
 
   test("voucher platform yang membuat total Rp 0 ditolak (non-tunai tidak bisa dibayar Rp 0); kuota tidak terpakai", async () => {
-    const t = await promo({ merchant_id: s.idA, code: "TOKOPENUH", type: "fixed", value: 50000 });
-    const g = await promo({ code: "LAYANANGRATIS", type: "free_service_fee" });
+    const merchantPromoId = await promo({ merchant_id: setup.idA, code: "TOKOPENUH", type: "fixed", value: 50000 });
+    const freeFeePromoId = await promo({ code: "LAYANANGRATIS", type: "free_service_fee" });
     await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
     try {
       expect((await quote({ promo_codes: ["TOKOPENUH"] }).expect(200)).body.data.total).toBe(2000);
@@ -202,30 +216,35 @@ describe("pesanan dua voucher", () => {
       expect(
         (await pesan({ promo_codes: ["TOKOPENUH", "LAYANANGRATIS"] }).expect(422)).body.error.fields.promo_codes,
       ).toEqual(msg);
-      expect([(await promoRow(t)).used_count, (await promoRow(g)).used_count]).toEqual([0, 0]);
+      expect([(await promoRow(merchantPromoId)).used_count, (await promoRow(freeFeePromoId)).used_count]).toEqual([
+        0, 0,
+      ]);
     } finally {
       await db.query("UPDATE app_settings SET setting_value = '0' WHERE setting_key = 'service_fee'");
     }
   });
 
   test("promo toko yang pernah dipakai pesanan batal bisa dihapus; pesanan lama tetap utuh", async () => {
-    const id = await promo({ merchant_id: s.idA, code: "HAPUSAKU", type: "fixed", value: 1000 });
+    const id = await promo({ merchant_id: setup.idA, code: "HAPUSAKU", type: "fixed", value: 1000 });
     const code = (await pesan({ promo_codes: ["HAPUSAKU"] }).expect(201)).body.data.code;
     await request(app)
       .post(`/api/v1/orders/${code}/cancel`)
-      .set("Authorization", `Bearer ${s.customerToken}`)
+      .set("Authorization", `Bearer ${setup.customerToken}`)
       .send({})
       .expect(200);
-    await request(app).delete(`/api/v1/merchant/promos/${id}`).set("Authorization", `Bearer ${s.tokenA}`).expect(200);
+    await request(app)
+      .delete(`/api/v1/merchant/promos/${id}`)
+      .set("Authorization", `Bearer ${setup.tokenA}`)
+      .expect(200);
     expect(await order(code)).toMatchObject({ merchant_promo_id: null, merchant_discount: 1000, status: "cancelled" });
   });
 
   test("C2: dua voucher gratis biaya layanan tidak bisa digabung", async () => {
-    await promo({ merchant_id: s.idA, code: "TOKOGRATIS", type: "free_service_fee" });
+    await promo({ merchant_id: setup.idA, code: "TOKOGRATIS", type: "free_service_fee" });
     await promo({ code: "PLATGRATIS", type: "free_service_fee" });
-    const r = await quote({ promo_codes: ["TOKOGRATIS", "PLATGRATIS"] }).expect(422);
-    expect(r.body.error.fields.promo_codes).toEqual(["Biaya layanan sudah digratiskan voucher lain."]);
-    const d = (await quote({ promo_codes: ["TOKO10", "PLATGRATIS"] }).expect(200)).body.data;
-    expect(d).toMatchObject({ merchant_discount: 3000, platform_discount: d.service_fee });
+    const res = await quote({ promo_codes: ["TOKOGRATIS", "PLATGRATIS"] }).expect(422);
+    expect(res.body.error.fields.promo_codes).toEqual(["Biaya layanan sudah digratiskan voucher lain."]);
+    const data = (await quote({ promo_codes: ["TOKO10", "PLATGRATIS"] }).expect(200)).body.data;
+    expect(data).toMatchObject({ merchant_discount: 3000, platform_discount: data.service_fee });
   });
 });

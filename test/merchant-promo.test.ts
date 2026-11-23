@@ -6,9 +6,9 @@ import db from "../src/config/db";
 import { createCustomer, prepareCheckout } from "./helpers/merchant";
 
 // F12: CRUD /merchant/promos + kode promo di quote & checkout
-let s: Awaited<ReturnType<typeof prepareCheckout>>;
-const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-const promo = (b: object = {}) => ({
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
+const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
+const promo = (overrides: object = {}) => ({
   code: " hemat10 ",
   description: "Diskon toko",
   type: "percent",
@@ -19,24 +19,25 @@ const promo = (b: object = {}) => ({
   per_user_limit: 1,
   starts_at: "2020-01-01T00:00:00.000Z",
   ends_at: "2099-01-01T00:00:00.000Z",
-  ...b,
+  ...overrides,
 });
-const buat = (b: object = {}, t = s.tokenA) => request(app).post("/api/v1/merchant/promos").set(H(t)).send(promo(b));
+const buat = (overrides: object = {}, token = setup.tokenA) =>
+  request(app).post("/api/v1/merchant/promos").set(authHeader(token)).send(promo(overrides));
 const isi = (code: string | null, qty = 2) => ({
-  items: [{ menu_id: s.menu, qty }],
+  items: [{ menu_id: setup.menu, qty }],
   pickup_point_id: 1,
   payment_method: "cod",
   promo_code: code,
 });
-const quote = (code: string | null, qty = 2, t = s.customerToken) =>
-  request(app).post("/api/v1/orders/quote").set(H(t)).send(isi(code, qty));
-const pesan = (code: string | null, t = s.customerToken) =>
-  request(app).post("/api/v1/orders").set(H(t)).set("Idempotency-Key", randomUUID()).send(isi(code));
+const quote = (code: string | null, qty = 2, token = setup.customerToken) =>
+  request(app).post("/api/v1/orders/quote").set(authHeader(token)).send(isi(code, qty));
+const pesan = (code: string | null, token = setup.customerToken) =>
+  request(app).post("/api/v1/orders").set(authHeader(token)).set("Idempotency-Key", randomUUID()).send(isi(code));
 const promoRow = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM promos WHERE code = ?", [code]))[0] as any[])[0];
 
 beforeAll(async () => {
-  s = await prepareCheckout();
+  setup = await prepareCheckout();
 });
 afterEach(async () => {
   await db.query("UPDATE orders SET status = 'expired' WHERE status = 'holding'");
@@ -48,12 +49,12 @@ afterAll(() => {
 
 describe("CRUD promo toko", () => {
   test("buat (kode dirapikan, aktif bawaan), daftar hanya milik toko, kode unik global", async () => {
-    const r = await buat().expect(201);
-    expect(r.body.data).toMatchObject({ code: "HEMAT10", merchant_id: s.idA, is_active: true, used_count: 0 });
-    expect((await buat({}, s.tokenB).expect(409)).body.error.fields).toEqual({ code: ["Kode sudah dipakai."] });
-    await buat({ code: "TOKOB", is_active: false }, s.tokenB).expect(201);
-    const daftar = await request(app).get("/api/v1/merchant/promos").set(H(s.tokenA)).expect(200);
-    expect(daftar.body.data.map((p: { code: string }) => p.code)).toEqual(["HEMAT10"]);
+    const res = await buat().expect(201);
+    expect(res.body.data).toMatchObject({ code: "HEMAT10", merchant_id: setup.idA, is_active: true, used_count: 0 });
+    expect((await buat({}, setup.tokenB).expect(409)).body.error.fields).toEqual({ code: ["Kode sudah dipakai."] });
+    await buat({ code: "TOKOB", is_active: false }, setup.tokenB).expect(201);
+    const daftar = await request(app).get("/api/v1/merchant/promos").set(authHeader(setup.tokenA)).expect(200);
+    expect(daftar.body.data.map((item: { code: string }) => item.code)).toEqual(["HEMAT10"]);
     expect((await buat({ code: "X", value: 0 }).expect(400)).body.error.fields).toMatchObject({
       code: expect.any(Array),
       value: ["Nilai minimal 1."],
@@ -62,18 +63,30 @@ describe("CRUD promo toko", () => {
 
   test("PATCH sebagian + is_active + ganti kode; toko lain 404", async () => {
     const { id } = await promoRow("HEMAT10");
-    const r = await request(app)
+    const res = await request(app)
       .patch(`/api/v1/merchant/promos/${id}`)
-      .set(H(s.tokenA))
+      .set(authHeader(setup.tokenA))
       .send({ value: 20, is_active: false })
       .expect(200);
-    expect(r.body.data).toMatchObject({ value: 20, is_active: false, max_discount: 2000 });
-    await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tokenA)).send({ is_active: "ya" }).expect(400);
-    await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tokenB)).send({ value: 5 }).expect(404);
-    await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tokenA)).send({ code: "tokob" }).expect(409);
+    expect(res.body.data).toMatchObject({ value: 20, is_active: false, max_discount: 2000 });
     await request(app)
       .patch(`/api/v1/merchant/promos/${id}`)
-      .set(H(s.tokenA))
+      .set(authHeader(setup.tokenA))
+      .send({ is_active: "ya" })
+      .expect(400);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${id}`)
+      .set(authHeader(setup.tokenB))
+      .send({ value: 5 })
+      .expect(404);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${id}`)
+      .set(authHeader(setup.tokenA))
+      .send({ code: "tokob" })
+      .expect(409);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${id}`)
+      .set(authHeader(setup.tokenA))
       .send({ value: 10, is_active: true })
       .expect(200);
   });
@@ -95,33 +108,42 @@ describe("kode promo di checkout", () => {
     // Es Teh 5000 < min belanja 10000
     const kecil = await request(app)
       .post("/api/v1/orders/quote")
-      .set(H(s.customerToken))
-      .send({ ...isi("HEMAT10"), items: [{ menu_id: s.menu2, qty: 1 }] })
+      .set(authHeader(setup.customerToken))
+      .send({ ...isi("HEMAT10"), items: [{ menu_id: setup.menu2, qty: 1 }] })
       .expect(422);
     expect(kecil.body.error.message).toBe("Minimal belanja Rp 10.000 untuk promo ini.");
   });
 
   test("pesanan: discount, promo_id, redemption, kuota & batas per pembeli; batal mengembalikan kuota", async () => {
-    const r = await pesan("HEMAT10").expect(201);
-    expect(r.body.data).toMatchObject({ discount: 2000, total: 28000 });
-    const p = await promoRow("HEMAT10");
-    expect(p.used_count).toBe(1);
-    const [[o]] = await db.query<any[]>(
+    const res = await pesan("HEMAT10").expect(201);
+    expect(res.body.data).toMatchObject({ discount: 2000, total: 28000 });
+    const promoRecord = await promoRow("HEMAT10");
+    expect(promoRecord.used_count).toBe(1);
+    const [[order]] = await db.query<any[]>(
       "SELECT id, promo_id, merchant_promo_id, merchant_discount FROM orders WHERE code = ?",
-      [r.body.data.code],
+      [res.body.data.code],
     );
-    expect(o).toMatchObject({ promo_id: null, merchant_promo_id: p.id, merchant_discount: r.body.data.discount }); // voucher toko (migrasi 014)
+    expect(order).toMatchObject({
+      promo_id: null,
+      merchant_promo_id: promoRecord.id,
+      merchant_discount: res.body.data.discount,
+    }); // voucher toko (migrasi 014)
     expect((await pesan("HEMAT10").expect(422)).body.error.message).toBe("Promo ini sudah mencapai batas pemakaianmu.");
 
-    await request(app).post(`/api/v1/orders/${r.body.data.code}/cancel`).set(H(s.customerToken)).expect(200);
+    await request(app)
+      .post(`/api/v1/orders/${res.body.data.code}/cancel`)
+      .set(authHeader(setup.customerToken))
+      .expect(200);
     expect((await promoRow("HEMAT10")).used_count).toBe(0);
-    const [[n]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM promo_redemptions WHERE order_id = ?", [o.id]);
-    expect(Number(n.n)).toBe(0);
+    const [[countRow]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM promo_redemptions WHERE order_id = ?", [
+      order.id,
+    ]);
+    expect(Number(countRow.n)).toBe(0);
 
     // kuota 2: dua pembeli lain habiskan, pembeli ketiga ditolak
-    const [p1, p2] = [await createCustomer(1), await createCustomer(2)];
-    await pesan("HEMAT10", p1).expect(201);
-    await pesan("HEMAT10", p2).expect(201);
+    const [firstToken, secondToken] = [await createCustomer(1), await createCustomer(2)];
+    await pesan("HEMAT10", firstToken).expect(201);
+    await pesan("HEMAT10", secondToken).expect(201);
     expect((await pesan("HEMAT10").expect(422)).body.error.message).toBe("Kuota promo sudah habis.");
   });
 
@@ -135,7 +157,7 @@ describe("kode promo di checkout", () => {
     await db.query(
       `INSERT INTO promos (merchant_id, code, type, value, min_subtotal, per_user_limit, starts_at, ends_at)
        VALUES (?, 'GRATISLAYANAN', 'free_service_fee', 0, 0, 1, '2020-01-01', '2099-01-01')`,
-      [s.idA],
+      [setup.idA],
     );
     expect((await quote("GRATISLAYANAN").expect(200)).body.data).toMatchObject({
       service_fee: 2000,
@@ -153,12 +175,20 @@ describe("kode promo di checkout", () => {
   test("hapus hanya bila belum dipakai", async () => {
     const { id } = await promoRow("HEMAT10");
     expect(
-      (await request(app).delete(`/api/v1/merchant/promos/${id}`).set(H(s.tokenA)).expect(409)).body.error.message,
+      (await request(app).delete(`/api/v1/merchant/promos/${id}`).set(authHeader(setup.tokenA)).expect(409)).body.error
+        .message,
     ).toBe("Promo sudah dipakai. Nonaktifkan saja.");
-    const g = await promoRow("GRATISLAYANAN");
-    expect((await request(app).delete(`/api/v1/merchant/promos/${g.id}`).set(H(s.tokenA)).expect(200)).body).toEqual({
-      data: { id: g.id },
+    const freeFeePromo = await promoRow("GRATISLAYANAN");
+    expect(
+      (
+        await request(app)
+          .delete(`/api/v1/merchant/promos/${freeFeePromo.id}`)
+          .set(authHeader(setup.tokenA))
+          .expect(200)
+      ).body,
+    ).toEqual({
+      data: { id: freeFeePromo.id },
     });
-    await request(app).delete(`/api/v1/merchant/promos/${g.id}`).set(H(s.tokenA)).expect(404);
+    await request(app).delete(`/api/v1/merchant/promos/${freeFeePromo.id}`).set(authHeader(setup.tokenA)).expect(404);
   });
 });
