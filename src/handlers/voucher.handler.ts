@@ -1,25 +1,25 @@
 import { Request, RequestHandler } from "express";
-import { voucherSayaSchema } from "../dto/voucher.dto";
+import { myVouchersSchema } from "../dto/voucher.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { clock } from "../services/catalog.service";
-import { klaimVoucher, voucherPlatform, voucherSaya } from "../services/voucher.service";
+import { claimVoucher, listPlatformVouchers, listMyVouchers } from "../services/voucher.service";
 
-const uid = (req: Request) => (req as AuthedRequest).auth.userId;
+const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
 // claimed hanya untuk sesi pembeli; tamu / peran lain → null
-const pembeli = (req: Request) => {
+const getCustomerId = (req: Request) => {
   const auth = (req as Partial<AuthedRequest>).auth;
   return auth?.role === "customer" ? auth.userId : null;
 };
 
-export const voucherPlatformHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await voucherPlatform(pembeli(req), clock.now()) });
+export const listPlatformVouchersHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await listPlatformVouchers(getCustomerId(req), clock.now()) });
 };
 
-export const klaimVoucherHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await klaimVoucher(uid(req), req.params.id) });
+export const claimVoucherHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await claimVoucher(getUserId(req), req.params.id) });
 };
 
-export const voucherSayaHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await voucherSaya(uid(req), parse(voucherSayaSchema, req.query)) });
+export const listMyVouchersHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await listMyVouchers(getUserId(req), parse(myVouchersSchema, req.query)) });
 };

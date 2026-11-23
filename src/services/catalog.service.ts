@@ -8,7 +8,7 @@ import { AppError } from "../utils/errors";
 import { getWibDate } from "./merchant-quota.service";
 import { parseGallery, parseMenuId, menuNotFound } from "./merchant-menu.service";
 import { Pagination, CatalogQuery } from "../dto/catalog.dto";
-import { voucherToko } from "./voucher.service";
+import { listMerchantVouchers } from "./voucher.service";
 
 // Istilah yang dipakai di file ini:
 // - WIB: jam Indonesia barat (UTC+7). Jam buka toko dan tanggal stok harian dihitung menurut WIB, bukan jam server.
@@ -396,6 +396,6 @@ export async function getMerchantProfile(slug: string, userId: number | null) {
   // 2. Lengkapi dengan titik temu dan voucher publik toko. Tanda "sudah diklaim" hanya berarti untuk pembeli login.
   return {
     ...mapPublicMerchantProfile(merchant, nowMs, await getPickupPoints(merchant.id)),
-    vouchers: await voucherToko(merchant.id, userId, nowMs),
+    vouchers: await listMerchantVouchers(merchant.id, userId, nowMs),
   };
 }

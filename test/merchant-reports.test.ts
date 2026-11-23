@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { rentangUtc } from "../src/services/merchant-report.service";
+import { toUtcRange } from "../src/services/merchant-report.service";
 import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F09: /merchant/reports/* (M-09, R-10; D1–D9)
@@ -105,7 +105,7 @@ describe("GET /merchant/reports/summary", () => {
     const [[q]] = await db.query<any[]>(
       `SELECT SUM(oi.line_total) AS r, SUM(oi.hpp * oi.qty) AS h FROM order_items oi JOIN orders o ON o.id = oi.order_id
        WHERE o.merchant_id = ? AND o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?`,
-      [s.idA, ...rentangUtc({ from: HARI, to: HARI })],
+      [s.idA, ...toUtcRange({ from: HARI, to: HARI })],
     );
     const r = await ringkasan(HARI).expect(200);
     expect(r.body.data).toEqual({

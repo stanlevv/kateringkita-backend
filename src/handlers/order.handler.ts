@@ -10,7 +10,7 @@ import {
   idempotencyKeySchema,
   orderSchema,
 } from "../dto/order.dto";
-import { kirimUlasan } from "../services/review.service";
+import { createReview } from "../services/review.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import {
@@ -108,7 +108,7 @@ export const completeMyOrderHandler: RequestHandler = async (req, res) => {
  * di rute. Dijawab 201.
  */
 export const createReviewHandler: RequestHandler = async (req, res) => {
-  res.status(201).json({ data: await kirimUlasan(getUserId(req), String(req.params.code), req.body) });
+  res.status(201).json({ data: await createReview(getUserId(req), String(req.params.code), req.body) });
 };
 
 /** `POST /orders/:code/reorder`: pesan lagi dari pesanan lama; dijawab keranjang siap kirim beserta rincian harganya. */

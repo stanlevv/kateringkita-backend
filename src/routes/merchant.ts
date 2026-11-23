@@ -6,16 +6,16 @@ import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
 import { openStatusSchema, updateProfileSchema } from "../dto/merchant.dto";
 import { merchantUploadSchema } from "../dto/upload.dto";
 import {
-  buatBannerTokoHandler,
-  daftarBannerTokoHandler,
-  hapusBannerTokoHandler,
-  ubahBannerTokoHandler,
+  createMerchantBannerHandler,
+  listMerchantBannersHandler,
+  deleteMerchantBannerHandler,
+  updateMerchantBannerHandler,
 } from "../handlers/banner.handler";
-import { tanyaSchema } from "../dto/assistant.dto";
+import { askAssistantSchema } from "../dto/assistant.dto";
 import { tableSchema, updateTableSchema } from "../dto/table.dto";
-import { rekeningSchema } from "../dto/payout.dto";
+import { bankAccountSchema } from "../dto/payout.dto";
 import { createTableHandler, listTablesHandler, updateTableHandler } from "../handlers/table.handler";
-import { pencairanSayaHandler, ubahRekeningHandler } from "../handlers/payout.handler";
+import { getMyPayoutsHandler, updateBankAccountHandler } from "../handlers/payout.handler";
 import {
   transitionMerchantOrderHandler,
   getMenuHandler,
@@ -74,10 +74,10 @@ merchant.patch("/menus/:id/quota", updateQuotaHandler);
 // alamat unggah foto: paling banyak 20 permintaan per penjual per 10 menit
 merchant.post("/uploads", validate(merchantUploadSchema), uploadLimiter, uploadPhotoHandler);
 // Banner beranda: satu banner aktif per toko, tampil setelah disetujui admin. Body diperiksa di service banner.
-merchant.get("/banners", daftarBannerTokoHandler);
-merchant.post("/banners", buatBannerTokoHandler);
-merchant.patch("/banners/:id", ubahBannerTokoHandler);
-merchant.delete("/banners/:id", hapusBannerTokoHandler);
+merchant.get("/banners", listMerchantBannersHandler);
+merchant.post("/banners", createMerchantBannerHandler);
+merchant.patch("/banners/:id", updateMerchantBannerHandler);
+merchant.delete("/banners/:id", deleteMerchantBannerHandler);
 
 // Daftar dan detail pesanan toko.
 merchant.get("/orders", listMerchantOrdersHandler);
@@ -107,7 +107,7 @@ merchant.delete("/promos/:id", deleteMerchantPromoHandler);
 merchant.get("/reviews", listMerchantReviewsHandler);
 
 // Asisten AI toko: paling banyak 10 pertanyaan per penjual per 10 menit.
-merchant.post("/assistant", validate(tanyaSchema), assistantLimiter, askAssistantHandler);
+merchant.post("/assistant", validate(askAssistantSchema), assistantLimiter, askAssistantHandler);
 
 // Meja dan kode QR untuk pesan dari meja.
 merchant.get("/tables", listTablesHandler);
@@ -116,8 +116,8 @@ merchant.patch("/tables/:id", validate(updateTableSchema), updateTableHandler);
 
 // Saldo dan riwayat pencairan, serta ubah rekening pencairan (kata sandi diminta ulang; lebih dari 5 kali ditolak 400
 // dalam semenit → 429).
-merchant.get("/payouts", pencairanSayaHandler);
-merchant.put("/payout-account", validate(rekeningSchema), passwordLimiter, ubahRekeningHandler);
+merchant.get("/payouts", getMyPayoutsHandler);
+merchant.put("/payout-account", validate(bankAccountSchema), passwordLimiter, updateBankAccountHandler);
 
 // Aksi penjual pada pesanan (confirm, cook, ready, complete, reject). Aksi lain diteruskan ke penangan 404.
 merchant.post("/orders/:code/:aksi", transitionMerchantOrderHandler);

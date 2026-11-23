@@ -10,7 +10,7 @@ import { catalog } from "./routes/catalog";
 import { table } from "./routes/table";
 import { order } from "./routes/order";
 import { notification } from "./routes/notification";
-import { tiket } from "./routes/ticket";
+import { ticket } from "./routes/ticket";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { recordServerLog, requestId, requestLogger } from "./middleware/request-logger";
 import { healthHandler } from "./handlers/health.handler";
@@ -46,7 +46,7 @@ app.use("/api/v1", table);
 app.use("/api/v1", catalog);
 app.use("/api/v1", order);
 app.use("/api/v1", notification);
-app.use("/api/v1", tiket);
+app.use("/api/v1", ticket);
 app.use("/api/v1", auth);
 app.use("/api/v1", meta);
 

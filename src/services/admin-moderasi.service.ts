@@ -4,7 +4,7 @@ import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { likePattern } from "./order.service";
 import { parseGallery } from "./merchant-menu.service";
-import { hitungUlangRating } from "./review.service";
+import { recalculateRatings } from "./review.service";
 
 // F19 moderasi admin: sembunyikan ulasan & turunkan menu (suspend toko sudah ada di admin-merchant F18). Semua aksi dicatat audit.
 type Filter = { q?: string; status?: string; page: number; limit: number };
@@ -74,7 +74,7 @@ export async function moderasiUlasan(adminId: number, idRaw: unknown, sembunyi: 
       r.id,
     ]);
     const [[x]] = await conn.query<RowDataPacket[]>("SELECT merchant_id FROM menus WHERE id = ?", [r.menu_id]);
-    await hitungUlangRating(conn, [r.menu_id], x.merchant_id);
+    await recalculateRatings(conn, [r.menu_id], x.merchant_id);
     await catat(conn, {
       adminId,
       action: sembunyi ? "review.hide" : "review.unhide",

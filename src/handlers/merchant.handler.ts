@@ -4,7 +4,7 @@
 import { RequestHandler } from "express";
 import { quotaSchema, menuQuerySchema } from "../dto/merchant-menu.dto";
 import { merchantOrdersQuerySchema } from "../dto/merchant-order.dto";
-import { rentangSchema, tanggalSchema } from "../dto/merchant-report.dto";
+import { reportRangeSchema, reportDateSchema } from "../dto/merchant-report.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { fieldsFromIssues, parse } from "../middleware/validate";
 import {
@@ -25,10 +25,15 @@ import {
   getMerchantOrderWhatsapp,
 } from "../services/merchant-order.service";
 import { getProfile, setOpen, updateProfile } from "../services/merchant.service";
-import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-report.service";
-import { buatPromoToko, daftarPromoToko, hapusPromoToko, ubahPromoToko } from "../services/merchant-promo.service";
-import { daftarUlasanToko } from "../services/review.service";
-import { tanyaAsisten } from "../services/assistant.service";
+import { getHourlyReport, getTransactionReport, getReportSummary } from "../services/merchant-report.service";
+import {
+  createMerchantPromo,
+  listMerchantPromos,
+  deleteMerchantPromo,
+  updateMerchantPromo,
+} from "../services/merchant-promo.service";
+import { listMerchantReviews } from "../services/review.service";
+import { askAssistant } from "../services/assistant.service";
 import { createUpload } from "../services/upload.service";
 import { AppError } from "../utils/errors";
 
@@ -206,7 +211,7 @@ export const transitionMerchantOrderHandler: RequestHandler = async (req, res, n
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const getReportSummaryHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await ringkasanLaporan(getUserId(req), parse(rentangSchema, req.query)) });
+  res.json({ data: await getReportSummary(getUserId(req), parse(reportRangeSchema, req.query)) });
 };
 
 /**
@@ -216,7 +221,7 @@ export const getReportSummaryHandler: RequestHandler = async (req, res) => {
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const getHourlyReportHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await laporanPerJam(getUserId(req), parse(tanggalSchema, req.query).date) });
+  res.json({ data: await getHourlyReport(getUserId(req), parse(reportDateSchema, req.query).date) });
 };
 
 /**
@@ -226,7 +231,7 @@ export const getHourlyReportHandler: RequestHandler = async (req, res) => {
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const listReportTransactionsHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await laporanTransaksi(getUserId(req), parse(rentangSchema, req.query)) });
+  res.json({ data: await getTransactionReport(getUserId(req), parse(reportRangeSchema, req.query)) });
 };
 
 /**
@@ -236,7 +241,7 @@ export const listReportTransactionsHandler: RequestHandler = async (req, res) =>
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const listMerchantPromosHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await daftarPromoToko(getUserId(req)) });
+  res.json({ data: await listMerchantPromos(getUserId(req)) });
 };
 
 /**
@@ -246,7 +251,7 @@ export const listMerchantPromosHandler: RequestHandler = async (req, res) => {
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const createMerchantPromoHandler: RequestHandler = async (req, res) => {
-  res.status(201).json({ data: await buatPromoToko(getUserId(req), req.body) });
+  res.status(201).json({ data: await createMerchantPromo(getUserId(req), req.body) });
 };
 
 /**
@@ -256,7 +261,7 @@ export const createMerchantPromoHandler: RequestHandler = async (req, res) => {
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const updateMerchantPromoHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await ubahPromoToko(getUserId(req), req.params.id, req.body) });
+  res.json({ data: await updateMerchantPromo(getUserId(req), req.params.id, req.body) });
 };
 
 /**
@@ -267,7 +272,7 @@ export const updateMerchantPromoHandler: RequestHandler = async (req, res) => {
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const deleteMerchantPromoHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await hapusPromoToko(getUserId(req), req.params.id) });
+  res.json({ data: await deleteMerchantPromo(getUserId(req), req.params.id) });
 };
 
 /**
@@ -277,7 +282,7 @@ export const deleteMerchantPromoHandler: RequestHandler = async (req, res) => {
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const listMerchantReviewsHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await daftarUlasanToko(getUserId(req)) });
+  res.json({ data: await listMerchantReviews(getUserId(req)) });
 };
 
 /**
@@ -287,5 +292,5 @@ export const listMerchantReviewsHandler: RequestHandler = async (req, res) => {
  * @returns tidak ada; hasil dikirim lewat `res`
  */
 export const askAssistantHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await tanyaAsisten(getUserId(req), req.body.question) });
+  res.json({ data: await askAssistant(getUserId(req), req.body.question) });
 };

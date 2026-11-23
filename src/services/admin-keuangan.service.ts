@@ -1,7 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { Rentang } from "../dto/merchant-report.dto";
-import { rentangUtc } from "./merchant-report.service";
+import { DateRange } from "../dto/merchant-report.dto";
+import { toUtcRange } from "./merchant-report.service";
 
 // F20 rekap keuangan platform: pesanan completed per toko (per completed_at, tanggal WIB).
 // Diskon dipisah per slot voucher (migrasi 014): voucher toko ditanggung toko, voucher platform ditanggung platform.
@@ -12,7 +12,7 @@ const bersih = (r: Record<string, unknown>) => {
   return { ...n, merchant_net: n.subtotal - n.discount_merchant, platform_net: n.service_fee - n.discount_platform };
 };
 
-export async function rekapKeuangan(r: Rentang) {
+export async function rekapKeuangan(r: DateRange) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT m.id AS merchant_id, m.business_name, COUNT(*) AS orders, SUM(o.subtotal) AS subtotal,
        SUM(o.merchant_discount) AS discount_merchant, SUM(o.platform_discount) AS discount_platform,
@@ -20,7 +20,7 @@ export async function rekapKeuangan(r: Rentang) {
      FROM orders o JOIN merchants m ON m.id = o.merchant_id
      WHERE o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?
      GROUP BY m.id, m.business_name ORDER BY total DESC, m.id`,
-    rentangUtc(r),
+    toUtcRange(r),
   );
   const data = rows.map((x) => ({
     merchant_id: x.merchant_id as number,

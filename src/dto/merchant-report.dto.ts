@@ -2,33 +2,36 @@ import { z } from "zod";
 import { getWibDate } from "../services/merchant-quota.service";
 
 // F09 (LP-E1): pesan sama dengan fe/lib/laporan.ts#cekRentang
-const MAKS_HARI = 92;
-const tanggal = z.iso.date({ error: "Tanggal tidak valid." });
-export const jumlahHari = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86400e3) + 1;
+const MAX_RANGE_DAYS = 92;
+const dateField = z.iso.date({ error: "Tanggal tidak valid." });
+export const countDays = (startDate: string, endDate: string) =>
+  Math.round((Date.parse(endDate) - Date.parse(startDate)) / 86400e3) + 1;
 // superRefine tetap jalan walau format satu field gagal; field itu sudah punya pesannya sendiri
-const sah = (...d: string[]) => d.every((x) => tanggal.safeParse(x).success);
+const areValidDates = (...dates: string[]) => dates.every((date) => dateField.safeParse(date).success);
 
 // YYYY-MM-DD terurut leksikal, jadi `d > getWibDate()` cukup
-const cekTidakLewat = (ctx: z.RefinementCtx, field: string, d: string) => {
-  if (sah(d) && d > getWibDate())
+const rejectFutureDate = (ctx: z.RefinementCtx, field: string, date: string) => {
+  if (areValidDates(date) && date > getWibDate())
     ctx.addIssue({ code: "custom", path: [field], message: "Tanggal tidak boleh melewati hari ini." });
 };
 
-const rentang = (tolakMasaDepan: boolean) =>
-  z.object({ from: tanggal, to: tanggal }).superRefine((r, ctx) => {
-    if (!sah(r.from, r.to)) return;
-    if (r.to < r.from)
+const rangeSchema = (rejectFuture: boolean) =>
+  z.object({ from: dateField, to: dateField }).superRefine((range, ctx) => {
+    if (!areValidDates(range.from, range.to)) return;
+    if (range.to < range.from)
       return ctx.addIssue({ code: "custom", path: ["to"], message: "Tanggal akhir harus setelah tanggal awal." });
-    if (tolakMasaDepan) {
-      cekTidakLewat(ctx, "from", r.from);
-      cekTidakLewat(ctx, "to", r.to);
+    if (rejectFuture) {
+      rejectFutureDate(ctx, "from", range.from);
+      rejectFutureDate(ctx, "to", range.to);
     }
-    if (jumlahHari(r.from, r.to) > MAKS_HARI)
-      ctx.addIssue({ code: "custom", path: ["to"], message: `Rentang maksimal ${MAKS_HARI} hari.` });
+    if (countDays(range.from, range.to) > MAX_RANGE_DAYS)
+      ctx.addIssue({ code: "custom", path: ["to"], message: `Rentang maksimal ${MAX_RANGE_DAYS} hari.` });
   });
-export const rentangSchema = rentang(true);
+export const reportRangeSchema = rangeSchema(true);
 // F20: rekap keuangan admin menerima rentang yang mencakup hari depan (hasilnya kosong), sesuai uji F20
-export const rentangAdminSchema = rentang(false);
-export type Rentang = z.infer<typeof rentangSchema>;
+export const adminRangeSchema = rangeSchema(false);
+export type DateRange = z.infer<typeof reportRangeSchema>;
 
-export const tanggalSchema = z.object({ date: tanggal }).superRefine((r, ctx) => cekTidakLewat(ctx, "date", r.date));
+export const reportDateSchema = z
+  .object({ date: dateField })
+  .superRefine((query, ctx) => rejectFutureDate(ctx, "date", query.date));

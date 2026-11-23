@@ -16,7 +16,7 @@ import {
 import { kirimPengumuman } from "../services/admin-pengumuman.service";
 import { ringkasan } from "../services/admin-summary.service";
 import { rekapKeuangan } from "../services/admin-keuangan.service";
-import { rentangAdminSchema } from "../dto/merchant-report.dto";
+import { adminRangeSchema } from "../dto/merchant-report.dto";
 import { parse } from "../middleware/validate";
 import {
   daftarMenuAdmin,
@@ -154,7 +154,7 @@ export const hapusFotoMenuHandler: RequestHandler = async (req, res) => {
 
 // F20 rekap keuangan ?from&to (tanggal WIB, maks 92 hari)
 export const rekapKeuanganHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await rekapKeuangan(parse(rentangAdminSchema, req.query)) });
+  res.json({ data: await rekapKeuangan(parse(adminRangeSchema, req.query)) });
 };
 
 // Kontak CS (body divalidasi kontakCsSchema) dan broadcast pengumuman (pengumumanSchema)

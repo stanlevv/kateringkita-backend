@@ -1,51 +1,51 @@
 import { Request, RequestHandler } from "express";
 import { bodyObject } from "../dto/order.dto";
-import { balasTiketSchema, buatTiketSchema, daftarTiketAdminSchema, daftarTiketSchema } from "../dto/ticket.dto";
+import { replyTicketSchema, createTicketSchema, listAdminTicketsSchema, listTicketsSchema } from "../dto/ticket.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { balasTiketAdmin, daftarTiketAdmin, detailTiketAdmin, tutupTiketAdmin } from "../services/admin-tiket.service";
-import { bacaTiketSaya, balasTiketSaya, buatTiket, daftarTiketSaya, tutupTiketSaya } from "../services/ticket.service";
+import { getMyTicket, replyMyTicket, createTicket, listMyTickets, closeMyTicket } from "../services/ticket.service";
 
 // Tiket bantuan (CS). Body bukan objek (kosong, teks) dianggap {} agar galat tetap per field.
-const uid = (req: Request) => (req as AuthedRequest).auth.userId;
-const kode = (req: Request) => String(req.params.code);
-const isiBalasan = (req: Request) => parse(balasTiketSchema, bodyObject(req.body)).body;
+const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
+const getTicketCode = (req: Request) => String(req.params.code);
+const getReplyBody = (req: Request) => parse(replyTicketSchema, bodyObject(req.body)).body;
 
-export const buatTiketHandler: RequestHandler = async (req, res) => {
-  res.status(201).json({ data: await buatTiket(uid(req), parse(buatTiketSchema, bodyObject(req.body))) });
+export const createTicketHandler: RequestHandler = async (req, res) => {
+  res.status(201).json({ data: await createTicket(getUserId(req), parse(createTicketSchema, bodyObject(req.body))) });
 };
 
-export const daftarTiketSayaHandler: RequestHandler = async (req, res) => {
-  res.json(await daftarTiketSaya(uid(req), parse(daftarTiketSchema, req.query)));
+export const listMyTicketsHandler: RequestHandler = async (req, res) => {
+  res.json(await listMyTickets(getUserId(req), parse(listTicketsSchema, req.query)));
 };
 
-export const bacaTiketSayaHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await bacaTiketSaya(uid(req), kode(req)) });
+export const getMyTicketHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await getMyTicket(getUserId(req), getTicketCode(req)) });
 };
 
-export const balasTiketSayaHandler: RequestHandler = async (req, res) => {
-  const body = isiBalasan(req);
-  res.status(201).json({ data: await balasTiketSaya(uid(req), kode(req), body) });
+export const replyMyTicketHandler: RequestHandler = async (req, res) => {
+  const body = getReplyBody(req);
+  res.status(201).json({ data: await replyMyTicket(getUserId(req), getTicketCode(req), body) });
 };
 
-export const tutupTiketSayaHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await tutupTiketSaya(uid(req), kode(req)) });
+export const closeMyTicketHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await closeMyTicket(getUserId(req), getTicketCode(req)) });
 };
 
 // Admin (/admin/tickets); semua tingkat admin
-export const daftarTiketAdminHandler: RequestHandler = async (req, res) => {
-  res.json(await daftarTiketAdmin(parse(daftarTiketAdminSchema, req.query)));
+export const listAdminTicketsHandler: RequestHandler = async (req, res) => {
+  res.json(await daftarTiketAdmin(parse(listAdminTicketsSchema, req.query)));
 };
 
-export const detailTiketAdminHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await detailTiketAdmin(kode(req)) });
+export const getAdminTicketHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await detailTiketAdmin(getTicketCode(req)) });
 };
 
-export const balasTiketAdminHandler: RequestHandler = async (req, res) => {
-  const body = isiBalasan(req);
-  res.status(201).json({ data: await balasTiketAdmin(uid(req), kode(req), body) });
+export const replyAdminTicketHandler: RequestHandler = async (req, res) => {
+  const body = getReplyBody(req);
+  res.status(201).json({ data: await balasTiketAdmin(getUserId(req), getTicketCode(req), body) });
 };
 
-export const tutupTiketAdminHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await tutupTiketAdmin(uid(req), kode(req)) });
+export const closeAdminTicketHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await tutupTiketAdmin(getUserId(req), getTicketCode(req)) });
 };

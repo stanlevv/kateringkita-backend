@@ -8,23 +8,23 @@ import { kabariPromoToko } from "./admin-pengumuman.service";
 
 // F12 promo toko: aturan isian sama dengan promo platform (rapikan); kode unik di seluruh tabel promos.
 // Berbeda dengan admin: kode boleh diubah, status lewat PATCH is_active, boleh dihapus selama belum dipakai, tanpa log audit admin.
-const dup = (e: unknown) => (e as { code?: string } | null)?.code === "ER_DUP_ENTRY";
-const objek = (b: unknown) =>
-  (typeof b === "object" && b !== null && !Array.isArray(b) ? b : {}) as Record<string, unknown>;
-const tidakValid = (field: string, pesan: string) =>
-  new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { [field]: [pesan] });
+const isDuplicateKey = (error: unknown) => (error as { code?: string } | null)?.code === "ER_DUP_ENTRY";
+const toObject = (body: unknown) =>
+  (typeof body === "object" && body !== null && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
+const invalidField = (field: string, message: string) =>
+  new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { [field]: [message] });
 
-function aktifDari(b: Record<string, unknown>): boolean | undefined {
-  if (!("is_active" in b)) return undefined;
-  if (typeof b.is_active !== "boolean") throw tidakValid("is_active", "Status promo tidak valid.");
-  return b.is_active;
+function readIsActive(body: Record<string, unknown>): boolean | undefined {
+  if (!("is_active" in body)) return undefined;
+  if (typeof body.is_active !== "boolean") throw invalidField("is_active", "Status promo tidak valid.");
+  return body.is_active;
 }
 
 // merchantId berasal dari DB (bilangan bulat), aman disisipkan ke klausa where milik kunci()
-const kunciPromoToko = (conn: Parameters<typeof kunci>[0], merchantId: number, idRaw: unknown) =>
+const lockMerchantPromo = (conn: Parameters<typeof kunci>[0], merchantId: number, idRaw: unknown) =>
   kunci(conn, "promos", idRaw, { where: `merchant_id = ${Number(merchantId)}`, notFound: "Promo tidak ditemukan." });
 
-export async function daftarPromoToko(userId: number) {
+export async function listMerchantPromos(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE merchant_id = ? ORDER BY id DESC", [
     await getMerchantId(userId),
   ]);
@@ -32,19 +32,19 @@ export async function daftarPromoToko(userId: number) {
 }
 
 // C2: biaya layanan milik platform, jadi voucher toko hanya potongan persen / nominal (promo lama jenis itu tetap berlaku)
-const tanpaGratisLayanan = (type: unknown) => {
-  if (type === "free_service_fee") throw tidakValid("type", "Promo toko hanya potongan persen atau nominal.");
+const rejectFreeServiceFee = (type: unknown) => {
+  if (type === "free_service_fee") throw invalidField("type", "Promo toko hanya potongan persen atau nominal.");
 };
 
-export async function buatPromoToko(userId: number, body: unknown) {
-  const b = objek(body);
-  const aktif = aktifDari(b) ?? true;
-  const publik = publikDari(b) ?? true;
-  const { code, data } = rapikan(b, 0, true);
-  tanpaGratisLayanan(data.type);
+export async function createMerchantPromo(userId: number, body: unknown) {
+  const input = toObject(body);
+  const isActive = readIsActive(input) ?? true;
+  const isPublic = publikDari(input) ?? true;
+  const { code, data } = rapikan(input, 0, true);
+  rejectFreeServiceFee(data.type);
   const merchantId = await getMerchantId(userId);
   try {
-    const [ins] = await db.query<ResultSetHeader>(
+    const [insertResult] = await db.query<ResultSetHeader>(
       `INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at,
          is_active, is_public)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -60,69 +60,72 @@ export async function buatPromoToko(userId: number, body: unknown) {
         data.per_user_limit,
         data.starts_at,
         data.ends_at,
-        aktif,
-        publik,
+        isActive,
+        isPublic,
       ],
     );
-    const [[row]] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [ins.insertId]);
+    const [[row]] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [insertResult.insertId]);
     await kabariPromoToko(row);
     return withBool(row);
-  } catch (e) {
-    if (dup(e)) throw kodeGanda();
-    throw e;
+  } catch (error) {
+    if (isDuplicateKey(error)) throw kodeGanda();
+    throw error;
   }
 }
 
 // PATCH sebagian: field yang tak dikirim memakai nilai tersimpan (pola ubahPromo admin)
-export async function ubahPromoToko(userId: number, idRaw: unknown, body: unknown) {
+export async function updateMerchantPromo(userId: number, idRaw: unknown, body: unknown) {
   const merchantId = await getMerchantId(userId);
-  const b = objek(body);
-  const aktif = aktifDari(b);
-  const publik = publikDari(b);
+  const input = toObject(body);
+  const isActive = readIsActive(input);
+  const isPublic = publikDari(input);
   try {
-    const { after, dinyalakan } = await dalamTransaksi(async (conn) => {
-      const before = await kunciPromoToko(conn, merchantId, idRaw);
+    const { after, activated } = await dalamTransaksi(async (conn) => {
+      const before = await lockMerchantPromo(conn, merchantId, idRaw);
       // C2: promo toko lama "free_service_fee" tetap berlaku & bisa diubah; yang dilarang hanya mengganti jenis ke sana
-      if ("type" in b && b.type !== before.type) tanpaGratisLayanan(b.type);
+      if ("type" in input && input.type !== before.type) rejectFreeServiceFee(input.type);
       const merged = {
         ...Object.fromEntries(
-          FIELD.map((k) => [k, before[k] instanceof Date ? (before[k] as Date).toISOString() : before[k]]),
+          FIELD.map((field) => [
+            field,
+            before[field] instanceof Date ? (before[field] as Date).toISOString() : before[field],
+          ]),
         ),
-        ...Object.fromEntries(FIELD.filter((k) => k in b).map((k) => [k, b[k]])),
+        ...Object.fromEntries(FIELD.filter((field) => field in input).map((field) => [field, input[field]])),
       };
-      const baru: Record<string, unknown> = { ...rapikan(merged, before.used_count).data };
-      if ("code" in b) {
-        const c = kodeSkema.safeParse(b.code);
-        if (!c.success) throw tidakValid("code", c.error.issues[0].message);
-        baru.code = c.data;
+      const updated: Record<string, unknown> = { ...rapikan(merged, before.used_count).data };
+      if ("code" in input) {
+        const parsedCode = kodeSkema.safeParse(input.code);
+        if (!parsedCode.success) throw invalidField("code", parsedCode.error.issues[0].message);
+        updated.code = parsedCode.data;
       }
-      if (aktif !== undefined) baru.is_active = aktif;
-      if (publik !== undefined) baru.is_public = publik;
-      const lama = withBool(before) as Record<string, unknown>;
-      const cols = Object.keys(baru).filter((c) => nilai(baru[c]) !== nilai(lama[c]));
-      if (cols.length) {
-        await conn.query(`UPDATE promos SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [
-          ...cols.map((c) => baru[c]),
+      if (isActive !== undefined) updated.is_active = isActive;
+      if (isPublic !== undefined) updated.is_public = isPublic;
+      const previous = withBool(before) as Record<string, unknown>;
+      const columns = Object.keys(updated).filter((column) => nilai(updated[column]) !== nilai(previous[column]));
+      if (columns.length) {
+        await conn.query(`UPDATE promos SET ${columns.map((column) => `${column} = ?`).join(", ")} WHERE id = ?`, [
+          ...columns.map((column) => updated[column]),
           before.id,
         ]);
       }
       const [[after]] = await conn.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [before.id]);
-      return { after, dinyalakan: !lama.is_active && Boolean(after.is_active) };
+      return { after, activated: !previous.is_active && Boolean(after.is_active) };
     });
-    if (dinyalakan) await kabariPromoToko(after);
+    if (activated) await kabariPromoToko(after);
     return withBool(after);
-  } catch (e) {
-    if (dup(e)) throw kodeGanda();
-    throw e;
+  } catch (error) {
+    if (isDuplicateKey(error)) throw kodeGanda();
+    throw error;
   }
 }
 
-export async function hapusPromoToko(userId: number, idRaw: unknown) {
+export async function deleteMerchantPromo(userId: number, idRaw: unknown) {
   const merchantId = await getMerchantId(userId);
   return dalamTransaksi(async (conn) => {
-    const p = await kunciPromoToko(conn, merchantId, idRaw);
-    if (p.used_count > 0) throw new AppError(409, "CONFLICT", "Promo sudah dipakai. Nonaktifkan saja.");
-    await conn.query("DELETE FROM promos WHERE id = ?", [p.id]);
-    return { id: p.id as number };
+    const promo = await lockMerchantPromo(conn, merchantId, idRaw);
+    if (promo.used_count > 0) throw new AppError(409, "CONFLICT", "Promo sudah dipakai. Nonaktifkan saja.");
+    await conn.query("DELETE FROM promos WHERE id = ?", [promo.id]);
+    return { id: promo.id as number };
   });
 }

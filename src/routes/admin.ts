@@ -45,12 +45,12 @@ import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { verifikasiAiSchema } from "../dto/hasil-ai.dto";
 import { adminUploadSchema } from "../dto/upload.dto";
 import {
-  buatBannerAdminHandler,
-  daftarBannerAdminHandler,
-  tinjauBannerHandler,
+  createAdminBannerHandler,
+  listAdminBannersHandler,
+  reviewBannerHandler,
   uploadAdminHandler,
 } from "../handlers/banner.handler";
-import { buatPopupHandler, daftarPopupHandler, ubahPopupHandler } from "../handlers/popup.handler";
+import { createPopupHandler, listPopupsHandler, updatePopupHandler } from "../handlers/popup.handler";
 import { uploadLimiter } from "../middleware/rate-limiter";
 import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/hasil-ai.handler";
 import {
@@ -62,19 +62,19 @@ import {
   ujiAiHandler,
 } from "../handlers/ai.handler";
 import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
-import { pencairanSchema, refundSchema } from "../dto/payout.dto";
+import { payoutSchema, refundSchema } from "../dto/payout.dto";
 import {
-  catatPencairanHandler,
-  daftarRefundHandler,
-  daftarSaldoHandler,
-  riwayatPencairanHandler,
-  tandaiRefundHandler,
+  recordPayoutHandler,
+  listRefundsHandler,
+  listBalancesHandler,
+  listPayoutHistoryHandler,
+  markRefundedHandler,
 } from "../handlers/payout.handler";
 import {
-  balasTiketAdminHandler,
-  daftarTiketAdminHandler,
-  detailTiketAdminHandler,
-  tutupTiketAdminHandler,
+  replyAdminTicketHandler,
+  listAdminTicketsHandler,
+  getAdminTicketHandler,
+  closeAdminTicketHandler,
 } from "../handlers/ticket.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
@@ -138,11 +138,11 @@ admin.get("/summary", ringkasanHandler);
 admin.get("/finance", rekapKeuanganHandler);
 
 // F26 pencairan dana Midtrans ke penjual & pengembalian dana pesanan batal yang sudah lunas
-admin.get("/payouts/balances", daftarSaldoHandler);
-admin.get("/payouts", riwayatPencairanHandler);
-admin.post("/payouts", validate(pencairanSchema), catatPencairanHandler);
-admin.get("/refunds", daftarRefundHandler);
-admin.post("/refunds/:code", validate(refundSchema), tandaiRefundHandler);
+admin.get("/payouts/balances", listBalancesHandler);
+admin.get("/payouts", listPayoutHistoryHandler);
+admin.post("/payouts", validate(payoutSchema), recordPayoutHandler);
+admin.get("/refunds", listRefundsHandler);
+admin.post("/refunds/:code", validate(refundSchema), markRefundedHandler);
 
 // F19 moderasi ulasan & menu (suspend toko: /merchants/:id/suspend)
 admin.get("/reviews", daftarUlasanAdminHandler);
@@ -162,14 +162,14 @@ admin.post("/ai-providers/:id/test", ujiAiHandler);
 // F25 pemakaian AI: token, panggilan, gagal, latensi
 admin.get("/ai-usage", pemakaianAiHandler);
 // Banner beranda (rancangan voucher 2026-11-16 §5.4): semua tingkat melihat, super & ops memutuskan; unggah gambar platform
-admin.get("/banners", daftarBannerAdminHandler);
-admin.post("/banners", buatBannerAdminHandler);
-admin.patch("/banners/:id", tinjauBannerHandler);
+admin.get("/banners", listAdminBannersHandler);
+admin.post("/banners", createAdminBannerHandler);
+admin.patch("/banners/:id", reviewBannerHandler);
 admin.post("/uploads", validate(adminUploadSchema), uploadLimiter, uploadAdminHandler);
 // Pop-up promo mobile: semua tingkat melihat, super & ops membuat / mengubah
-admin.get("/popups", daftarPopupHandler);
-admin.post("/popups", buatPopupHandler);
-admin.patch("/popups/:id", ubahPopupHandler);
+admin.get("/popups", listPopupsHandler);
+admin.post("/popups", createPopupHandler);
+admin.patch("/popups/:id", updatePopupHandler);
 // Rubrik AI: hasil AI tersimpan diverifikasi manual (ops & super; support hanya melihat — bukan path "ai-" khusus super)
 admin.get("/hasil-ai", daftarHasilAiHandler);
 admin.patch("/hasil-ai/:id", validate(verifikasiAiSchema), verifikasiHasilAiHandler);
@@ -179,10 +179,10 @@ admin.get("/server-status", statusServerHandler);
 admin.get("/server-logs", daftarLogServerHandler);
 
 // Tiket bantuan (CS) dari pembeli; semua tingkat admin boleh baca, balas, tutup (lihat middleware/admin-access.ts)
-admin.get("/tickets", daftarTiketAdminHandler);
-admin.get("/tickets/:code", detailTiketAdminHandler);
-admin.post("/tickets/:code/messages", balasTiketAdminHandler);
-admin.post("/tickets/:code/close", tutupTiketAdminHandler);
+admin.get("/tickets", listAdminTicketsHandler);
+admin.get("/tickets/:code", getAdminTicketHandler);
+admin.post("/tickets/:code/messages", replyAdminTicketHandler);
+admin.post("/tickets/:code/close", closeAdminTicketHandler);
 
 // path admin tak dikenal berhenti di sini (404), tidak jatuh ke router v1
 admin.use(() => {

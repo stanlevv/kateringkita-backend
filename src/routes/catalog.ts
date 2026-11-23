@@ -14,9 +14,9 @@ import {
   recommendMenusHandler,
   listMenuReviewsHandler,
 } from "../handlers/catalog.handler";
-import { klaimVoucherHandler, voucherPlatformHandler, voucherSayaHandler } from "../handlers/voucher.handler";
-import { bannerPublikHandler } from "../handlers/banner.handler";
-import { popupPublikHandler } from "../handlers/popup.handler";
+import { claimVoucherHandler, listPlatformVouchersHandler, listMyVouchersHandler } from "../handlers/voucher.handler";
+import { listPublicBannersHandler } from "../handlers/banner.handler";
+import { getPublicPopupHandler } from "../handlers/popup.handler";
 import { recommendationSchema } from "../dto/recommendation.dto";
 import { optionalAuth, requireAuth, requireRole } from "../middleware/auth";
 import { assistantLimiter } from "../middleware/rate-limiter";
@@ -36,13 +36,13 @@ catalog.get("/menus/:id/reviews", listMenuReviewsHandler);
 catalog.get("/merchants/:slug", optionalAuth, getMerchantProfileHandler);
 
 // Voucher: daftar voucher platform publik, klaim ke Voucher Saya, Voucher Saya (+ penanda bisa dipakai untuk checkout)
-catalog.get("/vouchers/platform", optionalAuth, voucherPlatformHandler);
+catalog.get("/vouchers/platform", optionalAuth, listPlatformVouchersHandler);
 // Banner beranda yang tayang (maks 8); promo.claimed hanya untuk pembeli login
-catalog.get("/banners", optionalAuth, bannerPublikHandler);
+catalog.get("/banners", optionalAuth, listPublicBannersHandler);
 // Pop-up promo yang tayang (atau null); promo.claimed hanya untuk pembeli login
-catalog.get("/popup", optionalAuth, popupPublikHandler);
-catalog.post("/me/vouchers/:id/claim", requireAuth, requireRole("customer"), klaimVoucherHandler);
-catalog.get("/me/vouchers", requireAuth, requireRole("customer"), voucherSayaHandler);
+catalog.get("/popup", optionalAuth, getPublicPopupHandler);
+catalog.post("/me/vouchers/:id/claim", requireAuth, requireRole("customer"), claimVoucherHandler);
+catalog.get("/me/vouchers", requireAuth, requireRole("customer"), listMyVouchersHandler);
 
 catalog.get("/me/favorites", requireAuth, requireRole("customer"), listFavoritesHandler);
 

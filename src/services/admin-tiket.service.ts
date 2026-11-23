@@ -1,23 +1,23 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { DaftarTiketAdmin } from "../dto/ticket.dto";
+import { ListAdminTicketsQuery } from "../dto/ticket.dto";
 import { catat, Conn, dalamTransaksi } from "./admin-audit.service";
 import { likePattern } from "./order.service";
 import {
-  KOLOM_RINGKAS,
-  NAMA_TIM,
-  bacaTiket,
-  detail,
-  kunciTiket,
-  ringkas,
-  tambahPesan,
-  tiketDitutup,
+  TICKET_SUMMARY_COLUMNS,
+  TEAM_NAME,
+  loadTicket,
+  toTicketDetail,
+  lockTicket,
+  toTicketSummary,
+  insertMessage,
+  ticketClosed,
 } from "./ticket.service";
 
 // Tiket bantuan (CS) sisi admin; semua tingkat admin boleh baca & balas (middleware/admin-access.ts). Pembeli: ticket.service.ts.
 
 // 1 kueri halaman + 1 COUNT + 1 hitungan per status
-export async function daftarTiketAdmin(f: DaftarTiketAdmin) {
+export async function daftarTiketAdmin(f: ListAdminTicketsQuery) {
   const where: string[] = [];
   const args: unknown[] = [];
   if (f.status) {
@@ -35,7 +35,7 @@ export async function daftarTiketAdmin(f: DaftarTiketAdmin) {
   // antrean open: yang paling lama menunggu di atas; tab lain terbaru dulu
   const arah = f.status === "open" ? "ASC" : "DESC";
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${KOLOM_RINGKAS}, u.id AS u_id, u.full_name AS u_name, u.phone AS u_phone
+    `SELECT ${TICKET_SUMMARY_COLUMNS}, u.id AS u_id, u.full_name AS u_name, u.phone AS u_phone
      FROM support_tickets t JOIN users u ON u.id = t.user_id LEFT JOIN orders o ON o.id = t.order_id
      ${w} ORDER BY t.last_message_at ${arah}, t.id ${arah} LIMIT ? OFFSET ?`,
     [...args, f.limit, (f.page - 1) * f.limit],
@@ -49,17 +49,17 @@ export async function daftarTiketAdmin(f: DaftarTiketAdmin) {
   const counts = { open: 0, answered: 0, closed: 0 };
   for (const r of per) counts[r.status as keyof typeof counts] = Number(r.n);
   return {
-    data: rows.map((r) => ({ ...ringkas(r), customer: { id: r.u_id, full_name: r.u_name, phone: r.u_phone } })),
+    data: rows.map((r) => ({ ...toTicketSummary(r), customer: { id: r.u_id, full_name: r.u_name, phone: r.u_phone } })),
     meta: { page: f.page, limit: f.limit, total: Number(n.n), counts },
   };
 }
 
 // AdminTicketDetail: nama pengirim asli (admin/pembeli), data pembeli, dan pesanan terkait
 export async function detailTiketAdmin(code: string) {
-  const b = await bacaTiket(code, null);
-  const { t } = b;
+  const b = await loadTicket(code, null);
+  const { ticket: t } = b;
   return {
-    ...detail(b, (m) => m.nama ?? (m.sender_role === "admin" ? NAMA_TIM : null)),
+    ...toTicketDetail(b, (m) => m.nama ?? (m.sender_role === "admin" ? TEAM_NAME : null)),
     customer: { id: t.u_id, full_name: t.u_name, phone: t.u_phone, email: t.u_email },
     order: t.order_code
       ? {
@@ -84,13 +84,13 @@ async function kabari(conn: Conn, t: RowDataPacket, title: string, body: string)
 // balasan admin: tiket menunggu pembeli
 export async function balasTiketAdmin(adminId: number, code: string, body: string) {
   await dalamTransaksi(async (conn) => {
-    const t = await kunciTiket(conn, code);
-    if (t.status === "closed") throw tiketDitutup();
+    const t = await lockTicket(conn, code);
+    if (t.status === "closed") throw ticketClosed();
     await conn.query("UPDATE support_tickets SET status = 'answered', last_message_at = UTC_TIMESTAMP() WHERE id = ?", [
       t.id,
     ]);
-    const messageId = await tambahPesan(conn, t.id, "admin", adminId, body);
-    await kabari(conn, t, `Balasan tiket ${t.code}`, `${NAMA_TIM} membalas "${t.subject}".`);
+    const messageId = await insertMessage(conn, t.id, "admin", adminId, body);
+    await kabari(conn, t, `Balasan tiket ${t.code}`, `${TEAM_NAME} membalas "${t.subject}".`);
     await catat(conn, {
       adminId,
       action: "ticket.reply",
@@ -106,13 +106,13 @@ export async function balasTiketAdmin(adminId: number, code: string, body: strin
 // idempoten: tiket yang sudah ditutup (oleh siapa pun) tidak berubah, tanpa notifikasi dan audit
 export async function tutupTiketAdmin(adminId: number, code: string) {
   await dalamTransaksi(async (conn) => {
-    const t = await kunciTiket(conn, code);
+    const t = await lockTicket(conn, code);
     if (t.status === "closed") return;
     await conn.query(
       "UPDATE support_tickets SET status = 'closed', closed_at = UTC_TIMESTAMP(), closed_by = 'admin' WHERE id = ?",
       [t.id],
     );
-    await kabari(conn, t, `Tiket ${t.code} ditutup`, `Tiket "${t.subject}" ditutup oleh ${NAMA_TIM}.`);
+    await kabari(conn, t, `Tiket ${t.code} ditutup`, `Tiket "${t.subject}" ditutup oleh ${TEAM_NAME}.`);
     await catat(conn, {
       adminId,
       action: "ticket.close",

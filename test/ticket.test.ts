@@ -8,7 +8,7 @@ import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ticketLimiter } from "../src/middleware/rate-limiter";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { kodeTiket } from "../src/services/ticket.service";
+import { ticketCodeGenerator } from "../src/services/ticket.service";
 import { login, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // Tiket bantuan (CS) sisi pembeli: /me/tickets (kontrak tiket-kontrak.md, migrasi 012)
@@ -229,7 +229,7 @@ describe("POST /me/tickets", () => {
 
   test("kode bentrok → coba kode acak lain", async () => {
     const spy = vi
-      .spyOn(kodeTiket, "acak")
+      .spyOn(ticketCodeGenerator, "random")
       .mockReturnValueOnce("AAAA")
       .mockReturnValueOnce("AAAA")
       .mockReturnValueOnce("BBBB");

@@ -1,39 +1,39 @@
 import { Request, RequestHandler } from "express";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { halamanSchema } from "../dto/payout.dto";
+import { pageSchema } from "../dto/payout.dto";
 import {
-  catatPencairan,
-  daftarRefund,
-  daftarSaldo,
-  pencairanSaya,
-  riwayatPencairan,
-  tandaiRefund,
-  ubahRekening,
+  recordPayout,
+  listRefunds,
+  listBalances,
+  getMyPayouts,
+  listPayoutHistory,
+  markRefunded,
+  updateBankAccount,
 } from "../services/payout.service";
 
 // F26 pencairan dana; body sudah divalidasi di rute
-const uid = (req: Request) => (req as AuthedRequest).auth.userId;
+const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
 
-export const pencairanSayaHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await pencairanSaya(uid(req)) });
+export const getMyPayoutsHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await getMyPayouts(getUserId(req)) });
 };
-export const ubahRekeningHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await ubahRekening(uid(req), req.body) });
+export const updateBankAccountHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await updateBankAccount(getUserId(req), req.body) });
 };
 
-export const daftarSaldoHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await daftarSaldo() });
+export const listBalancesHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await listBalances() });
 };
-export const catatPencairanHandler: RequestHandler = async (req, res) => {
-  res.status(201).json({ data: await catatPencairan(uid(req), req.body) });
+export const recordPayoutHandler: RequestHandler = async (req, res) => {
+  res.status(201).json({ data: await recordPayout(getUserId(req), req.body) });
 };
-export const riwayatPencairanHandler: RequestHandler = async (req, res) => {
-  res.json(await riwayatPencairan(parse(halamanSchema, req.query).page));
+export const listPayoutHistoryHandler: RequestHandler = async (req, res) => {
+  res.json(await listPayoutHistory(parse(pageSchema, req.query).page));
 };
-export const daftarRefundHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await daftarRefund() });
+export const listRefundsHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await listRefunds() });
 };
-export const tandaiRefundHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await tandaiRefund(uid(req), String(req.params.code), req.body) });
+export const markRefundedHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await markRefunded(getUserId(req), String(req.params.code), req.body) });
 };

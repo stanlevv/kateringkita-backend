@@ -1,26 +1,26 @@
 import { Router } from "express";
 import {
-  bacaTiketSayaHandler,
-  balasTiketSayaHandler,
-  buatTiketHandler,
-  daftarTiketSayaHandler,
-  tutupTiketSayaHandler,
+  getMyTicketHandler,
+  replyMyTicketHandler,
+  createTicketHandler,
+  listMyTicketsHandler,
+  closeMyTicketHandler,
 } from "../handlers/ticket.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { ticketLimiter } from "../middleware/rate-limiter";
 
 // Tiket bantuan (CS) pembeli ↔ tim admin; dipasang di /api/v1 sebelum v1. Sisi admin: routes/admin.ts (/admin/tickets).
-export const tiket = Router();
-const pembeli = [requireAuth, requireRole("customer")];
+export const ticket = Router();
+const customerOnly = [requireAuth, requireRole("customer")];
 
-tiket.get("/me/tickets", ...pembeli, daftarTiketSayaHandler);
+ticket.get("/me/tickets", ...customerOnly, listMyTicketsHandler);
 
 // 10 tiket baru per pembeli per jam (hanya yang berhasil dibuat dihitung)
-tiket.post("/me/tickets", ...pembeli, ticketLimiter, buatTiketHandler);
+ticket.post("/me/tickets", ...customerOnly, ticketLimiter, createTicketHandler);
 
 // sekaligus menandai balasan admin sudah dibaca
-tiket.get("/me/tickets/:code", ...pembeli, bacaTiketSayaHandler);
+ticket.get("/me/tickets/:code", ...customerOnly, getMyTicketHandler);
 
-tiket.post("/me/tickets/:code/messages", ...pembeli, balasTiketSayaHandler);
+ticket.post("/me/tickets/:code/messages", ...customerOnly, replyMyTicketHandler);
 
-tiket.post("/me/tickets/:code/close", ...pembeli, tutupTiketSayaHandler);
+ticket.post("/me/tickets/:code/close", ...customerOnly, closeMyTicketHandler);
