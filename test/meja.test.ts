@@ -81,6 +81,13 @@ describe("menu meja (tanpa login)", () => {
 });
 
 describe("pesanan tamu", () => {
+  // AUD-45: token bukan 32-hex (mis. 4096 karakter) ditolak sebelum masuk Map limiter
+  test("token meja berformat salah → 404 tanpa menambah isi limiter", async () => {
+    const r = await request(app).post(`/api/v1/tables/${"a".repeat(4096)}/orders`).send({}).expect(404);
+    expect(r.body.error.message).toBe("Meja tidak ditemukan atau tidak aktif.");
+    expect(mejaLimiter.ukuran()).toBe(0);
+  });
+
   test("holding tanpa akun & titik temu, stok ditahan; status lewat token tamu; penjual melihat meja", async () => {
     const r = await pesan().expect(201);
     const { code, guest_token: tamu } = r.body.data;

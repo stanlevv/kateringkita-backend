@@ -1,4 +1,4 @@
-import { RowDataPacket } from "mysql2";
+import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 
 // F23 log server: error 5xx & request lambat untuk dashboard admin; disimpan 30 hari.
@@ -69,7 +69,11 @@ export async function statusServer() {
 }
 
 export async function bersihkanLog(): Promise<void> {
-  await db.query(`DELETE FROM server_logs WHERE created_at < UTC_TIMESTAMP() - INTERVAL ${SIMPAN_HARI} DAY LIMIT 10000`);
+  // AUD-44: per 10.000 baris (transaksi kecil), diulang sampai habis; dibatasi 100 putaran agar satu pembersihan tidak tanpa akhir
+  for (let i = 0; i < 100; i++) {
+    const [r] = await db.query<ResultSetHeader>(`DELETE FROM server_logs WHERE created_at < UTC_TIMESTAMP() - INTERVAL ${SIMPAN_HARI} DAY LIMIT 10000`);
+    if (r.affectedRows < 10000) break;
+  }
   // F25: riwayat pemakaian AI disimpan 90 hari
   await db.query("DELETE FROM ai_usage WHERE created_at < UTC_TIMESTAMP() - INTERVAL 90 DAY LIMIT 10000");
 }

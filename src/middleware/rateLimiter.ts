@@ -17,8 +17,11 @@ const full = (b: Bucket, key: string, now: number) => {
   const e = b.hits.get(key);
   return !!e && e.resetAt > now && e.count >= b.max;
 };
+// AUD-45: batas isi per bucket; yang tertua (urutan sisip Map) dibuang agar memori tidak tumbuh tanpa batas
+const MAKS_KUNCI = 50_000;
 const hit = (b: Bucket, key: string, now: number) => {
   for (const [k, v] of b.hits) if (v.resetAt <= now) b.hits.delete(k);
+  if (!b.hits.has(key) && b.hits.size >= MAKS_KUNCI) b.hits.delete(b.hits.keys().next().value!);
   const e = b.hits.get(key) ?? { count: 0, resetAt: now + b.windowMs };
   e.count++;
   b.hits.set(key, e);
@@ -67,6 +70,24 @@ export const loginLimiter: RequestHandler & { reset: () => void } = Object.assig
 
 // Ganti kata sandi: 5 kata sandi lama salah (400) per pengguna per menit; pola jatah sama dengan loginLimiter
 const perUser = newBucket(5, 60_000);
+
+// AUD-37: pendaftaran berhasil per sumber (IP klien) 60/jam. Hanya yang berhasil dihitung: gagal validasi atau nomor
+// terdaftar tidak menjalankan bcrypt. Longgar karena satu WiFi kampus / proxy web bisa berbagi satu IP.
+const perDaftar = newBucket(60, 3600_000);
+
+export const registerLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, res, next) => {
+    const key = String(clientIp(req));
+    if (full(perDaftar, key, Date.now())) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak pendaftaran dari jaringan ini. Coba lagi nanti."));
+    }
+    res.on("finish", () => {
+      if (res.statusCode === 201) hit(perDaftar, key, Date.now());
+    });
+    next();
+  }) as RequestHandler,
+  { reset: () => perDaftar.hits.clear() },
+);
 
 export const passwordLimiter: RequestHandler & { reset: () => void } = Object.assign(
   ((req, res, next) => {
@@ -142,17 +163,19 @@ export const asistenLimiter: RequestHandler & { reset: () => void } = Object.ass
 // permintaan datang lewat server web sehingga IP tamu tidak selalu terlihat.
 const perMeja = newBucket(15, 10 * 60_000);
 
-export const mejaLimiter: RequestHandler & { reset: () => void } = Object.assign(
+export const mejaLimiter: RequestHandler & { reset: () => void; ukuran: () => number } = Object.assign(
   ((req, _res, next) => {
     const now = Date.now();
     const key = String(req.params.token);
+    // AUD-45: format token (32 hex) dicek sebelum masuk Map, sama dengan pesan mejaAktif
+    if (!/^[0-9a-f]{32}$/.test(key)) return next(new AppError(404, "NOT_FOUND", "Meja tidak ditemukan atau tidak aktif."));
     if (full(perMeja, key, now)) {
       return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak pesanan dari meja ini. Coba lagi beberapa menit lagi."));
     }
     hit(perMeja, key, now);
     next();
   }) as RequestHandler,
-  { reset: () => perMeja.hits.clear() },
+  { reset: () => perMeja.hits.clear(), ukuran: () => perMeja.hits.size },
 );
 
 // Tiket bantuan: 10 tiket baru per pembeli per jam. Hanya tiket yang jadi (201) dihitung; pola jatah sama dengan loginLimiter.

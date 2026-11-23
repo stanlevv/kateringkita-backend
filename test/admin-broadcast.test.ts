@@ -73,6 +73,23 @@ describe("notifikasi promo toko", () => {
     expect(await jumlah()).toBe(awal);
     await tampilkan(s.idA);
   });
+
+  // AUD-43: mati-nyala berulang tidak boleh membanjiri pemfavorit; satu notifikasi per promo per penerima per 24 jam
+  test("5 siklus mati-nyala promo → satu notifikasi per penerima", async () => {
+    const isi = { type: "fixed", value: 1000, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
+    const jumlah = async () => (await notif(s.tCust)).filter((n) => n.type === "promo" && n.body.startsWith("Pakai kode ULANG")).length;
+    const id = (await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "ULANG" }).expect(201)).body.data.id;
+    for (let i = 0; i < 5; i++) {
+      await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: false }).expect(200);
+      await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: true }).expect(200);
+    }
+    expect(await jumlah()).toBe(1);
+    // lewat 24 jam → boleh dikabarkan lagi
+    await db.query("UPDATE notifications SET created_at = created_at - INTERVAL 25 HOUR WHERE type = 'promo'");
+    await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: false }).expect(200);
+    await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: true }).expect(200);
+    expect(await jumlah()).toBe(2);
+  });
 });
 
 describe("kontak CS", () => {

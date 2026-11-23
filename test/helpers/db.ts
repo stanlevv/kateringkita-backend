@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import { registerLimiter } from "../../src/middleware/rateLimiter";
 
 // Kosongkan DB uji yang ditunjuk DATABASE_URL (diisi vitest.config.ts dari TEST_DATABASE_URL).
 export async function resetTestDatabase(): Promise<string> {
@@ -12,5 +13,7 @@ export async function resetTestDatabase(): Promise<string> {
   await conn.query(`DROP DATABASE IF EXISTS \`${name}\``);
   await conn.query(`CREATE DATABASE \`${name}\``);
   await conn.end();
+  // DB baru = akun baru; kuota daftar per IP (AUD-37) ikut dikosongkan agar file dengan banyak tes tidak kena 429
+  registerLimiter.reset();
   return process.env.DATABASE_URL!;
 }

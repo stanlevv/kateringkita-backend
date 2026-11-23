@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)
 ![MySQL / TiDB](https://img.shields.io/badge/TiDB%20Cloud-MySQL%208-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-714%20Tes-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-723%20Tes-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **RESTful API tangguh dan berkinerja tinggi untuk KateringKita — platform marketplace katering kampus terpercaya.**
@@ -179,6 +179,13 @@ Pada November 2026 tim mengaudit kode sendiri dengan [cloudflare/security-audit-
 | Limiter OTP | Batas per email memakai pola rute, sehingga variasi huruf besar-kecil atau garis miring akhir pada path tidak membuat jatah baru |
 | Sesi | Login yang berpacu dengan ganti/reset sandi tidak mendapat sesi |
 | Voucher platform | Saldo pencairan per toko menampilkan porsi voucher platform agar admin bisa memeriksa sebelum mentransfer |
+| Pencairan dana | Pencatatan pencairan terikat ke versi rekening yang dilihat admin saat mentransfer; rekening yang diganti sesudahnya ditolak `409` |
+| Batas porsi | Maksimal 20 porsi menunggu per pembeli dan 30 per meja QR, agar satu akun atau satu meja tidak memborong sisa stok toko |
+| Banner | Pengajuan banner penjual baru bisa disetujui setelah URL unggah gambarnya kedaluwarsa, sehingga gambar tidak bisa ditukar setelah ditinjau |
+| Pendaftaran | Maksimal 60 pendaftaran berhasil per sumber per jam; nomor atau email yang sudah terdaftar ditolak sebelum hash kata sandi dihitung |
+| Notifikasi promo | Satu notifikasi per promo per penerima per 24 jam, walau promo dimatikan-dinyalakan berulang |
+| Log server | URL rusak dijawab 400 tanpa dicatat sebagai galat server; pembersihan log lama diulang sampai habis |
+| Limiter | Token meja dicek formatnya sebelum masuk limiter, dan isi tiap limiter dibatasi agar memori tidak tumbuh tanpa batas |
 
 Temuan yang belum diperbaiki dicatat dan dilacak di luar repo publik ini.
 
