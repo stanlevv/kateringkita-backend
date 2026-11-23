@@ -1,6 +1,6 @@
 // Isi file: daftar alamat (rute) pesanan pembeli di /api/v1: quote, checkout, detail, daftar, batal, selesai,
 // ulasan, pesan lagi, dan bayar. Lapisan pertama dari alur routes → handlers (order.handler) → services
-// (order.service, pembayaran-va.service) → database: menentukan siapa yang boleh masuk dan skema isi permintaan.
+// (order.service, va-payment.service) → database: menentukan siapa yang boleh masuk dan skema isi permintaan.
 import { Router } from "express";
 import { quoteSchema, reviewSchema, vaSchema } from "../dto/order.dto";
 import {

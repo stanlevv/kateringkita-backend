@@ -7,7 +7,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { TableOrderInput, UpdateTableInput } from "../dto/table.dto";
 import { dalamTransaksi } from "./admin-audit.service";
-import { asalSah, bukaSnap, KOLOM_SNAP, URL_BAYAR } from "./pembayaran-va.service";
+import { asalSah, bukaSnap, KOLOM_SNAP, URL_BAYAR } from "./va-payment.service";
 import {
   MENU_FROM,
   clock,
@@ -336,7 +336,7 @@ export async function getGuestOrder(code: string, guestToken: string) {
 
 /**
  * Membuka halaman bayar Snap untuk pesanan tamu, atau memakai ulang halaman yang sudah pernah dibuat. Logikanya
- * dipakai bersama pembayaran online pembeli, di bukaSnap (pembayaran-va.service).
+ * dipakai bersama pembayaran online pembeli, di bukaSnap (va-payment.service).
  * @param code       kode pesanan
  * @param guestToken token tamu dari header X-Guest-Token
  * @param returnUrl  alamat web tujuan setelah bayar; harus alamat web KateringKita sendiri (CORS_ORIGIN), supaya

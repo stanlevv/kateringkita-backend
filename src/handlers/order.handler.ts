@@ -1,6 +1,6 @@
 // Isi file: handler HTTP untuk pesanan pembeli dan pembayarannya. Lapisan kedua dari alur routes → handlers →
 // services → database: membaca alamat, isi, dan header permintaan, memeriksa yang belum diperiksa di rute, lalu
-// memanggil order.service atau pembayaran-va.service dan mengirim jawabannya sebagai JSON.
+// memanggil order.service atau va-payment.service dan mengirim jawabannya sebagai JSON.
 import { Request, RequestHandler } from "express";
 import {
   reasonSchema,
@@ -23,7 +23,7 @@ import {
   completeMyOrder,
   getMyOrderWhatsapp,
 } from "../services/order.service";
-import { bayarOnline, buatQris, buatVa, terimaNotifikasiMidtrans } from "../services/pembayaran-va.service";
+import { bayarOnline, buatQris, buatVa, terimaNotifikasiMidtrans } from "../services/va-payment.service";
 
 // id pengguna yang login, sudah dipasang middleware requireAuth di rute.
 const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;

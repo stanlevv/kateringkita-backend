@@ -1,5 +1,5 @@
 // Isi file: pemanggil API Midtrans, penyedia pembayaran online (Virtual Account bank, QRIS, e-wallet). Dipakai
-// pembayaran-va.service. Semua pembayaran non-tunai lewat Midtrans. Mode sandbox (uang bohongan untuk uji coba) kecuali
+// va-payment.service. Semua pembayaran non-tunai lewat Midtrans. Mode sandbox (uang bohongan untuk uji coba) kecuali
 // MIDTRANS_IS_PRODUCTION=true; awalan key tidak bisa dipakai untuk menebak mode karena key sandbox akun baru juga
 // berawalan "Mid-server-".
 import { createHash, timingSafeEqual } from "node:crypto";

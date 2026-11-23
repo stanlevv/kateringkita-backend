@@ -1,9 +1,9 @@
 import { Request, RequestHandler } from "express";
-import { daftarNotifSchema, tandaiSchema } from "../dto/notifikasi.dto";
+import { daftarNotifSchema, tandaiSchema } from "../dto/notification.dto";
 import { bodyObject } from "../dto/order.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { daftarNotifikasi, tandaiDibaca } from "../services/notifikasi.service";
+import { daftarNotifikasi, tandaiDibaca } from "../services/notification.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
 

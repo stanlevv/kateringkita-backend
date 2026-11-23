@@ -9,7 +9,7 @@ import { merchant } from "./routes/merchant";
 import { catalog } from "./routes/catalog";
 import { table } from "./routes/table";
 import { order } from "./routes/order";
-import { notifikasi } from "./routes/notifikasi";
+import { notifikasi } from "./routes/notification";
 import { tiket } from "./routes/tiket";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { recordServerLog, requestId, requestLogger } from "./middleware/request-logger";

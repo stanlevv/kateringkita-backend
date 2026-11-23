@@ -1,10 +1,10 @@
 // Isi file: "mesin status" pesanan, yaitu tabel aturan perpindahan status (contoh: menunggu → diterima →
 // dimasak → siap → selesai) dan satu fungsi yang menjalankannya. Lapisan services paling dalam: dipakai
-// order.service (pembeli), merchant-order.service (penjual), pembayaran-va.service (lunas), dan job kadaluarsa.
+// order.service (pembeli), merchant-order.service (penjual), va-payment.service (lunas), dan job kadaluarsa.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/errors";
-import { buatNotifikasiPesanan } from "./notifikasi.service";
+import { buatNotifikasiPesanan } from "./notification.service";
 import { releaseStock } from "./order-stock.service";
 
 /** Status pesanan, sama dengan nilai kolom `orders.status`. */
