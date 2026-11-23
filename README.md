@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)
 ![MySQL / TiDB](https://img.shields.io/badge/TiDB%20Cloud-MySQL%208-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-723%20Tes-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+[![ci](https://github.com/stanlevv/kateringkita-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/stanlevv/kateringkita-backend/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **RESTful API tangguh dan berkinerja tinggi untuk KateringKita — platform marketplace katering kampus terpercaya.**
@@ -138,7 +138,26 @@ database/
 test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
 ```
 
-Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai: `auth`, `admin`, `merchant`, `katalog`, `order`, `notifikasi`, `tiket`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `order-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
+Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai antara lain `auth`, `admin`, `merchant`, `catalog`, `order`, `table`, `notification`, `tiket`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `order-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
+
+---
+
+## 🧭 Cara Membaca Kode Ini
+
+Setiap request melewati lapisan yang sama, dari atas ke bawah:
+
+1. **`src/routes/`** menentukan path, middleware yang dipasang (login, peran, validasi), dan handler yang dipanggil.
+2. **`src/handlers/`** membaca request (body, parameter, header), memanggil service, lalu mengirim respons JSON.
+3. **`src/services/`** berisi aturan bisnis dan kueri SQL; hanya lapisan ini yang menyentuh database.
+4. **Database** (MySQL/TiDB) diakses lewat pool di `src/config/db.ts`.
+
+Contoh menelusuri checkout `POST /orders`:
+
+- `src/routes/order.ts`: `order.post("/orders", ...customerOnly, createOrderHandler)`; `customerOnly` memastikan yang memanggil sudah login sebagai pembeli.
+- `src/handlers/order.handler.ts`: `createOrderHandler` memeriksa body dengan `orderSchema` (`src/dto/order.dto.ts`) dan header `Idempotency-Key`, lalu memanggil `createOrder`.
+- `src/services/order.service.ts`: `createOrder` menghitung harga di server, menahan porsi, dan menyimpan pesanan dalam satu transaksi database.
+
+Aturan nama, aturan keterangan (komentar), dan glosarium Indonesia → Inggris ada di [`CONTRIBUTING.md`](CONTRIBUTING.md). Sebelum mengirim perubahan, jalankan `npm run format:check`, `npm run lint`, `npm run typecheck`, dan `npm test`.
 
 ---
 
