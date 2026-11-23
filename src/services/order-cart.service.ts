@@ -10,7 +10,8 @@ import { SISA, tokoBuka } from "./katalog.service";
 import { segarkanKuota } from "./merchant-kuota.service";
 import { QuoteInput } from "../dto/order.dto";
 
-// Apa saja yang bisa menjalankan kueri: koneksi biasa (quote) atau koneksi di dalam transaksi (checkout).
+// Apa saja yang bisa menjalankan kueri: koneksi biasa (quote) atau koneksi di dalam transaksi (checkout). Transaksi =
+// rangkaian perubahan database yang disimpan semua atau dibatalkan semua.
 type Queryable = Pick<PoolConnection, "query">;
 /**
  * Data mentah keranjang dari database: baris menu per id (`menus`), opsi tambahan menu (`options`), dan data toko
@@ -56,9 +57,10 @@ export type PricedCart = {
 };
 
 /**
- * Mengambil menu, opsi, dan toko yang disebut di keranjang dengan 3–4 kueri. Data dibaca tanpa dikunci. Sisa stok
- * yang dibaca di sini hanya untuk pesan galat; kepastian stok saat checkout dijaga oleh UPDATE bersyarat di
- * order.service, supaya baris menu dikunci sesingkat mungkin.
+ * Mengambil menu, opsi, dan toko yang disebut di keranjang: 3 kueri untuk quote; saat checkout (`refresh: true`)
+ * ditambah kueri reset kuota harian, jadi 5–6. Data dibaca tanpa dikunci. Sisa stok yang dibaca di sini hanya untuk
+ * pesan galat; kepastian stok saat checkout dijaga oleh UPDATE bersyarat di order.service (UPDATE yang hanya mengubah
+ * baris bila stoknya masih cukup), supaya baris menu dikunci sesingkat mungkin.
  * @param conn    koneksi biasa (quote) atau koneksi di dalam transaksi (checkout)
  * @param data    isi keranjang
  * @param options `refresh` = reset kuota harian dulu bila sudah ganti hari (checkout), `day` = tanggal stok WIB
@@ -285,12 +287,14 @@ export const parseVoucherCodes = (body: { promo_code?: string | null; promo_code
 // sebelum potongan), dan pembeli belum melewati batas pakai per orang. Tidak mengunci apa pun: jatah dikurangi
 // belakangan oleh createOrder, dan batas per pembeli aman karena baris pembeli sudah dikunci di sana.
 async function validatePromo(conn: Queryable, promo: RowDataPacket, cart: PricedCart, userId: number, nowMs: number) {
+  // 1. Syarat dari data voucher itu sendiri: aktif, masa berlaku, jatah pakai, dan belanja minimal.
   if (!promo.is_active) throw promoInvalid("Kode promo tidak ditemukan.");
   if (nowMs < new Date(promo.starts_at).getTime() || nowMs >= new Date(promo.ends_at).getTime())
     throw promoInvalid("Promo sedang tidak berlaku.");
   if (promo.quota !== null && promo.used_count >= promo.quota) throw promoInvalid("Kuota promo sudah habis.");
   if (cart.subtotal < promo.min_subtotal)
     throw promoInvalid(`Minimal belanja Rp ${Number(promo.min_subtotal).toLocaleString("id-ID")} untuk promo ini.`);
+  // 2. Batas pakai per pembeli: hitung berapa kali pembeli ini sudah memakai voucher ini.
   const [[countRow]] = await conn.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM promo_redemptions WHERE promo_id = ? AND user_id = ?",
     [promo.id, userId],

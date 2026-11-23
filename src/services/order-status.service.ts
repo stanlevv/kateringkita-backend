@@ -158,10 +158,11 @@ export async function transitionOrder(
   // Virtual Account dan halaman bayar online (Snap) dilunasi lewat pemberitahuan dari Midtrans.
   if (action === "pay" && (!["va", "online"].includes(order.payment_method) || order.payment_status === "paid"))
     throw conflict("Pesanan ini tidak menunggu pembayaran online.");
-  // Menolak pesanan yang sudah lunas tidak mengubah payment_status: uangnya dikembalikan admin lewat daftar refund.
 
   // 4. Ubah status, isi kolom waktunya, dan catat siapa serta mengapa bila batal. Pesanan tunai yang selesai
   //    sekalian ditandai lunas; aksi `pay` menandai lunas (baris pembayarannya ditandai oleh penerima pemberitahuan).
+  //    Menolak pesanan yang sudah lunas tidak mengubah payment_status: uangnya dikembalikan admin lewat daftar
+  //    refund.
   const isCancel = rule.to === "cancelled" || rule.to === "expired";
   const cancelReason = action === "expire" ? "Tidak dikonfirmasi tepat waktu." : reason?.trim() || null;
   await conn.query(

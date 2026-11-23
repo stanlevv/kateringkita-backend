@@ -7,7 +7,6 @@ import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { Actor, transitionOrder } from "./order-status.service";
 
-// Hanya server.ts yang memulai penjadwal; test cukup mengimpor app sehingga job ini tidak ikut berjalan di test.
 /** Pelaku perubahan status untuk job ini: sistem, tanpa id pengguna (riwayat status mencatat pelaku kosong). */
 export const SYSTEM_ACTOR: Actor = { kind: "system" };
 
@@ -53,7 +52,8 @@ export async function expireHeldOrders(
 /**
  * Memulai penjadwal sapuan kadaluarsa. Sapuan pertama langsung jalan; sapuan berikutnya dijadwalkan `intervalMs`
  * setelah sapuan sebelumnya selesai, jadi dua sapuan tidak pernah berjalan bersamaan. Galat sapuan dicatat dan
- * penjadwal tetap jalan.
+ * penjadwal tetap jalan. Hanya server.ts yang memanggil fungsi ini; test cukup mengimpor app sehingga job ini tidak
+ * ikut berjalan di test.
  * @param intervalMs jeda antar sapuan dalam milidetik (bawaan 30 detik)
  * @param sweep      isi satu sapuan; bawaannya {@link expireHeldOrders}, bisa diganti test
  * @returns fungsi untuk menghentikan penjadwal
@@ -62,6 +62,7 @@ export function startExpiryJob(
   intervalMs = 30_000,
   sweep: () => Promise<unknown> = () => expireHeldOrders(),
 ): () => void {
+  // 1. Satu putaran: jalankan sapuan, catat galatnya, lalu jadwalkan putaran berikutnya bila belum dihentikan.
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
   const run = () => {
@@ -71,7 +72,9 @@ export function startExpiryJob(
         if (!stopped) timer = setTimeout(run, intervalMs);
       });
   };
+  // 2. Mulai putaran pertama sekarang.
   run();
+  // 3. Kembalikan fungsi penghenti: tandai berhenti dan batalkan putaran yang sudah terjadwal.
   return () => {
     stopped = true;
     clearTimeout(timer);

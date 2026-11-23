@@ -90,10 +90,12 @@ const orderNotFound = () => new AppError(404, "NOT_FOUND", "Pesanan tidak ditemu
 // Galat MySQL saat menyimpan nilai yang harus unik tetapi sudah ada.
 const isDuplicateKey = (error: unknown) => (error as { code?: string } | null)?.code === "ER_DUP_ENTRY";
 
-// Batas porsi yang boleh ditahan sekaligus, supaya satu akun atau satu meja QR tidak memborong sisa stok toko.
-/** Batas jumlah porsi yang sedang ditahan (pesanan menunggu bayar/konfirmasi) untuk satu pembeli. */
+/**
+ * Batas jumlah porsi yang sedang ditahan (pesanan menunggu bayar/konfirmasi) untuk satu pembeli, supaya satu akun
+ * tidak memborong sisa stok toko.
+ */
 export const MAX_CUSTOMER_PORTIONS = 20;
-/** Batas jumlah porsi yang sedang ditahan untuk satu meja QR. */
+/** Batas jumlah porsi yang sedang ditahan untuk satu meja QR, supaya satu meja tidak memborong sisa stok toko. */
 export const MAX_TABLE_PORTIONS = 30;
 /**
  * Menjumlahkan porsi dari daftar menu.
@@ -125,7 +127,8 @@ export async function getHeldPortions(
   return Number(row.porsi);
 }
 // Kode kembar hanya bila yang bentrok adalah kunci unik kolom `code` di tabel orders. MySQL 8 menamainya "orders.code",
-// versi lama dan TiDB menamainya "code". Kembar di kolom lain adalah galat biasa.
+// versi lama dan TiDB menamainya "code". Kembar di kolom lain adalah galat biasa. (TiDB = database yang dipakai server
+// production; bahasanya sama dengan MySQL, tetapi beberapa perilakunya sedikit berbeda.)
 const isCodeCollision = (error: unknown) =>
   isDuplicateKey(error) && /for key '(orders\.)?code'/.test(String((error as Error).message));
 // Penanda khusus bahwa permintaan checkout ini kiriman ulang dari permintaan sebelumnya (lihat createOrder).
@@ -168,11 +171,13 @@ export async function insertOrder(
   buildParams: (orderCode: string) => unknown[],
 ) {
   for (let i = 0; ; i++) {
+    // 1. Buat kode baru lalu coba simpan pesanannya.
     const code = generateOrderCode(date);
     try {
       const [result] = await conn.query<ResultSetHeader>(sql, buildParams(code));
       return { orderId: result.insertId, code };
     } catch (error) {
+      // 2. Galat selain kode kembar diteruskan; kode kembar dicoba lagi dengan kode baru, paling banyak 5 kali.
       if (!isCodeCollision(error)) throw error;
       if (i === 4) throw new Error("Kode pesanan bentrok 5 kali.");
     }
@@ -451,12 +456,15 @@ export type Item = {
  * @returns peta id pesanan → daftar menunya (urut seperti saat dipesan); pesanan tanpa menu tidak ada di peta
  */
 export async function loadOrderItems(ids: number[]): Promise<Map<number, Item[]>> {
+  // 1. Tanpa id pesanan tidak perlu bertanya ke database.
   const itemsByOrder = new Map<number, Item[]>();
   if (!ids.length) return itemsByOrder;
+  // 2. Ambil semua menu dari pesanan-pesanan itu dalam satu kueri.
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT order_id, menu_id, menu_name, qty, unit_price, options, line_total FROM order_items WHERE order_id IN (?) ORDER BY id",
     [ids],
   );
+  // 3. Kelompokkan per id pesanan, kolom dipilih satu per satu.
   for (const row of rows) {
     const list = itemsByOrder.get(row.order_id) ?? itemsByOrder.set(row.order_id, []).get(row.order_id)!;
     list.push({
@@ -549,13 +557,16 @@ export async function paginateOrders<T>(
   filter: { page: number; limit: number; updated_since?: string },
   mapRow: (row: RowDataPacket, items: Item[]) => T,
 ) {
+  // 1. Tentukan urutan, lalu hitung jumlah semua pesanan yang cocok (untuk info halaman).
   const orderBy = filter.updated_since ? "o.updated_at ASC, o.id ASC" : "o.created_at DESC, o.id DESC";
   const whereSql = where.join(" AND ");
   const [[countRow]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM orders o WHERE ${whereSql}`, args);
+  // 2. Ambil satu halaman saja (LIMIT = jumlah per halaman, OFFSET = baris yang dilewati).
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${selectFrom} WHERE ${whereSql} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
     [...args, filter.limit, (filter.page - 1) * filter.limit],
   );
+  // 3. Ambil menu-menu halaman ini sekaligus, lalu susun respons.
   const items = await loadOrderItems(rows.map((row) => row.id));
   return {
     data: rows.map((row) => mapRow(row, items.get(row.id) ?? [])),
@@ -579,8 +590,10 @@ const STATUSES_BY_TAB: Record<MyOrdersQuery["tab"], Status[]> = {
  * @returns `{ data, meta }` seperti {@link paginateOrders}; tiap pesanan berbentuk {@link mapCustomerOrder}
  */
 export async function listMyOrders(userId: number, filter: MyOrdersQuery) {
+  // 1. Syarat dasar: hanya pesanan milik pembeli ini.
   const where = ["o.customer_id = ?"];
   const args: unknown[] = [userId];
+  // 2. Bila updated_since diisi, tab diabaikan; kalau tidak, saring status sesuai tab.
   if (filter.updated_since) {
     where.push("o.updated_at >= ?");
     args.push(new Date(filter.updated_since));
@@ -588,12 +601,14 @@ export async function listMyOrders(userId: number, filter: MyOrdersQuery) {
     where.push("o.status IN (?)");
     args.push(STATUSES_BY_TAB[filter.tab]);
   }
+  // 3. Pencarian kode pesanan atau nama menu.
   if (filter.q) {
     where.push(
       "(LOWER(o.code) LIKE LOWER(?) OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND LOWER(i.menu_name) LIKE LOWER(?)))",
     );
     args.push(likePattern(filter.q), likePattern(filter.q));
   }
+  // 4. Ambil satu halaman.
   return paginateOrders(CUSTOMER_ORDER_SELECT, where, args, filter, mapCustomerOrder);
 }
 
@@ -770,6 +785,7 @@ export const waLink = (phone: string, text: string) =>
  * @throws 404 pesanan tidak ada atau milik pembeli lain
  */
 export async function getMyOrderWhatsapp(userId: number, code: string) {
+  // 1. Ambil pesanan milik pembeli ini beserta nama dan nomor WhatsApp toko.
   const [[order]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.customer_name, o.total, o.pickup_at, o.payment_method, o.note, m.business_name, m.wa_number,
        p.name AS titik_temu
@@ -778,10 +794,12 @@ export async function getMyOrderWhatsapp(userId: number, code: string) {
     [code, userId],
   );
   if (!order) throw orderNotFound();
+  // 2. Ambil jumlah dan nama menu untuk ditulis di pesan.
   const [items] = await db.query<RowDataPacket[]>(
     "SELECT qty, menu_name FROM order_items WHERE order_id = ? ORDER BY id",
     [order.id],
   );
+  // 3. Isi templat, lalu buat tautan wa.me.
   const message = render(
     CUSTOMER_WA_TEMPLATE + (order.note ? "\nCatatan: {catatan}" : ""),
     buildWaValues({ ...order, items } as Parameters<typeof buildWaValues>[0]),
@@ -800,12 +818,14 @@ export async function getMyOrderWhatsapp(userId: number, code: string) {
  *   toko tutup, dan lain-lain)
  */
 export async function reorder(userId: number, code: string) {
+  // 1. Ambil pesanan lama milik pembeli ini beserta menunya.
   const [[order]] = await db.query<RowDataPacket[]>(
     "SELECT id, pickup_point_id, note FROM orders WHERE code = ? AND customer_id = ?",
     [code, userId],
   );
   if (!order) throw orderNotFound();
   const items = (await loadOrderItems([order.id])).get(order.id) ?? [];
+  // 2. Susun ulang menjadi isi keranjang dan periksa dengan skema quote, sama seperti kiriman dari aplikasi.
   const request = quoteSchema.parse({
     items: items.map((item) => ({
       menu_id: item.menu_id,
@@ -815,5 +835,6 @@ export async function reorder(userId: number, code: string) {
     pickup_point_id: order.pickup_point_id,
     note: order.note,
   });
+  // 3. Hitung harganya dengan data hari ini.
   return { request, quote: await quote(userId, request) };
 }

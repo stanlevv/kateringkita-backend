@@ -53,7 +53,8 @@ export const createQrisHandler: RequestHandler = async (req, res) => {
 /**
  * `POST /payments/midtrans`: menerima webhook pembayaran dari Midtrans, yaitu pemberitahuan yang dikirim server
  * Midtrans ke server kita saat status pembayaran berubah. Tanpa token login; keasliannya diperiksa di service.
- * Selalu dijawab `{ ok: true }` bila diterima, karena Midtrans terus mengulang pemberitahuan sampai dijawab sukses.
+ * Bila diterima, dijawab `{ data: { ok: true } }`, karena Midtrans terus mengulang pemberitahuan sampai dijawab
+ * sukses.
  */
 export const midtransNotificationHandler: RequestHandler = async (req, res) => {
   await terimaNotifikasiMidtrans(bodyObject(req.body) as Record<string, unknown>);

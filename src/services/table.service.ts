@@ -84,12 +84,14 @@ async function getTable(merchantId: number, tableId: number) {
  *   kolom `label`)
  */
 export async function createTable(userId: number, label: string) {
+  // 1. Cek batas jumlah meja toko ini.
   const merchantId = await idToko(userId);
   const [[countRow]] = await db.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM merchant_tables WHERE merchant_id = ?",
     [merchantId],
   );
   if (Number(countRow.n) >= MAX_TABLES) throw conflict(`Maksimal ${MAX_TABLES} meja per toko.`);
+  // 2. Simpan meja dengan token QR acak; nama kembar dijawab 409.
   try {
     const [result] = await db.query<ResultSetHeader>(
       "INSERT INTO merchant_tables (merchant_id, label, token) VALUES (?, ?, ?)",
@@ -141,7 +143,9 @@ export async function updateTable(userId: number, rawId: unknown, input: UpdateT
 // Cari meja dari token QR. Syaratnya: meja aktif, fitur makan di tempat (dine-in) toko menyala, dan toko boleh
 // tampil (terverifikasi, akun pemilik aktif). Token yang bentuknya salah langsung 404 tanpa bertanya ke database.
 async function getActiveTable(token: string) {
+  // 1. Tolak token yang bentuknya salah tanpa kueri.
   if (!/^[0-9a-f]{32}$/.test(token)) throw tableNotFound();
+  // 2. Cari meja beserta profil tokonya, hanya bila semua syarat di atas terpenuhi.
   const [[table]] = await db.query<RowDataPacket[]>(
     `SELECT t.id, t.label, m.id AS merchant_id, m.slug, m.business_name, m.description, m.logo_url, m.is_open, m.open_time, m.close_time
      FROM merchant_tables t JOIN merchants m ON m.id = t.merchant_id JOIN users u ON u.id = m.user_id
@@ -220,6 +224,9 @@ export async function getTableMenu(token: string) {
 export async function createTableOrder(token: string, data: TableOrderInput) {
   const table = await getActiveTable(token);
   const guestToken = randomBytes(24).toString("base64url");
+  // Transaksi memakai tingkat isolasi READ COMMITTED (argumen terakhir dalamTransaksi): setiap baca melihat data
+  // terbaru yang sudah disimpan, dan penghitungan pesanan tidak mengunci "celah" di indeks. Alasannya dijelaskan di
+  // createOrder (order.service).
   const code = await dalamTransaksi(async (conn) => {
     // 1. Kunci baris meja (FOR UPDATE = baca sambil mengunci) supaya pesanan dari meja yang sama antre satu per
     //    satu, sehingga batas pesanan menunggu tidak bisa ditembus dengan banyak permintaan sekaligus.
@@ -288,6 +295,7 @@ export async function createTableOrder(token: string, data: TableOrderInput) {
  * @throws 404 kode pesanan atau token tamu tidak cocok
  */
 export async function getGuestOrder(code: string, guestToken: string) {
+  // 1. Cari pesanan dengan kode + hash token tamu (token salah = 404).
   const [[order]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.status, o.payment_status, o.customer_name, o.note, o.subtotal, o.service_fee, o.total, o.hold_until, o.created_at,
        GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, t.label, m.business_name, m.slug, ${URL_BAYAR} AS url
@@ -296,6 +304,7 @@ export async function getGuestOrder(code: string, guestToken: string) {
     [code, hash(guestToken)],
   );
   if (!order) throw orderNotFound();
+  // 2. Susun respons; hold_until, seconds_left, dan payment_url hanya diisi selama pesanan masih menunggu.
   const holding = order.status === "holding";
   return {
     code: order.code,
@@ -325,7 +334,7 @@ export async function getGuestOrder(code: string, guestToken: string) {
  *                   halaman bayar tidak bisa dipakai mengalihkan tamu ke situs lain
  * @returns `payment_url` halaman Snap
  * @throws 400 alamat kembali tidak diizinkan (pesan di kolom `kembali`), 404 kode atau token tamu tidak cocok,
- *   409 pesanan tidak sedang menunggu pembayaran
+ *   409 pesanan tidak sedang menunggu pembayaran, 409 batas waktu pesanan sudah habis
  */
 export async function payGuestOrder(code: string, guestToken: string, returnUrl: string) {
   if (!asalSah(returnUrl))

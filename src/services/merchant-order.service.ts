@@ -59,8 +59,10 @@ export const mapMerchantOrder = (order: RowDataPacket, items: Item[]) => ({
  * @throws 404 akun ini belum punya toko
  */
 export async function listMerchantOrders(userId: number, filter: MerchantOrdersQuery) {
+  // 1. Syarat dasar: hanya pesanan toko milik penjual ini.
   const where = ["o.merchant_id = ?"];
   const args: unknown[] = [await idToko(userId)];
+  // 2. Bila updated_since diisi, saringan status diabaikan; kalau tidak, saring status yang diminta.
   if (filter.updated_since) {
     where.push("o.updated_at >= ?");
     args.push(new Date(filter.updated_since));
@@ -68,6 +70,7 @@ export async function listMerchantOrders(userId: number, filter: MerchantOrdersQ
     where.push("o.status IN (?)");
     args.push(filter.status);
   }
+  // 3. Tanggal WIB → rentang UTC 24 jam, dan pencarian kode pesanan atau nama pembeli.
   if (filter.date) {
     const dayStartMs = Date.parse(`${filter.date}T00:00:00+07:00`);
     where.push("o.created_at >= ? AND o.created_at < ?");
@@ -77,6 +80,7 @@ export async function listMerchantOrders(userId: number, filter: MerchantOrdersQ
     where.push("(LOWER(o.code) LIKE LOWER(?) OR LOWER(o.customer_name) LIKE LOWER(?))");
     args.push(likePattern(filter.q), likePattern(filter.q));
   }
+  // 4. Ambil satu halaman.
   return paginateOrders(MERCHANT_ORDER_SELECT, where, args, filter, mapMerchantOrder);
 }
 
@@ -104,7 +108,8 @@ export type MerchantAction = (typeof MERCHANT_ACTIONS)[number];
 
 /**
  * Menjalankan aksi penjual pada pesanan tokonya lewat mesin status (order-status.service) di dalam transaksi
- * database, lalu mengirim detail pesanan terbaru. Menolak pesanan wajib disertai alasan.
+ * database (rangkaian perubahan yang disimpan semua atau dibatalkan semua), lalu mengirim detail pesanan terbaru.
+ * Menolak pesanan wajib disertai alasan.
  * @param userId id penjual yang login
  * @param code   kode pesanan
  * @param action aksi penjual: terima, masak, siap, selesai, atau tolak
@@ -147,6 +152,7 @@ Terima kasih sudah memesan.`;
  * @throws 404 toko atau pesanan tidak ditemukan; 409 pembeli (tamu meja) tidak mencantumkan nomor WhatsApp
  */
 export async function getMerchantOrderWhatsapp(userId: number, code: string) {
+  // 1. Ambil pesanan toko ini; titik temu pesanan meja ditulis "Meja <nama meja>".
   const [[order]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.customer_name, o.customer_phone, o.total, o.pickup_at, o.payment_method, o.note, m.business_name, m.wa_template,
        COALESCE(p.name, CONCAT('Meja ', mt.label)) AS titik_temu
@@ -156,8 +162,9 @@ export async function getMerchantOrderWhatsapp(userId: number, code: string) {
     [code, await idToko(userId)],
   );
   if (!order) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
-  // Tamu meja boleh tidak mencantumkan nomor HP.
+  // 2. Tanpa nomor pembeli tidak ada tujuan pesan. Tamu meja boleh tidak mencantumkan nomor HP.
   if (!order.customer_phone) throw new AppError(409, "CONFLICT", "Pembeli tidak mencantumkan nomor WhatsApp.");
+  // 3. Isi templat toko (atau templat bawaan) dengan data pesanan, lalu buat tautan wa.me.
   const items = (await loadOrderItems([order.id])).get(order.id) ?? [];
   const message = render(
     order.wa_template ?? DEFAULT_WA_TEMPLATE,
