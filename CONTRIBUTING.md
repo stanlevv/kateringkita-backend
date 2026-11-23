@@ -12,6 +12,8 @@ Kode memakai nama bahasa Inggris; teks untuk manusia tetap bahasa Indonesia.
 | Tipe dan interface       | PascalCase                                              | `Env`; `PengumumanInput` menjadi `AnnouncementInput`       |
 | Konstanta                | `UPPER_SNAKE`                                           | `WA_PLACEHOLDERS`; `BANK_PENCAIRAN` menjadi `PAYOUT_BANKS` |
 
+Konstanta berisi teks pesan galat/validasi diberi akhiran `_MSG` (contoh `REASON_MSG`).
+
 ### Yang tidak boleh diganti namanya
 
 Dipakai aplikasi mobile, Midtrans, database, atau pengguna:

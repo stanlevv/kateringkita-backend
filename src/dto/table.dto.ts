@@ -4,7 +4,7 @@ import { z } from "zod";
 import { quoteSchema } from "./order.dto";
 
 // F21 pesan dari meja. Pesanan tamu: titik temu, waktu ambil, dan promo tidak dipakai (field lain dibuang z.object).
-const NAME = "Nama 1–60 karakter.";
+const NAME_MSG = "Nama 1–60 karakter.";
 /**
  * Body `POST /tables/:token/orders`: baris menu, catatan, dan nomor HP memakai aturan {@link quoteSchema};
  * nama pemesan wajib 1–60 karakter karena tamu tidak login.
@@ -13,7 +13,7 @@ export const tableOrderSchema = z.object(
   {
     items: quoteSchema.shape.items,
     note: quoteSchema.shape.note,
-    customer_name: z.string({ error: NAME }).trim().min(1, NAME).max(60, NAME),
+    customer_name: z.string({ error: NAME_MSG }).trim().min(1, NAME_MSG).max(60, NAME_MSG),
     customer_phone: quoteSchema.shape.customer_phone,
   },
   { error: "Data pesanan tidak valid." },

@@ -6,11 +6,11 @@ import { BANK_VA } from "../utils/midtrans";
 // F06 (C-09): field harga/total dari client tidak dideklarasikan sehingga dibuang z.object (R-07, D1)
 const ITEMS = "Pilih 1–20 menu.";
 const QTY = "Jumlah harus 1–1000.";
-const OPTIONS = "Pilihan tidak valid.";
-const NAME = "Nama 1–150 karakter.";
-const PHONE = "Nomor HP harus diawali 08 dan berisi 10–13 angka.";
-const PICKUP_TIME = "Waktu ambil tidak valid.";
-const VOUCHER_CODE = "Kode voucher 1–30 karakter.";
+const OPTIONS_MSG = "Pilihan tidak valid.";
+const NAME_MSG = "Nama 1–150 karakter.";
+const PHONE_MSG = "Nomor HP harus diawali 08 dan berisi 10–13 angka.";
+const PICKUP_TIME_MSG = "Waktu ambil tidak valid.";
+const VOUCHER_CODE_MSG = "Kode voucher 1–30 karakter.";
 const id = (message: string) => z.number({ error: message }).int(message).min(1, message);
 // teks opsional: trim, kosong → null
 const optionalText = (message: string, max: number) =>
@@ -36,9 +36,9 @@ export const quoteSchema = z.object(
             qty: z.number({ error: QTY }).int(QTY).min(1, QTY).max(1000, QTY),
             // galat per elemen dilaporkan di option_ids; diurutkan & unik agar hash idempotensi stabil (D6)
             option_ids: z
-              .array(z.unknown(), { error: OPTIONS })
-              .max(10, OPTIONS)
-              .refine((a) => a.every((n) => Number.isInteger(n) && (n as number) >= 1), OPTIONS)
+              .array(z.unknown(), { error: OPTIONS_MSG })
+              .max(10, OPTIONS_MSG)
+              .refine((a) => a.every((n) => Number.isInteger(n) && (n as number) >= 1), OPTIONS_MSG)
               .default([])
               .transform((a) => [...new Set(a as number[])].sort((x, y) => x - y)),
           },
@@ -53,21 +53,21 @@ export const quoteSchema = z.object(
     promo_code: optionalText("Kode promo maksimal 30 karakter.", 30),
     // voucher: maks 1 toko + 1 platform (aturan slot dicek di applyVouchers); promo_code lama digabung oleh parseVoucherCodes
     promo_codes: z
-      .array(z.string({ error: VOUCHER_CODE }).trim().min(1, VOUCHER_CODE).max(30, VOUCHER_CODE), {
-        error: VOUCHER_CODE,
+      .array(z.string({ error: VOUCHER_CODE_MSG }).trim().min(1, VOUCHER_CODE_MSG).max(30, VOUCHER_CODE_MSG), {
+        error: VOUCHER_CODE_MSG,
       })
       .max(2, "Maksimal 2 voucher per pesanan.")
       .default([]),
     // kosong/spasi = null → nama & nomor akun (API.md)
-    customer_name: optionalText(NAME, 150),
+    customer_name: optionalText(NAME_MSG, 150),
     customer_phone: z
-      .string({ error: PHONE })
+      .string({ error: PHONE_MSG })
       .trim()
-      .regex(/^(08\d{8,11})?$/, PHONE)
+      .regex(/^(08\d{8,11})?$/, PHONE_MSG)
       .nullish()
       .transform((s) => s || null),
     pickup_at: z.iso
-      .datetime({ offset: true, error: PICKUP_TIME })
+      .datetime({ offset: true, error: PICKUP_TIME_MSG })
       .nullish()
       .transform((s) => s ?? null),
   },
@@ -76,10 +76,10 @@ export const quoteSchema = z.object(
 
 // F10/F26: tunai, VA Midtrans (bank dipilih di POST /orders/:code/va), atau bayar online lewat halaman Snap Midtrans
 // (QRIS, e-wallet, VA; POST /orders/:code/online). QRIS statis toko dengan verifikasi manual dihapus di F26.
-const PAYMENT_METHOD = "Pilih bayar tunai, Virtual Account, atau bayar online.";
+const PAYMENT_METHOD_MSG = "Pilih bayar tunai, Virtual Account, atau bayar online.";
 /** Body `POST /orders` (checkout): isi quote ditambah `payment_method` wajib (`cod`, `va`, atau `online`). */
 export const orderSchema = quoteSchema.extend({
-  payment_method: z.enum(["cod", "va", "online"], { error: PAYMENT_METHOD }),
+  payment_method: z.enum(["cod", "va", "online"], { error: PAYMENT_METHOD_MSG }),
 });
 /** Body `POST /orders/:code/va`: bank Virtual Account pilihan pembeli (BCA, BNI, atau BRI). */
 export const vaSchema = z.object(
@@ -103,13 +103,13 @@ export type QuoteInput = z.infer<typeof quoteSchema>;
 export type OrderInput = z.infer<typeof orderSchema>;
 
 // F07 D8: alasan batal/tolak; kosong → null (wajib-nya tolak dicek pemanggil)
-const REASON = "Alasan maksimal 255 karakter.";
+const REASON_MSG = "Alasan maksimal 255 karakter.";
 /** Body batal (pembeli) dan tolak (penjual): `reason` opsional maks 255 karakter, kosong menjadi null. */
 export const reasonSchema = z.object({
   reason: z
-    .string({ error: REASON })
+    .string({ error: REASON_MSG })
     .trim()
-    .max(255, REASON)
+    .max(255, REASON_MSG)
     .nullish()
     .transform((s) => s || null),
 });
@@ -120,22 +120,22 @@ export const reasonSchema = z.object({
 export const bodyObject = (b: unknown) => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
 
 // F07 D10–D12: query daftar pesanan (pembeli & penjual)
-const PAGE = "Halaman tidak valid.";
-const SEARCH = "Pencarian maksimal 50 karakter.";
+const PAGE_MSG = "Halaman tidak valid.";
+const SEARCH_MSG = "Pencarian maksimal 50 karakter.";
 /**
  * Field query daftar yang dipakai bersama (pesanan pembeli, pesanan toko, notifikasi): `q` pencarian maks 50 karakter,
  * `updated_since` ISO untuk sinkron bertahap, `page` mulai 1, dan `limit` 1–100 (bawaan 20).
  */
 export const listQueryBase = {
   q: z
-    .string({ error: SEARCH })
+    .string({ error: SEARCH_MSG })
     .trim()
-    .max(50, SEARCH)
+    .max(50, SEARCH_MSG)
     .optional()
     .transform((s) => s || undefined),
   updated_since: z.iso.datetime({ offset: true, error: "Waktu tidak valid." }).optional(),
-  page: z.coerce.number({ error: PAGE }).int(PAGE).min(1, PAGE).default(1),
-  limit: z.coerce.number({ error: PAGE }).int(PAGE).min(1, PAGE).max(100, PAGE).default(20),
+  page: z.coerce.number({ error: PAGE_MSG }).int(PAGE_MSG).min(1, PAGE_MSG).default(1),
+  limit: z.coerce.number({ error: PAGE_MSG }).int(PAGE_MSG).min(1, PAGE_MSG).max(100, PAGE_MSG).default(20),
 };
 /** Query `GET /me/orders` (C-14): `tab` aktif/selesai/batal (bawaan `active`) ditambah {@link listQueryBase}. */
 export const myOrdersQuerySchema = z.object({
@@ -147,7 +147,7 @@ export type MyOrdersQuery = z.infer<typeof myOrdersQuerySchema>;
 
 // F13: ulasan per menu dalam pesanan selesai
 const RATING = "Rating harus 1–5.";
-const REVIEW_ITEMS = "Pilih 1–20 menu untuk diulas.";
+const REVIEW_ITEMS_MSG = "Pilih 1–20 menu untuk diulas.";
 /** Body `POST /orders/:code/reviews`: 1–20 menu, masing-masing rating 1–5 dan komentar opsional maks 500 karakter. */
 export const reviewSchema = z.object(
   {
@@ -159,12 +159,12 @@ export const reviewSchema = z.object(
             rating: z.number({ error: RATING }).int(RATING).min(1, RATING).max(5, RATING),
             comment: optionalText("Komentar maksimal 500 karakter.", 500),
           },
-          { error: REVIEW_ITEMS },
+          { error: REVIEW_ITEMS_MSG },
         ),
-        { error: REVIEW_ITEMS },
+        { error: REVIEW_ITEMS_MSG },
       )
-      .min(1, REVIEW_ITEMS)
-      .max(20, REVIEW_ITEMS),
+      .min(1, REVIEW_ITEMS_MSG)
+      .max(20, REVIEW_ITEMS_MSG),
   },
   { error: "Data ulasan tidak valid." },
 );
