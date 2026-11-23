@@ -93,3 +93,12 @@ df07518e2e529888a1e547ff071ca5f989de8f5e
 
 # refactor(admin): nama pendek di test admin dan nama lama di komentar jadi kata utuh (F28)
 2a8092b7a20f08acc50fd7af5143b29d8230c0e4
+
+# refactor(test): kode catatan internal di judul dan komentar test diganti kata-kata (F28)
+c9e88ff122d0dd256b5b53ae6e9ad6c696304b9b
+
+# refactor(test): nama variabel, helper, dan konstanta test bahasa Inggris (F28)
+0b420ea55220a58b681a7c840c9514e3d1ed3fc6
+
+# refactor(pesanan): buyer menjadi customer sesuai glosarium (F28)
+58aee353021d7d052bf05bfe476861886c012f70
