@@ -4,8 +4,8 @@ import { z } from "zod";
 import { BANK_VA } from "../utils/midtrans";
 
 // F06 (C-09): field harga/total dari client tidak dideklarasikan sehingga dibuang z.object (R-07, D1)
-const ITEMS = "Pilih 1–20 menu.";
-const QTY = "Jumlah harus 1–1000.";
+const ITEMS_MSG = "Pilih 1–20 menu.";
+const QTY_MSG = "Jumlah harus 1–1000.";
 const OPTIONS_MSG = "Pilihan tidak valid.";
 const NAME_MSG = "Nama 1–150 karakter.";
 const PHONE_MSG = "Nomor HP harus diawali 08 dan berisi 10–13 angka.";
@@ -33,7 +33,7 @@ export const quoteSchema = z.object(
         z.object(
           {
             menu_id: id("Menu tidak tersedia."),
-            qty: z.number({ error: QTY }).int(QTY).min(1, QTY).max(1000, QTY),
+            qty: z.number({ error: QTY_MSG }).int(QTY_MSG).min(1, QTY_MSG).max(1000, QTY_MSG),
             // galat per elemen dilaporkan di option_ids; diurutkan & unik agar hash idempotensi stabil (D6)
             option_ids: z
               .array(z.unknown(), { error: OPTIONS_MSG })
@@ -42,12 +42,12 @@ export const quoteSchema = z.object(
               .default([])
               .transform((a) => [...new Set(a as number[])].sort((x, y) => x - y)),
           },
-          { error: ITEMS },
+          { error: ITEMS_MSG },
         ),
-        { error: ITEMS },
+        { error: ITEMS_MSG },
       )
-      .min(1, ITEMS)
-      .max(20, ITEMS),
+      .min(1, ITEMS_MSG)
+      .max(20, ITEMS_MSG),
     pickup_point_id: id("Pilih titik temu."),
     note: optionalText("Catatan maksimal 255 karakter.", 255),
     promo_code: optionalText("Kode promo maksimal 30 karakter.", 30),
@@ -146,7 +146,7 @@ export const myOrdersQuerySchema = z.object({
 export type MyOrdersQuery = z.infer<typeof myOrdersQuerySchema>;
 
 // F13: ulasan per menu dalam pesanan selesai
-const RATING = "Rating harus 1–5.";
+const RATING_MSG = "Rating harus 1–5.";
 const REVIEW_ITEMS_MSG = "Pilih 1–20 menu untuk diulas.";
 /** Body `POST /orders/:code/reviews`: 1–20 menu, masing-masing rating 1–5 dan komentar opsional maks 500 karakter. */
 export const reviewSchema = z.object(
@@ -156,7 +156,7 @@ export const reviewSchema = z.object(
         z.object(
           {
             menu_id: id("Menu tidak ada di pesanan ini."),
-            rating: z.number({ error: RATING }).int(RATING).min(1, RATING).max(5, RATING),
+            rating: z.number({ error: RATING_MSG }).int(RATING_MSG).min(1, RATING_MSG).max(5, RATING_MSG),
             comment: optionalText("Komentar maksimal 500 karakter.", 500),
           },
           { error: REVIEW_ITEMS_MSG },

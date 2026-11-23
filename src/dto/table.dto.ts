@@ -30,8 +30,8 @@ export const payGuestOrderSchema = z.object(
   { error: "Data tidak valid." },
 );
 
-const LABEL = "Nama meja 1–30 karakter.";
-const label = z.string({ error: LABEL }).trim().min(1, LABEL).max(30, LABEL);
+const LABEL_MSG = "Nama meja 1–30 karakter.";
+const label = z.string({ error: LABEL_MSG }).trim().min(1, LABEL_MSG).max(30, LABEL_MSG);
 /** Body `POST /merchant/tables`: nama meja (`label`) 1–30 karakter. */
 export const tableSchema = z.object({ label }, { error: "Data meja tidak valid." });
 /**
