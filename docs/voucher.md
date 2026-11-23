@@ -12,7 +12,7 @@ Voucher = promo yang `is_public` (tampil & bisa diklaim). Ada dua slot:
 Satu pesanan boleh memakai **maks 1 voucher toko + 1 voucher platform**. Klaim **tidak** mengurangi kuota; kuota
 berkurang saat pesanan dibuat (rebutan di checkout) dan kembali saat pesanan batal / kedaluwarsa.
 
-## Bentuk voucher (`VoucherKartu`)
+## Bentuk voucher (`VoucherCard`)
 
 ```json
 {
@@ -37,14 +37,14 @@ berkurang saat pesanan dibuat (rebutan di checkout) dan kembali saat pesanan bat
 
 ## Endpoint
 
-| Endpoint                                                  | Siapa           | Isi                                                                                                                                 |
-| --------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /merchants/:slug`                                    | publik          | profil toko + `vouchers: VoucherKartu[]` (publik, aktif, dalam periode; berakhir paling cepat dulu)                                 |
-| `GET /vouchers/platform`                                  | publik          | voucher platform publik yang berlaku                                                                                                |
-| `POST /me/vouchers/:id/claim`                             | pembeli         | idempoten → `VoucherKartu`; `404` "Voucher tidak ditemukan."; `409` "Voucher sedang tidak tersedia." / "Kuota voucher sudah habis." |
-| `GET /me/vouchers?merchant_id=&subtotal=&payment_method=` | pembeli         | voucher yang diklaim (+ yang berakhir ≤ 30 hari lalu), tiap item + `usable`, `reason`                                               |
-| `POST /orders/quote`, `POST /orders`                      | pembeli         | body `promo_codes: string[]` (maks 2); `promo_code` lama tetap diterima                                                             |
-| `PATCH /merchant/promos/:id`, `PATCH /admin/promos/:id`   | penjual / admin | + `is_public: boolean`                                                                                                              |
+| Endpoint                                                  | Siapa           | Isi                                                                                                                                |
+| --------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /merchants/:slug`                                    | publik          | profil toko + `vouchers: VoucherCard[]` (publik, aktif, dalam periode; berakhir paling cepat dulu)                                 |
+| `GET /vouchers/platform`                                  | publik          | voucher platform publik yang berlaku                                                                                               |
+| `POST /me/vouchers/:id/claim`                             | pembeli         | idempoten → `VoucherCard`; `404` "Voucher tidak ditemukan."; `409` "Voucher sedang tidak tersedia." / "Kuota voucher sudah habis." |
+| `GET /me/vouchers?merchant_id=&subtotal=&payment_method=` | pembeli         | voucher yang diklaim (+ yang berakhir ≤ 30 hari lalu), tiap item + `usable`, `reason`                                              |
+| `POST /orders/quote`, `POST /orders`                      | pembeli         | body `promo_codes: string[]` (maks 2); `promo_code` lama tetap diterima                                                            |
+| `PATCH /merchant/promos/:id`, `PATCH /admin/promos/:id`   | penjual / admin | + `is_public: boolean`                                                                                                             |
 
 `reason` (salah satu): "Voucher sudah berakhir.", "Belum berlaku", "Voucher sedang tidak tersedia.", "Kuota habis",
 "Batas pemakaianmu habis", "Khusus <nama toko>", "Minimal belanja Rp X", "Voucher platform hanya untuk bayar non-tunai."
@@ -62,18 +62,18 @@ Urutan hitung: voucher toko dari `subtotal`, voucher platform dari sisa barang (
 
 ## Banner beranda
 
-| Endpoint                                                                        | Siapa                     | Isi                                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /banners`                                                                  | publik                    | maks 8 banner tayang: `[{ id, title, image_url, target: "promo"\|"merchant"\|"none", promo: VoucherKartu\|null, merchant: { id, slug, business_name }\|null }]` — banner platform dulu (`sort_order`), lalu banner toko terbaru disetujui. Banner ke voucher yang tidak tersedia / toko tersembunyi tidak ikut |
-| `GET/POST /merchant/banners`, `PATCH/DELETE /merchant/banners/:id`              | penjual                   | `{ title 3–80, image_url (unggah purpose "banner"), target: "merchant"\|"promo", promo_id (voucher tokonya), starts_at, ends_at }`; status awal `menunggu`, diubah → `menunggu` lagi; 1 banner aktif per toko (`409`)                                                                                          |
-| `GET /admin/banners?status=`, `POST /admin/banners`, `PATCH /admin/banners/:id` | admin (support hanya GET) | buat banner platform (`target: "promo"\|"none"`, `sort_order`, langsung `disetujui`); tinjau `{ status: "disetujui"\|"ditolak"\|"nonaktif", catatan (wajib bila ditolak), sort_order }`; diaudit `banner.*`                                                                                                    |
-| `POST /admin/uploads`                                                           | admin                     | `{ purpose: "banner"\|"popup", content_type, size }` → URL unggah ke `platform/<purpose>/`                                                                                                                                                                                                                     |
+| Endpoint                                                                        | Siapa                     | Isi                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /banners`                                                                  | publik                    | maks 8 banner tayang: `[{ id, title, image_url, target: "promo"\|"merchant"\|"none", promo: VoucherCard\|null, merchant: { id, slug, business_name }\|null }]` — banner platform dulu (`sort_order`), lalu banner toko terbaru disetujui. Banner ke voucher yang tidak tersedia / toko tersembunyi tidak ikut |
+| `GET/POST /merchant/banners`, `PATCH/DELETE /merchant/banners/:id`              | penjual                   | `{ title 3–80, image_url (unggah purpose "banner"), target: "merchant"\|"promo", promo_id (voucher tokonya), starts_at, ends_at }`; status awal `menunggu`, diubah → `menunggu` lagi; 1 banner aktif per toko (`409`)                                                                                         |
+| `GET /admin/banners?status=`, `POST /admin/banners`, `PATCH /admin/banners/:id` | admin (support hanya GET) | buat banner platform (`target: "promo"\|"none"`, `sort_order`, langsung `disetujui`); tinjau `{ status: "disetujui"\|"ditolak"\|"nonaktif", catatan (wajib bila ditolak), sort_order }`; diaudit `banner.*`                                                                                                   |
+| `POST /admin/uploads`                                                           | admin                     | `{ purpose: "banner"\|"popup", content_type, size }` → URL unggah ke `platform/<purpose>/`                                                                                                                                                                                                                    |
 
 ## Pop-up promo (mobile)
 
-| Endpoint                                            | Siapa                     | Isi                                                                                                                                             |
-| --------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /popup`                                        | publik                    | `{ id, title, image_url, promo: VoucherKartu\|null }` atau `null`: pop-up aktif terbaru dalam periode yang vouchernya (bila ada) masih tersedia |
-| `GET/POST /admin/popups`, `PATCH /admin/popups/:id` | admin (support hanya GET) | `{ title 3–80, image_url (unggah purpose "popup"), promo_id (voucher platform), starts_at, ends_at, is_active }`; diaudit `popup.*`             |
+| Endpoint                                            | Siapa                     | Isi                                                                                                                                            |
+| --------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /popup`                                        | publik                    | `{ id, title, image_url, promo: VoucherCard\|null }` atau `null`: pop-up aktif terbaru dalam periode yang vouchernya (bila ada) masih tersedia |
+| `GET/POST /admin/popups`, `PATCH /admin/popups/:id` | admin (support hanya GET) | `{ title 3–80, image_url (unggah purpose "popup"), promo_id (voucher platform), starts_at, ends_at, is_active }`; diaudit `popup.*`            |
 
 Aplikasi menampilkan pop-up sekali per hari per pop-up (disimpan di perangkat) dan tidak lagi bila vouchernya sudah diklaim.

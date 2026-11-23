@@ -130,15 +130,15 @@ src/
 ├── handlers/          <fitur>.handler.ts: baca request, panggil service, kirim respons
 ├── services/          <fitur>[-bagian].service.ts: aturan bisnis dan kueri SQL
 ├── dto/               <fitur>[-bagian].dto.ts: skema zod untuk body/query dan tipe inputnya
-├── middleware/        auth.ts (sesi & peran), rate-limiter.ts, validate.ts, error-handler.ts, request-logger.ts
+├── middleware/        auth.ts (sesi & peran), admin-access.ts (tingkat admin), maintenance.ts (mode pemeliharaan), rate-limiter.ts, validate.ts, error-handler.ts, request-logger.ts
 ├── utils/             errors.ts (AppError), r2.ts (URL Cloudflare R2), mail.ts (SMTP), midtrans.ts, crypto.ts (enkripsi key AI), safe-prompt.ts (filter injeksi & anonimisasi)
-└── scripts/           migrate.ts, seed-demo.ts, create-admin.ts (dijalankan lewat npm run)
+└── scripts/           migrate.ts, seed-demo.ts, create-admin.ts, sql.ts (dijalankan lewat npm run)
 database/
-└── migrations/        001_init.sql … 016_popup.sql (berurutan, satu kali jalan per database)
+└── migrations/        001_init.sql … 017_foto_toko_menu.sql (berurutan, satu kali jalan per database)
 test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
 ```
 
-Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai antara lain `auth`, `admin`, `merchant`, `catalog`, `order`, `table`, `notification`, `tiket`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `order-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
+Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai antara lain `auth`, `admin`, `merchant`, `catalog`, `order`, `table`, `notification`, `ticket`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `order-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
 
 ---
 
@@ -157,7 +157,7 @@ Contoh menelusuri checkout `POST /orders`:
 - `src/handlers/order.handler.ts`: `createOrderHandler` memeriksa body dengan `orderSchema` (`src/dto/order.dto.ts`) dan header `Idempotency-Key`, lalu memanggil `createOrder`.
 - `src/services/order.service.ts`: `createOrder` menghitung harga di server, menahan porsi, dan menyimpan pesanan dalam satu transaksi database.
 
-Aturan nama, aturan keterangan (komentar), dan glosarium Indonesia → Inggris ada di [`CONTRIBUTING.md`](CONTRIBUTING.md). Sebelum mengirim perubahan, jalankan `npm run format:check`, `npm run lint`, `npm run typecheck`, dan `npm test`.
+Aturan nama, aturan keterangan (komentar), dan glosarium Indonesia → Inggris ada di [`CONTRIBUTING.md`](CONTRIBUTING.md). Sebelum mengirim perubahan, jalankan `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run build`, dan `npm test` (urutan yang sama dengan CI).
 
 ---
 
