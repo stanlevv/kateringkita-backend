@@ -97,7 +97,8 @@ const conflict = (message = "Pesanan sudah berubah status.") => new AppError(409
  * pembeli bila pelakunya bukan pembeli itu sendiri.
  *
  * Harus dipanggil di dalam transaksi database (rangkaian perubahan yang disimpan semua atau dibatalkan semua).
- * Baris dikunci dengan urutan yang sama seperti checkout: pembeli (users) → pesanan (orders) → menu (menus, urut id).
+ * Baris dikunci dengan urutan yang sama seperti checkout: pembeli (users) → pesanan (orders) → menu (menus,
+ * urut id).
  * Kalau dua transaksi mengunci dengan urutan berbeda, keduanya bisa saling menunggu selamanya (deadlock).
  *
  * Aturan tambahan di luar tabel: pembeli hanya boleh membatalkan pesanan yang sudah diterima bila bayar tunai;

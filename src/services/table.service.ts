@@ -1,5 +1,6 @@
-// Layanan fitur pesan dari meja (F21): penjual mengelola meja + QR, tamu memesan tanpa login lalu membayar lewat Snap.
-// Lapisan services dari routes/table.ts dan routes/merchant.ts → handlers/table.handler.ts → di sini → database.
+// Isi file: fitur pesan dari meja. Penjual mengelola meja dan kode QR-nya; tamu memindai QR, memesan tanpa login,
+// lalu membayar online lewat Midtrans Snap (halaman bayar milik penyedia pembayaran Midtrans). Alurnya
+// routes/table.ts dan routes/merchant.ts → handlers/table.handler.ts → file ini → database.
 import { createHash, randomBytes } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
@@ -21,34 +22,39 @@ import {
   totalPortions,
 } from "./order.service";
 
-// F21 pesan dari meja: QR meja → menu tanpa login → pesanan tamu → bayar lewat Snap → status lewat token tamu.
-// Token tamu hanya dipegang peramban tamu; DB menyimpan SHA-256-nya.
+// Urutan pakai: pindai QR meja → lihat menu tanpa login → buat pesanan tamu → bayar lewat Snap → pantau status
+// dengan "token tamu". Token tamu adalah kata sandi acak yang hanya disimpan peramban tamu; database hanya menyimpan
+// hash-nya (sidik jari satu arah dengan algoritma SHA256), jadi orang yang membaca database tetap tidak tahu token aslinya.
 
 const MAX_TABLES = 100;
-// shortcut: batas pesanan menunggu per meja menahan stok dari pesanan iseng; naikkan bila satu meja dipakai rombongan besar
+// shortcut: batas pesanan menunggu per meja menahan stok dari pesanan iseng; naikkan bila satu meja dipakai
+// rombongan besar
 const MAX_HOLDING_ORDERS = 5;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const conflict = (message: string) => new AppError(409, "CONFLICT", message);
 const tableNotFound = () => new AppError(404, "NOT_FOUND", "Meja tidak ditemukan atau tidak aktif.");
 const orderNotFound = () => new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
+// "08:00:00" dari database → "08:00".
 const formatHourMinute = (time: unknown) => String(time).slice(0, 5);
 
-// ---------- penjual ----------
+// ---------- bagian penjual: kelola meja ----------
 const mapTable = (row: RowDataPacket) => ({
   id: row.id,
   label: row.label,
   token: row.token,
   is_active: Boolean(row.is_active),
 });
+// Nama meja unik per toko; galat "nilai kembar" dari MySQL berarti nama sudah dipakai.
 const isLabelTaken = (error: unknown) => (error as { code?: string }).code === "ER_DUP_ENTRY";
 const labelTakenError = () =>
   new AppError(409, "CONFLICT", "Nama meja sudah dipakai.", { label: ["Nama meja sudah dipakai."] });
 
 /**
- * Daftar meja toko milik penjual yang login, urut panjang nama lalu nama (Meja 2 sebelum Meja 10).
- *
- * @returns `{ id, label, token, is_active }` per meja; token = isi QR meja
- * @throws AppError 404 NOT_FOUND bila akun belum punya toko
+ * Daftar meja milik toko penjual yang login, diurutkan panjang nama lalu nama, supaya "Meja 2" muncul sebelum
+ * "Meja 10".
+ * @param userId id penjual yang login
+ * @returns `{ id, label, token, is_active }` per meja; `token` = isi kode QR meja
+ * @throws 404 akun ini belum punya toko
  */
 export async function listTables(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>(
@@ -58,6 +64,7 @@ export async function listTables(userId: number) {
   return rows.map(mapTable);
 }
 
+// Ambil satu meja milik toko; 404 bila meja tidak ada atau milik toko lain.
 async function getTable(merchantId: number, tableId: number) {
   const [[row]] = await db.query<RowDataPacket[]>(
     "SELECT id, label, token, is_active FROM merchant_tables WHERE id = ? AND merchant_id = ?",
@@ -68,10 +75,12 @@ async function getTable(merchantId: number, tableId: number) {
 }
 
 /**
- * Buat meja baru dengan token QR acak 32 heksa. Maks {@link MAX_TABLES} meja per toko.
- *
+ * Membuat meja baru dengan token QR acak (32 karakter heksadesimal). Satu toko paling banyak {@link MAX_TABLES} meja.
+ * @param userId id penjual yang login
+ * @param label  nama meja, contoh "Meja 1"
  * @returns meja yang baru dibuat
- * @throws AppError 409 CONFLICT bila batas meja tercapai atau nama meja sudah dipakai (galat di field `label`)
+ * @throws 404 akun ini belum punya toko; 409 batas jumlah meja tercapai, atau nama meja sudah dipakai (pesan di
+ *   kolom `label`)
  */
 export async function createTable(userId: number, label: string) {
   const merchantId = await idToko(userId);
@@ -93,22 +102,27 @@ export async function createTable(userId: number, label: string) {
 }
 
 /**
- * Ubah nama/status meja milik toko penjual; `ganti_token` membuat token QR baru sehingga QR lama tidak berlaku.
- *
- * @param rawId id dari URL (belum divalidasi); bukan bilangan bulat ≥ 1 → 404
+ * Mengubah nama atau status aktif meja milik toko penjual. `ganti_token: true` membuat token QR baru sehingga QR
+ * lama tidak berlaku lagi (misalnya stiker QR hilang).
+ * @param userId id penjual yang login
+ * @param rawId  id meja dari alamat URL, belum diperiksa; bila bukan bilangan bulat ≥ 1 dijawab 404
+ * @param input  perubahan yang sudah lolos skema: `label`, `is_active`, dan/atau `ganti_token`
  * @returns meja setelah diubah
- * @throws AppError 404 NOT_FOUND bila meja bukan milik toko, 409 CONFLICT bila nama meja sudah dipakai
+ * @throws 404 meja tidak ada atau milik toko lain, 409 nama meja sudah dipakai
  */
 export async function updateTable(userId: number, rawId: unknown, input: UpdateTableInput) {
   const merchantId = await idToko(userId);
+  // 1. Pastikan meja ada dan milik toko ini.
   const tableId = Number(rawId);
   if (!Number.isInteger(tableId) || tableId < 1) throw new AppError(404, "NOT_FOUND", "Meja tidak ditemukan.");
   await getTable(merchantId, tableId);
+  // 2. Susun bagian SET hanya dari kolom yang dikirim.
   const sets: string[] = [];
   const args: unknown[] = [];
   if (input.label !== undefined) (sets.push("label = ?"), args.push(input.label));
   if (input.is_active !== undefined) (sets.push("is_active = ?"), args.push(input.is_active));
   if (input.ganti_token) (sets.push("token = ?"), args.push(randomBytes(16).toString("hex")));
+  // 3. Simpan; nama kembar dijawab 409.
   try {
     await db.query(`UPDATE merchant_tables SET ${sets.join(", ")} WHERE id = ? AND merchant_id = ?`, [
       ...args,
@@ -122,8 +136,9 @@ export async function updateTable(userId: number, rawId: unknown, input: UpdateT
   return getTable(merchantId, tableId);
 }
 
-// ---------- publik (tamu) ----------
-// Meja aktif + dine-in toko menyala + toko tampil. Token bukan heksa 32 → 404 tanpa kueri.
+// ---------- bagian publik: tamu ----------
+// Cari meja dari token QR. Syaratnya: meja aktif, fitur makan di tempat (dine-in) toko menyala, dan toko boleh
+// tampil (terverifikasi, akun pemilik aktif). Token yang bentuknya salah langsung 404 tanpa bertanya ke database.
 async function getActiveTable(token: string) {
   if (!/^[0-9a-f]{32}$/.test(token)) throw tableNotFound();
   const [[table]] = await db.query<RowDataPacket[]>(
@@ -137,21 +152,24 @@ async function getActiveTable(token: string) {
 }
 
 /**
- * Data halaman menu meja untuk tamu: label meja, profil toko (termasuk buka/tutup saat ini), dan menu tampil.
- * Menu toko untuk meja: kartu katalog + deskripsi + opsi aktif; menu pre-order tidak dijual di meja.
- *
- * @param token token QR meja
- * @throws AppError 404 NOT_FOUND bila token salah, meja nonaktif, dine-in toko mati, atau toko tidak tampil
+ * Data halaman menu meja untuk tamu: nama meja, profil toko (termasuk sedang buka atau tutup), dan menu yang dijual.
+ * Tiap menu berisi data kartu katalog ditambah deskripsi, jumlah minimal pesan, dan opsi tambahan yang aktif.
+ * Menu pre-order tidak dijual lewat meja.
+ * @param token token dari kode QR meja
+ * @returns `{ table, merchant, menus }`
+ * @throws 404 token salah, meja nonaktif, dine-in toko mati, atau toko tidak boleh tampil
  */
 export async function getTableMenu(token: string) {
   const table = await getActiveTable(token);
   const nowMs = jam.sekarang();
+  // 1. Menu toko yang tampil, urut kategori lalu yang paling laku.
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${KOLOM_KARTU}, x.description, x.min_order_qty FROM ${DARI} ${JOIN_FAVORIT}
      WHERE ${TAMPIL} AND m.id = ? AND NOT x.is_preorder
      ORDER BY c.sort_order, c.name, x.sold_total DESC, x.id`,
     [hariIniWib(new Date(nowMs)), null, table.merchant_id],
   );
+  // 2. Opsi tambahan yang aktif, dikelompokkan per menu (satu kueri untuk semua menu).
   const optionsByMenu = new Map<number, { id: number; name: string; extra_price: number }[]>();
   if (rows.length) {
     const [optionRows] = await db.query<RowDataPacket[]>(
@@ -164,6 +182,7 @@ export async function getTableMenu(token: string) {
         { id: row.id, name: row.name, extra_price: row.extra_price },
       ]);
   }
+  // 3. Susun respons kolom demi kolom.
   return {
     table: { label: table.label },
     merchant: {
@@ -185,20 +204,24 @@ export async function getTableMenu(token: string) {
 }
 
 /**
- * Buat pesanan tamu dari QR meja: status `holding`, metode `online`, tanpa pembeli terdaftar.
- * Pesanan tamu: validasi & penahanan stok sama dengan checkout (F06) tanpa titik temu & promo; bayar online (Snap) menyusul.
- * Batas per meja: maks {@link MAX_HOLDING_ORDERS} pesanan menunggu dan maks MAX_TABLE_PORTIONS porsi tertahan (AUD-32).
- * Token tamu acak dibuat di sini; DB hanya menyimpan hash SHA-256-nya.
- *
- * @returns `guest_token` (hanya dikirim sekali, disimpan peramban tamu) dan status pesanan seperti {@link getGuestOrder}
- * @throws AppError 404 NOT_FOUND (meja), 400 VALIDATION_ERROR, 409 CONFLICT (batas meja), 409 OUT_OF_STOCK,
- *   409 MERCHANT_UNAVAILABLE / MERCHANT_CLOSED
+ * Membuat pesanan tamu dari QR meja: status `holding` (menunggu bayar), metode bayar `online`, tanpa akun pembeli.
+ * Pemeriksaan dan penahanan stok sama dengan checkout pembeli, tetapi tanpa titik temu dan tanpa voucher; tamu lalu
+ * membayar lewat Snap. Batas per meja: paling banyak {@link MAX_HOLDING_ORDERS} pesanan menunggu dan
+ * MAX_TABLE_PORTIONS porsi yang ditahan. Token tamu acak dibuat di sini; database hanya menyimpan hash-nya.
+ * Semua langkah berjalan dalam satu transaksi database (perubahan disimpan semua atau dibatalkan semua).
+ * @param token token dari kode QR meja
+ * @param data  isi pesanan tamu: menu + jumlah, catatan, nama, nomor HP (opsional)
+ * @returns `guest_token` (hanya dikirim sekali ini, disimpan peramban tamu) dan status pesanan seperti
+ *   {@link getGuestOrder}
+ * @throws 404 meja tidak ditemukan; 400 isi pesanan tidak valid atau menu bukan dari toko ini; 409 batas pesanan
+ *   atau porsi menunggu per meja tercapai, stok tidak cukup, atau toko tidak menerima pesanan/sedang tutup
  */
 export async function createTableOrder(token: string, data: TableOrderInput) {
   const table = await getActiveTable(token);
   const guestToken = randomBytes(24).toString("base64url");
   const code = await dalamTransaksi(async (conn) => {
-    // serial per meja agar batas pesanan menunggu tidak dilampaui request paralel
+    // 1. Kunci baris meja (FOR UPDATE = baca sambil mengunci) supaya pesanan dari meja yang sama antre satu per
+    //    satu, sehingga batas pesanan menunggu tidak bisa ditembus dengan banyak permintaan sekaligus.
     await conn.query("SELECT id FROM merchant_tables WHERE id = ? FOR UPDATE", [table.id]);
     const [[countRow]] = await conn.query<RowDataPacket[]>(
       "SELECT COUNT(*) AS n FROM orders WHERE table_id = ? AND status = 'holding' AND hold_until > UTC_TIMESTAMP() FOR UPDATE",
@@ -206,6 +229,7 @@ export async function createTableOrder(token: string, data: TableOrderInput) {
     );
     if (Number(countRow.n) >= MAX_HOLDING_ORDERS)
       throw conflict("Masih ada pesanan meja ini yang menunggu pembayaran. Selesaikan dulu.");
+    // 2. Periksa keranjang seperti checkout, tanpa titik temu, waktu ambil, dan voucher.
     const nowMs = jam.sekarang();
     const today = hariIniWib(new Date(nowMs));
     const cartInput = { ...data, pickup_point_id: 0, promo_code: null, promo_codes: [], pickup_at: null };
@@ -215,12 +239,14 @@ export async function createTableOrder(token: string, data: TableOrderInput) {
     if (cart.merchant.id !== table.merchant_id)
       throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { items: ["Menu bukan dari toko ini."] });
     if (cart.shortages.length) throw outOfStockError(cart.shortages);
-    // AUD-32: tamu anonim tanpa bayar dulu; batasi porsi tertahan per meja, bukan hanya jumlah pesanannya (setelah cek stok)
+    // 3. Tamu tidak login dan belum membayar, jadi batasi juga total porsi yang ditahan per meja, bukan hanya jumlah
+    //    pesanannya. Dicek sesudah stok, supaya stok yang memang kurang tetap dijawab "stok tidak cukup".
     if ((await getHeldPortions(conn, "table_id", table.id)) + totalPortions(data.items) > MAX_TABLE_PORTIONS) {
       throw conflict(
         `Maksimal ${MAX_TABLE_PORTIONS} porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.`,
       );
     }
+    // 4. Simpan pesanan (tanpa akun pembeli, dengan hash token tamu), tahan stok, dan catat riwayat status pertama.
     const { orderId, code } = await insertOrder(
       conn,
       today,
@@ -253,10 +279,12 @@ export async function createTableOrder(token: string, data: TableOrderInput) {
 }
 
 /**
- * Status pesanan tamu untuk halaman status di web: item, total, sisa waktu tahan, dan `payment_url` Snap selama menunggu bayar.
- *
- * @param guestToken token tamu dari header X-Guest-Token; dicocokkan lewat hash
- * @throws AppError 404 NOT_FOUND bila kode atau token tamu tidak cocok
+ * Status pesanan tamu untuk halaman status di web: menu, total, sisa waktu tahan, dan `payment_url` (halaman bayar
+ * Snap) selama pesanan masih menunggu bayar.
+ * @param code       kode pesanan
+ * @param guestToken token tamu dari header X-Guest-Token; dicocokkan dengan hash yang tersimpan
+ * @returns status pesanan tamu
+ * @throws 404 kode pesanan atau token tamu tidak cocok
  */
 export async function getGuestOrder(code: string, guestToken: string) {
   const [[order]] = await db.query<RowDataPacket[]>(
@@ -288,13 +316,15 @@ export async function getGuestOrder(code: string, guestToken: string) {
 }
 
 /**
- * Buka (atau pakai ulang) halaman bayar Snap untuk pesanan tamu.
- * Halaman bayar Snap tamu (logika bersama pre-order F26 di bukaSnap).
- *
- * @param returnUrl URL kembali setelah bayar; origin-nya harus termasuk CORS_ORIGIN
+ * Membuka halaman bayar Snap untuk pesanan tamu, atau memakai ulang halaman yang sudah pernah dibuat. Logikanya
+ * dipakai bersama pembayaran online pembeli, di bukaSnap (pembayaran-va.service).
+ * @param code       kode pesanan
+ * @param guestToken token tamu dari header X-Guest-Token
+ * @param returnUrl  alamat web tujuan setelah bayar; harus alamat web KateringKita sendiri (CORS_ORIGIN), supaya
+ *                   halaman bayar tidak bisa dipakai mengalihkan tamu ke situs lain
  * @returns `payment_url` halaman Snap
- * @throws AppError 400 VALIDATION_ERROR (field `kembali`) bila asal URL tidak diizinkan, 404 NOT_FOUND bila kode/token
- *   tamu tidak cocok, 409 CONFLICT bila pesanan tidak menunggu pembayaran
+ * @throws 400 alamat kembali tidak diizinkan (pesan di kolom `kembali`), 404 kode atau token tamu tidak cocok,
+ *   409 pesanan tidak sedang menunggu pembayaran
  */
 export async function payGuestOrder(code: string, guestToken: string, returnUrl: string) {
   if (!asalSah(returnUrl))
