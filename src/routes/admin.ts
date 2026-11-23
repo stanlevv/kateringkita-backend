@@ -162,7 +162,8 @@ admin.post("/payouts", validate(payoutSchema), recordPayoutHandler);
 admin.get("/refunds", listRefundsHandler);
 admin.post("/refunds/:code", validate(refundSchema), markRefundedHandler);
 
-// Moderasi ulasan dan menu (menangguhkan toko lewat /merchants/:id/suspend); sembunyikan dan turunkan wajib beralasan.
+// Moderasi ulasan dan menu (menangguhkan toko lewat /merchants/:id/suspend); sembunyikan dan turunkan wajib
+// beralasan.
 admin.get("/reviews", listAdminReviewsHandler);
 admin.post("/reviews/:id/hide", validate(adminReasonSchema), moderateReviewHandler(true));
 admin.post("/reviews/:id/unhide", moderateReviewHandler(false));
@@ -189,9 +190,8 @@ admin.post("/uploads", validate(adminUploadSchema), uploadLimiter, uploadAdminHa
 admin.get("/popups", listPopupsHandler);
 admin.post("/popups", createPopupHandler);
 admin.patch("/popups/:id", updatePopupHandler);
-// Moderasi ulasan dan menu (menangguhkan toko lewat /merchants/:id/suspend); sembunyikan dan turunkan wajib
-// beralasan.
-// berawalan "ai-", sehingga tidak ikut aturan khusus super.
+// Hasil AI tersimpan diperiksa manual: ops dan super memberi keputusan, support hanya melihat. Path-nya /hasil-ai,
+// tidak berawalan "ai-", jadi tidak termasuk rute khusus super.
 admin.get("/hasil-ai", listAiResultsHandler);
 admin.patch("/hasil-ai/:id", validate(verifyAiResultSchema), verifyAiResultHandler);
 
