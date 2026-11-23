@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";

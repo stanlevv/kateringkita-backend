@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import db from "../src/config/db";
-import { hariIniWib, segarkanKuota } from "../src/services/merchant-kuota.service";
+import { hariIniWib, segarkanKuota } from "../src/services/merchant-quota.service";
 import { menuRow, siapkanToko, sisipMenu } from "./helpers/toko";
 
 test("hariIniWib: tanggal di zona Asia/Jakarta (UTC+7)", () => {

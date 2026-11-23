@@ -21,7 +21,7 @@ import {
 import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { simpanHasil } from "./hasil-ai.service";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 
 // Istilah yang dipakai di file ini:
 // - RAG (retrieval-augmented generation): sebelum bertanya ke AI, server mencari dulu data yang relevan di database

@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F09: GET /merchant/reports/{summary,hourly,transactions} (LP-N1..N4, LP-E1)

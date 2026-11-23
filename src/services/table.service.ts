@@ -18,7 +18,7 @@ import {
   isMerchantOpen,
   MERCHANT_VISIBLE,
 } from "./catalog.service";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 import { idToko } from "./merchant-menu.service";
 import { loadCart, validateCart } from "./order-cart.service";
 import {

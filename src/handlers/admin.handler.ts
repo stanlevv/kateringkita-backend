@@ -27,7 +27,7 @@ import {
 } from "../services/admin-moderasi.service";
 import { buatAdmin, daftarAdmin, resetSandiAdmin, setAktifAdmin, ubahLevel } from "../services/admin-akun.service";
 import { AppError } from "../utils/errors";
-import { ambilPemeliharaan, ubahPemeliharaan } from "../services/pemeliharaan.service";
+import { ambilPemeliharaan, ubahPemeliharaan } from "../services/maintenance.service";
 
 const angka = (v: unknown, def: number, max: number) => {
   const n = Math.floor(Number(v));

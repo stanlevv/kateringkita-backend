@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { codeGenerator } from "../src/services/order.service";
 import { menuRow, pembeliBaru, siapCheckout, tampilkan } from "./helpers/toko";
 

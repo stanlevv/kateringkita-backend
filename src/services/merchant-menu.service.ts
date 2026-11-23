@@ -4,7 +4,7 @@ import db from "../config/db";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { validateImageUrl } from "./upload.service";
-import { hariIniWib, segarkanKuota } from "./merchant-kuota.service";
+import { hariIniWib, segarkanKuota } from "./merchant-quota.service";
 import { KuotaInput, MenuInput, MenuQuery, menuSchema } from "../dto/merchant-menu.dto";
 
 export type MerchantMenu = {

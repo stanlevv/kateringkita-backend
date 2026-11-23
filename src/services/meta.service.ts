@@ -2,7 +2,7 @@
 // pengaturan umum. Alurnya routes/meta.ts → handlers/meta.handler.ts → file ini → database.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { ambilPemeliharaan } from "./pemeliharaan.service";
+import { ambilPemeliharaan } from "./maintenance.service";
 
 /**
  * Daftar jenis usaha yang masih aktif, untuk pilihan saat penjual mendaftar.

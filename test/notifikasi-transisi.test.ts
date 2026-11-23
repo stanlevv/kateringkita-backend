@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { pesanDulu, siapCheckout } from "./helpers/toko";

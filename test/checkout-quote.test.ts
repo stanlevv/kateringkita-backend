@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { menuRow, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
 
 // F06 Task 2: POST /orders/quote (C-09, R-07, R-13, R-14, D1–D3, D10, D13)

@@ -3,7 +3,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { pembeliBaru, siapCheckout } from "./helpers/toko";
 
 // F06 Task 6: GET /orders/:code/whatsapp (C-13, D15)

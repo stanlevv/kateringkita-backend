@@ -3,7 +3,7 @@
 // disembunyikan tidak dihapus, hanya tidak tampil, dan muncul lagi saat menu atau tokonya tampil lagi.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 import { menuId, menuTidakAda } from "./merchant-menu.service";
 import {
   MENU_FROM,

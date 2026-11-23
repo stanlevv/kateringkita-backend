@@ -5,7 +5,7 @@ import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { ai } from "./ai.service";
 import { simpanHasil } from "./hasil-ai.service";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 import { ringkasanToko } from "./merchant-laporan.service";
 import { idToko } from "./merchant-menu.service";
 

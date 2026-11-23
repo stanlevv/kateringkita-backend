@@ -5,7 +5,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { sedangBuka } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 import { galeri, menuId, menuTidakAda } from "./merchant-menu.service";
 import { Pagination, CatalogQuery } from "../dto/catalog.dto";
 import { voucherToko } from "./voucher.service";

@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { menuRow, siapkanToko, sisipMenu } from "./helpers/toko";
 
 let tA: string, tB: string, idA: number, idB: number;

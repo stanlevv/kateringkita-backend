@@ -3,7 +3,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 import { BuatTiket, DaftarTiket } from "../dto/tiket.dto";
 
 // Tiket bantuan (CS) dua arah pembeli ↔ tim admin (migrasi 012). Sisi admin: admin-tiket.service.ts.

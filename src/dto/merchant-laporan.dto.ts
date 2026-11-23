@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hariIniWib } from "../services/merchant-kuota.service";
+import { hariIniWib } from "../services/merchant-quota.service";
 
 // F09 (LP-E1): pesan sama dengan fe/lib/laporan.ts#cekRentang
 const MAKS_HARI = 92;

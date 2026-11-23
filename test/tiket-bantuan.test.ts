@@ -7,7 +7,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ticketLimiter } from "../src/middleware/rate-limiter";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { kodeTiket } from "../src/services/tiket.service";
 import { login, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 

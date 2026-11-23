@@ -10,7 +10,7 @@ import { env } from "../config/env";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { clock, toWibTime, REMAINING_STOCK } from "./catalog.service";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 import {
   PricedCart,
   Shortage,

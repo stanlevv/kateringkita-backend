@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { createAdmin } from "../src/scripts/create-admin";
 import { login, pesanDulu, siapCheckout } from "./helpers/toko";
 

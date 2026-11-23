@@ -3,7 +3,7 @@
 // request masuk → middleware (… → maintenanceGuard) → routes → handlers → services → database.
 import { RequestHandler } from "express";
 import { AppError } from "../utils/errors";
-import { PESAN_BAWAAN, ambilPemeliharaan } from "../services/pemeliharaan.service";
+import { PESAN_BAWAAN, ambilPemeliharaan } from "../services/maintenance.service";
 
 // Rute yang tetap jalan saat pemeliharaan: login/logout/me/ganti sandi agar admin bisa masuk; meta/settings agar
 // aplikasi tahu statusnya; notifikasi Midtrans agar pembayaran tetap tercatat. Semua path /admin juga tetap jalan

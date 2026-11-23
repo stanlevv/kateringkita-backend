@@ -6,7 +6,7 @@ import { env } from "../src/config/env";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ai } from "../src/services/ai.service";
 import { bersihkanLog } from "../src/services/log-server.service";
-import { hariIniWib } from "../src/services/merchant-kuota.service";
+import { hariIniWib } from "../src/services/merchant-quota.service";
 import { decrypt } from "../src/utils/crypto";
 import { login, siapkanToko } from "./helpers/toko";
 

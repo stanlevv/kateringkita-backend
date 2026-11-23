@@ -7,7 +7,7 @@ import { PoolConnection } from "mysql2/promise";
 import { rentangHariWib } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
 import { REMAINING_STOCK, isMerchantOpen } from "./catalog.service";
-import { segarkanKuota } from "./merchant-kuota.service";
+import { segarkanKuota } from "./merchant-quota.service";
 import { QuoteInput } from "../dto/order.dto";
 
 // Apa saja yang bisa menjalankan kueri: koneksi biasa (quote) atau koneksi di dalam transaksi (checkout). Transaksi =

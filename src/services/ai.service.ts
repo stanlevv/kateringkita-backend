@@ -5,7 +5,7 @@ import { AppError } from "../utils/errors";
 import { decrypt, encrypt } from "../utils/crypto";
 import type { AiInput, UbahAiInput } from "../dto/ai.dto";
 import { catat, dalamTransaksi, type Conn } from "./admin-audit.service";
-import { hariIniWib } from "./merchant-kuota.service";
+import { hariIniWib } from "./merchant-quota.service";
 
 // F22 AI gateway: penyedia dari DB (dikelola admin) dicoba urut prioritas; gagal (kuota/error/timeout) → istirahat sebentar
 // → penyedia berikutnya. GEMINI_API_KEY di env = cadangan terakhir (perilaku F17 lama tetap jalan tanpa isian admin).

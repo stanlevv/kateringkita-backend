@@ -6,7 +6,7 @@ import db from "../../src/config/db";
 import { env } from "../../src/config/env";
 import { migrate } from "../../src/scripts/migrate";
 import { loginLimiter } from "../../src/middleware/rate-limiter";
-import { hariIniWib } from "../../src/services/merchant-kuota.service";
+import { hariIniWib } from "../../src/services/merchant-quota.service";
 import { clock } from "../../src/services/catalog.service";
 import { resetTestDatabase } from "./db";
 
