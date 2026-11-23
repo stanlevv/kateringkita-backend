@@ -109,7 +109,7 @@ export async function moderasiMenu(adminId: number, idRaw: unknown, turun: boole
 }
 
 // Hapus satu foto melanggar; menu tetap dijual. Foto utama dihapus → foto tambahan pertama naik jadi foto utama (kartu katalog tidak kosong).
-// shortcut: objek di R2 tidak dihapus (sama dengan buatUnggahan); penjual tidak diberi notifikasi, alasan hanya di log audit
+// shortcut: objek di R2 tidak dihapus (sama dengan buatUnggahan)
 export async function hapusFotoMenu(adminId: number, idRaw: unknown, url: string, reason: string) {
   const id = await dalamTransaksi(async (conn) => {
     const x = await kunci(conn, "menus", idRaw, { where: "deleted_at IS NULL", notFound: "Menu tidak ditemukan." });
@@ -121,6 +121,12 @@ export async function hapusFotoMenu(adminId: number, idRaw: unknown, url: string
     await conn.query("UPDATE menus SET image_url = ?, gallery = ? WHERE id = ?",
       [sesudah.image_url, sesudah.gallery.length ? JSON.stringify(sesudah.gallery) : null, x.id]);
     await catat(conn, { adminId, action: "menu.photo_remove", targetType: "menu", targetId: x.id, reason, before: sebelum, after: sesudah });
+    // kabari pemilik toko (halaman Notifikasi dashboard penjual)
+    await conn.query(
+      `INSERT INTO notifications (user_id, type, title, body, data, created_at)
+       SELECT m.user_id, 'moderation', 'Foto menu dihapus admin', ?, JSON_OBJECT('menu_id', ?), UTC_TIMESTAMP() FROM merchants m WHERE m.id = ?`,
+      [`Satu foto "${x.name}" dihapus karena: ${reason}. Menu tetap dijual; unggah foto pengganti bila perlu.`.slice(0, 255), x.id, x.merchant_id],
+    );
     return x.id;
   });
   const [[x]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_MENU} ${DARI_MENU} WHERE x.id = ?`, [id]);

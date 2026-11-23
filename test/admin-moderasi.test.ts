@@ -98,6 +98,19 @@ describe("menu", () => {
     expect(json(log[1].after_json)).toEqual({ image_url: b, gallery: [] });
   });
 
+  test("hapus foto → notifikasi ke penjual pemilik menu (nama menu + alasan), terlihat di GET /me/notifications", async () => {
+    const foto = `https://foto.test/merchants/${s.idA}/menu/n.jpg`;
+    await db.query("UPDATE menus SET gallery = ? WHERE id = ?", [JSON.stringify([foto]), s.menu]);
+    await adm("post", `/menus/${s.menu}/photos/remove`, { url: foto, reason: "Foto buram" }).expect(200);
+    const r = (await request(app).get("/api/v1/me/notifications?type=moderation").set(H(s.tA)).expect(200)).body;
+    expect(r.data[0]).toMatchObject({ type: "moderation", title: "Foto menu dihapus admin" });
+    expect(r.data[0].body).toContain("Foto buram");
+    expect(r.data[0].body).toContain(String(((await menuRow(s.menu)) as { name: string }).name));
+    expect(r.meta.unread_count).toBeGreaterThan(0);
+    // penjual lain tidak menerima
+    expect((await request(app).get("/api/v1/me/notifications?type=moderation").set(H(s.tB)).expect(200)).body.data).toEqual([]);
+  });
+
   test("hapus foto: URL bukan milik menu → 404; alasan kosong → 400; menu tidak ada → 404", async () => {
     const lain = `https://foto.test/merchants/${s.idA}/menu/lain.jpg`;
     expect((await adm("post", `/menus/${s.menu2}/photos/remove`, { url: lain, reason: "x" }).expect(404)).body.error.message).toBe("Foto tidak ditemukan di menu ini.");
