@@ -9,7 +9,7 @@ import {
   registerMerchant,
   updateMe,
 } from "../services/auth.service";
-import { cekOtp, mintaOtp, resetSandi } from "../services/lupa-sandi.service";
+import { cekOtp, mintaOtp, resetSandi } from "../services/password-reset.service";
 import { buatUnggahan } from "../services/upload.service";
 
 export const registerCustomerHandler: RequestHandler = async (req, res) => {

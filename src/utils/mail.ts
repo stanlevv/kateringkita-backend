@@ -1,4 +1,4 @@
-// Isi file: pengirim email teks lewat server email (SMTP). Dipakai lupa-sandi.service untuk mengirim kode OTP.
+// Isi file: pengirim email teks lewat server email (SMTP). Dipakai password-reset.service untuk mengirim kode OTP.
 import nodemailer from "nodemailer";
 import { env } from "../config/env";
 import { AppError } from "./errors";
