@@ -93,6 +93,9 @@ Wajib dipakai saat memberi nama baru. Mengikuti nama tabel DB dan peran PRD.
 | katalog                 | catalog           | tampil (lolos syarat)       | visible            |
 | kandidat                | candidate         | sisa (porsi)                | remaining          |
 | kata kunci              | keyword           | jam (waktu sekarang)        | clock              |
+| galeri (foto tambahan)  | gallery           | sinkronkan                  | sync               |
+| HPP (harga pokok)       | costPrice         | siapkan                     | prepare            |
+| isian templat `{…}`     | placeholder       | basi (lewat hari)           | stale              |
 
 Istilah yang belum ada di tabel: pilih padanan Inggris yang umum, lalu tambahkan ke tabel ini pada commit yang sama.
 
