@@ -9,7 +9,7 @@ import db from "../config/db";
 import { env } from "../config/env";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
-import { jam, jamWib, SISA } from "./catalog.service";
+import { clock, toWibTime, REMAINING_STOCK } from "./catalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import {
   PricedCart,
@@ -33,7 +33,7 @@ import { Status, transitionOrder } from "./order-status.service";
  * @throws 400 isi keranjang tidak valid, 409 toko tidak menerima pesanan atau sedang tutup, 422 voucher tidak berlaku
  */
 export async function quote(userId: number, data: QuoteInput) {
-  const nowMs = jam.sekarang();
+  const nowMs = clock.now();
   // 1. Ambil keranjang lalu cek: toko buka, menu masih dijual, stok cukup.
   const cart = validateCart(
     await loadCart(db, data, { refresh: false, day: hariIniWib(new Date(nowMs)), nowMs }),
@@ -217,7 +217,7 @@ export async function holdStockAndInsertItems(
     if (result.affectedRows === 0) {
       // 3. Stok tidak cukup: baca sisa terbaru untuk pesan galat, lalu lempar galat agar seluruh transaksi dibatalkan.
       const [[menu]] = await conn.query<RowDataPacket[]>(
-        `SELECT ${SISA} AS available FROM menus x WHERE id = ? FOR UPDATE`,
+        `SELECT ${REMAINING_STOCK} AS available FROM menus x WHERE id = ? FOR UPDATE`,
         [stockDate, menuId],
       );
       const lineIndex = cart.lines.findIndex((line) => line.menu_id === menuId);
@@ -309,7 +309,7 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
         throw new AppError(409, "CONFLICT", "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu.");
 
       // 4. Ambil keranjang (sekalian reset kuota harian bila sudah ganti hari) lalu cek aturan dan stoknya.
-      const nowMs = jam.sekarang();
+      const nowMs = clock.now();
       const today = hariIniWib(new Date(nowMs));
       const cart = validateCart(await loadCart(conn, data, { refresh: true, day: today, nowMs }), data, nowMs);
       if (cart.shortages.length) throw outOfStockError(cart.shortages);
@@ -744,7 +744,7 @@ export function buildWaValues(order: {
     total: `Rp ${order.total.toLocaleString("id-ID")}`,
     titik_temu: order.titik_temu,
     waktu_ambil: order.pickup_at
-      ? `${pickupDayPrefix(order.pickup_at)}${jamWib(order.pickup_at.getTime()).slice(0, 5).replace(":", ".")} WIB`
+      ? `${pickupDayPrefix(order.pickup_at)}${toWibTime(order.pickup_at.getTime()).slice(0, 5).replace(":", ".")} WIB`
       : "Secepatnya",
     metode_bayar: PAYMENT_METHOD_LABELS[order.payment_method] ?? order.payment_method,
     catatan: order.note ?? "",
@@ -754,7 +754,7 @@ export function buildWaValues(order: {
 const wibDateFormat = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" });
 // Awalan tanggal seperti "3 November " bila hari ambil (WIB) bukan hari ini; kosong bila hari ini.
 const pickupDayPrefix = (date: Date) =>
-  hariIniWib(date) === hariIniWib(new Date(jam.sekarang())) ? "" : `${wibDateFormat.format(date)} `;
+  hariIniWib(date) === hariIniWib(new Date(clock.now())) ? "" : `${wibDateFormat.format(date)} `;
 
 /**
  * Mengisi templat WhatsApp: setiap `{nama}` diganti `values.nama`. Tempat kosong yang tidak dikenal dibiarkan apa

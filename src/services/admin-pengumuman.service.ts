@@ -2,7 +2,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { PengumumanInput } from "../dto/admin.dto";
 import { catat, dalamTransaksi } from "./admin-audit.service";
-import { TOKO_TAMPIL } from "./catalog.service";
+import { MERCHANT_VISIBLE } from "./catalog.service";
 
 // Broadcast: pengumuman admin → notifikasi tipe "info" ke semua pengguna aktif sesuai peran (admin tidak ikut)
 export async function kirimPengumuman(adminId: number, p: PengumumanInput) {
@@ -31,7 +31,7 @@ export async function kabariPromoToko(p: RowDataPacket) {
   if (!p.is_active || !p.is_public || new Date(p.ends_at).getTime() <= Date.now()) return;
   // AUD-33: toko yang tidak tampil di katalog (suspend, belum verifikasi, pemilik nonaktif) tidak boleh menyiarkan promo
   const [[m]] = await db.query<RowDataPacket[]>(
-    `SELECT m.business_name FROM merchants m JOIN users u ON u.id = m.user_id WHERE m.id = ? AND ${TOKO_TAMPIL}`,
+    `SELECT m.business_name FROM merchants m JOIN users u ON u.id = m.user_id WHERE m.id = ? AND ${MERCHANT_VISIBLE}`,
     [p.merchant_id],
   );
   if (!m) return;

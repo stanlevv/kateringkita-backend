@@ -6,7 +6,7 @@ import { meta } from "./routes/meta";
 import { admin } from "./routes/admin";
 import { adminAccess } from "./middleware/admin-access";
 import { merchant } from "./routes/merchant";
-import { katalog } from "./routes/catalog";
+import { catalog } from "./routes/catalog";
 import { table } from "./routes/table";
 import { order } from "./routes/order";
 import { notifikasi } from "./routes/notifikasi";
@@ -43,7 +43,7 @@ app.use("/api/v1/admin", requireAuth, requireRole("admin"), adminAccess, admin);
 app.use("/api/v1/merchant", requireAuth, requireRole("merchant"), merchant);
 // F21: menu & pesanan meja tanpa login
 app.use("/api/v1", table);
-app.use("/api/v1", katalog);
+app.use("/api/v1", catalog);
 app.use("/api/v1", order);
 app.use("/api/v1", notifikasi);
 app.use("/api/v1", tiket);

@@ -6,7 +6,7 @@ import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { rentangHariWib } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
-import { SISA, tokoBuka } from "./catalog.service";
+import { REMAINING_STOCK, isMerchantOpen } from "./catalog.service";
 import { segarkanKuota } from "./merchant-kuota.service";
 import { QuoteInput } from "../dto/order.dto";
 
@@ -83,7 +83,7 @@ export async function loadCart(
   // 2. Ambil menu beserta sisa stoknya untuk tanggal `day`, lalu opsi tambahannya.
   const [menus] = await conn.query<RowDataPacket[]>(
     `SELECT x.id, x.merchant_id, x.name, x.unit_label, x.price, x.hpp, x.is_active, x.deleted_at, x.min_order_qty, x.is_preorder,
-       x.preorder_days, ${SISA} AS available
+       x.preorder_days, ${REMAINING_STOCK} AS available
      FROM menus x WHERE x.id IN (?) ORDER BY x.id`,
     [options.day, menuIds],
   );
@@ -157,7 +157,7 @@ export function validateCart(
   if (merchant.verification_status !== "verified" || !merchant.pemilik_aktif) {
     throw new AppError(409, "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
   }
-  if (!tokoBuka(merchant, nowMs)) {
+  if (!isMerchantOpen(merchant, nowMs)) {
     throw new AppError(
       409,
       "MERCHANT_CLOSED",

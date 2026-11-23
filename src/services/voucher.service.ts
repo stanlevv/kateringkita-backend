@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import type { VoucherSayaQuery } from "../dto/voucher.dto";
 import { AppError } from "../utils/errors";
-import { jam } from "./catalog.service";
+import { clock } from "./catalog.service";
 
 // Voucher (rancangan 2026-11-16): promo publik tampil di halaman toko / daftar voucher platform dan bisa diklaim ke
 // "Voucher Saya". Klaim tidak mengurangi kuota; kuota berkurang saat pesanan dibuat (rebutan di checkout).
@@ -79,7 +79,7 @@ const tidakAda = () => new AppError(404, "NOT_FOUND", "Voucher tidak ditemukan."
 export async function klaimVoucher(userId: number, idRaw: unknown): Promise<VoucherKartu> {
   const id = Number(idRaw);
   if (!Number.isInteger(id) || id < 1) throw tidakAda();
-  const ms = jam.sekarang();
+  const ms = clock.now();
   const [[r]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM}, ${TOKO_OK} AS toko_ok FROM ${DARI} WHERE p.id = ?`, [
     userId,
     id,
@@ -101,7 +101,7 @@ const rupiah = (n: number) => `Rp ${Number(n).toLocaleString("id-ID")}`;
  * Dengan merchant_id / subtotal / payment_method (checkout), `usable` & `reason` mengikuti keranjang itu.
  */
 export async function voucherSaya(userId: number, f: VoucherSayaQuery) {
-  const ms = jam.sekarang();
+  const ms = clock.now();
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${KOLOM}, (SELECT COUNT(*) FROM promo_redemptions x WHERE x.promo_id = p.id AND x.user_id = ?) AS dipakai
      FROM promo_claims k JOIN promos p ON p.id = k.promo_id LEFT JOIN merchants m ON m.id = p.merchant_id

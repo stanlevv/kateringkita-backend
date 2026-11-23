@@ -4,7 +4,7 @@ import { PopupInput, UbahPopup, popupSchema, ubahPopupSchema } from "../dto/popu
 import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { rapikan } from "./banner.service";
-import { jam } from "./catalog.service";
+import { clock } from "./catalog.service";
 import { VoucherKartu, voucherTersedia } from "./voucher.service";
 
 // Pop-up promo saat aplikasi mobile dibuka (rancangan voucher 2026-11-16 §5.5). Hanya admin. Yang tayang = aktif terbaru
@@ -31,7 +31,7 @@ const baris = async (id: number) =>
 export type PopupPublik = { id: number; title: string; image_url: string; promo: VoucherKartu | null };
 
 export async function popupPublik(userId: number | null): Promise<PopupPublik | null> {
-  const ms = jam.sekarang();
+  const ms = clock.now();
   const now = new Date(ms);
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT id, title, image_url, promo_id FROM popups WHERE is_active AND starts_at <= ? AND ends_at > ? ORDER BY id DESC LIMIT 5",

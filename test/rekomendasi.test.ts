@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
-import { kataKunci } from "../src/services/recommendation.service";
+import { extractKeywords } from "../src/services/recommendation.service";
 import { AppError } from "../src/utils/errors";
 import { BOCOR, bekukanJam, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
 
@@ -252,6 +252,6 @@ describe("rekomendasi AI pembeli", () => {
 });
 
 test("kataKunci: buang kata umum, angka, dan kata setelah negasi", () => {
-  expect(kataKunci("Makan siang 5 orang, TIDAK pedas; nasi-goreng!!")).toEqual(["siang", "nasi", "goreng"]);
-  expect(kataKunci("tanpa daging, ayam ayam ok")).toEqual(["ayam"]);
+  expect(extractKeywords("Makan siang 5 orang, TIDAK pedas; nasi-goreng!!")).toEqual(["siang", "nasi", "goreng"]);
+  expect(extractKeywords("tanpa daging, ayam ayam ok")).toEqual(["ayam"]);
 });

@@ -8,7 +8,16 @@ import { AppError } from "../utils/errors";
 import { TableOrderInput, UpdateTableInput } from "../dto/table.dto";
 import { dalamTransaksi } from "./admin-audit.service";
 import { asalSah, bukaSnap, KOLOM_SNAP, URL_BAYAR } from "./pembayaran-va.service";
-import { DARI, jam, JOIN_FAVORIT, kartu, KOLOM_KARTU, TAMPIL, tokoBuka, TOKO_TAMPIL } from "./catalog.service";
+import {
+  MENU_FROM,
+  clock,
+  JOIN_FAVORITE,
+  mapMenuCard,
+  MENU_CARD_COLUMNS,
+  MENU_VISIBLE,
+  isMerchantOpen,
+  MERCHANT_VISIBLE,
+} from "./catalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import { idToko } from "./merchant-menu.service";
 import { loadCart, validateCart } from "./order-cart.service";
@@ -149,7 +158,7 @@ async function getActiveTable(token: string) {
   const [[table]] = await db.query<RowDataPacket[]>(
     `SELECT t.id, t.label, m.id AS merchant_id, m.slug, m.business_name, m.description, m.logo_url, m.is_open, m.open_time, m.close_time
      FROM merchant_tables t JOIN merchants m ON m.id = t.merchant_id JOIN users u ON u.id = m.user_id
-     WHERE t.token = ? AND t.is_active AND m.dine_in_enabled AND ${TOKO_TAMPIL}`,
+     WHERE t.token = ? AND t.is_active AND m.dine_in_enabled AND ${MERCHANT_VISIBLE}`,
     [token],
   );
   if (!table) throw tableNotFound();
@@ -166,11 +175,11 @@ async function getActiveTable(token: string) {
  */
 export async function getTableMenu(token: string) {
   const table = await getActiveTable(token);
-  const nowMs = jam.sekarang();
+  const nowMs = clock.now();
   // 1. Menu toko yang tampil, urut kategori lalu yang paling laku.
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${KOLOM_KARTU}, x.description, x.min_order_qty FROM ${DARI} ${JOIN_FAVORIT}
-     WHERE ${TAMPIL} AND m.id = ? AND NOT x.is_preorder
+    `SELECT ${MENU_CARD_COLUMNS}, x.description, x.min_order_qty FROM ${MENU_FROM} ${JOIN_FAVORITE}
+     WHERE ${MENU_VISIBLE} AND m.id = ? AND NOT x.is_preorder
      ORDER BY c.sort_order, c.name, x.sold_total DESC, x.id`,
     [hariIniWib(new Date(nowMs)), null, table.merchant_id],
   );
@@ -195,12 +204,12 @@ export async function getTableMenu(token: string) {
       business_name: table.business_name,
       description: table.description,
       logo_url: table.logo_url,
-      is_open: tokoBuka(table, nowMs),
+      is_open: isMerchantOpen(table, nowMs),
       open_time: formatHourMinute(table.open_time),
       close_time: formatHourMinute(table.close_time),
     },
     menus: rows.map((row) => ({
-      ...kartu(row, nowMs),
+      ...mapMenuCard(row, nowMs),
       description: row.description,
       min_order_qty: row.min_order_qty,
       options: optionsByMenu.get(row.id) ?? [],
@@ -238,7 +247,7 @@ export async function createTableOrder(token: string, data: TableOrderInput) {
     if (Number(countRow.n) >= MAX_HOLDING_ORDERS)
       throw conflict("Masih ada pesanan meja ini yang menunggu pembayaran. Selesaikan dulu.");
     // 2. Periksa keranjang seperti checkout, tanpa titik temu, waktu ambil, dan voucher.
-    const nowMs = jam.sekarang();
+    const nowMs = clock.now();
     const today = hariIniWib(new Date(nowMs));
     const cartInput = { ...data, pickup_point_id: 0, promo_code: null, promo_codes: [], pickup_at: null };
     const cart = validateCart(await loadCart(conn, cartInput, { refresh: true, day: today, nowMs }), cartInput, nowMs, {

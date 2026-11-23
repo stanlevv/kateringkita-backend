@@ -14,7 +14,7 @@ import {
 import { AppError } from "../utils/errors";
 import { PRESIGN_SECONDS } from "../utils/r2";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
-import { jam } from "./catalog.service";
+import { clock } from "./catalog.service";
 import { idToko } from "./merchant-menu.service";
 import { validateImageUrl } from "./upload.service";
 import { VoucherKartu, voucherTersedia } from "./voucher.service";
@@ -86,7 +86,7 @@ export type BannerPublik = {
 
 /** Maks 8 banner disetujui dalam periode: admin dulu (sort_order), lalu penjual (terbaru disetujui). */
 export async function bannerPublik(userId: number | null): Promise<BannerPublik[]> {
-  const ms = jam.sekarang();
+  const ms = clock.now();
   const now = new Date(ms);
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${KOLOM} FROM ${DARI} LEFT JOIN users u ON u.id = m.user_id

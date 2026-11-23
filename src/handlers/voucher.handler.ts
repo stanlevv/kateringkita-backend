@@ -2,7 +2,7 @@ import { Request, RequestHandler } from "express";
 import { voucherSayaSchema } from "../dto/voucher.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { jam } from "../services/catalog.service";
+import { clock } from "../services/catalog.service";
 import { klaimVoucher, voucherPlatform, voucherSaya } from "../services/voucher.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
@@ -13,7 +13,7 @@ const pembeli = (req: Request) => {
 };
 
 export const voucherPlatformHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await voucherPlatform(pembeli(req), jam.sekarang()) });
+  res.json({ data: await voucherPlatform(pembeli(req), clock.now()) });
 };
 
 export const klaimVoucherHandler: RequestHandler = async (req, res) => {
