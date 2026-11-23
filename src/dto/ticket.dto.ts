@@ -1,8 +1,13 @@
+// Isi file: daftar kategori dan status tiket bantuan, serta skema zod untuk membuat tiket, membalas, dan query
+// daftar tiket (pembeli dan admin). zod = pustaka yang memeriksa bentuk data masuk; data yang tidak lolos dijawab 400
+// beserta pesan per kolom. Dipakai handlers/ticket.handler.ts dan admin-tiket.service. Nama kunci = kontrak JSON.
 import { z } from "zod";
 
-// Tiket bantuan (CS). Kategori tampil di aplikasi: Akun, Pembayaran, Pesanan, Penjual, Aplikasi, Lainnya.
+/** Kategori tiket, tampil di aplikasi sebagai Akun, Pembayaran, Pesanan, Penjual, Aplikasi, Lainnya. */
 export const TICKET_CATEGORIES = ["akun", "pembayaran", "pesanan", "penjual", "aplikasi", "lainnya"] as const;
-// open = menunggu admin, answered = admin sudah membalas (menunggu pembeli), closed = selesai
+/**
+ * Status tiket: `open` = menunggu admin, `answered` = admin sudah membalas (menunggu pembeli), `closed` = selesai.
+ */
 export const TICKET_STATUSES = ["open", "answered", "closed"] as const;
 
 const CATEGORY_MSG = "Pilih kategori.";
@@ -12,11 +17,15 @@ const REPLY_MSG = "Pesan 1–2000 karakter.";
 const ORDER_MSG = "Pesanan tidak ditemukan.";
 const SEARCH_MSG = "Pencarian maksimal 100 karakter.";
 
+/**
+ * Isi `POST /me/tickets`: `category`, `subject` (judul 3–120 karakter), `message` (pesan pertama 5–2000 karakter),
+ * dan `order_code` opsional. Kode pesanan kosong atau berisi spasi saja dianggap tanpa pesanan; kepemilikan pesanan
+ * dicek di service, dan pesanan milik orang lain dijawab dengan pesan yang sama seperti pesanan yang tidak ada.
+ */
 export const createTicketSchema = z.object({
   category: z.enum(TICKET_CATEGORIES, { error: CATEGORY_MSG }),
   subject: z.string({ error: SUBJECT_MSG }).trim().min(3, SUBJECT_MSG).max(120, SUBJECT_MSG),
   message: z.string({ error: MESSAGE_MSG }).trim().min(5, MESSAGE_MSG).max(2000, MESSAGE_MSG),
-  // opsional: kosong/spasi = tanpa pesanan; kepemilikan dicek di service (bukan milik → pesan yang sama)
   order_code: z
     .string({ error: ORDER_MSG })
     .trim()
@@ -24,14 +33,16 @@ export const createTicketSchema = z.object({
     .nullish()
     .transform((orderCode) => orderCode || null),
 });
+/** Isi tiket baru yang sudah lolos {@link createTicketSchema}. */
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 
-// balasan pembeli & admin
+/** Isi balasan tiket dari pembeli maupun admin: `body` 1–2000 karakter. */
 export const replyTicketSchema = z.object({
   body: z.string({ error: REPLY_MSG }).trim().min(1, REPLY_MSG).max(2000, REPLY_MSG),
 });
 
-// limit 1–50, bawaan 20: nilai tak valid → bawaan, > 50 → 50 (pola halamanSchema katalog & admin)
+// Kolom halaman: `page` mulai 1, `limit` 1–50 dengan bawaan 20. Nilai yang tidak valid memakai bawaan, dan `limit` di
+// atas 50 dipotong menjadi 50 (sama dengan query halaman di katalog dan admin).
 const paginationFields = {
   page: z.coerce.number().int().min(1).catch(1),
   limit: z.coerce
@@ -41,10 +52,15 @@ const paginationFields = {
     .catch(20)
     .transform((limit) => Math.min(limit, 50)),
 };
+/** Query `GET /me/tickets`: hanya `page` dan `limit`. */
 export const listTicketsSchema = z.object(paginationFields);
+/** Query daftar tiket pembeli yang sudah lolos {@link listTicketsSchema}. */
 export type ListTicketsQuery = z.infer<typeof listTicketsSchema>;
 
-// GET /admin/tickets; status kosong (tab "Semua") = tanpa filter
+/**
+ * Query `GET /admin/tickets`: `status` (kosong = tab "Semua", tanpa saringan), `q` (kata cari, maksimal 100 karakter),
+ * `page`, dan `limit`.
+ */
 export const listAdminTicketsSchema = z.object({
   status: z.preprocess(
     (value) => (value === "" ? undefined : value),
@@ -58,4 +74,5 @@ export const listAdminTicketsSchema = z.object({
     .transform((search) => search || undefined),
   ...paginationFields,
 });
+/** Query daftar tiket admin yang sudah lolos {@link listAdminTicketsSchema}. */
 export type ListAdminTicketsQuery = z.infer<typeof listAdminTicketsSchema>;
