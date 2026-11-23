@@ -1,6 +1,11 @@
+// Isi file: skema zod untuk query daftar log server di dasbor server admin super (GET /admin/server-logs). Dipakai
+// handlers/server-log.handler.ts; query yang tidak lolos dijawab 400 beserta pesan per kolom.
 import { z } from "zod";
 
-// F23 filter log server (query string)
+/**
+ * Query daftar log server: `level` `error`/`slow` opsional, `q` kata kunci paling banyak 128 karakter (kosong = tanpa
+ * pencarian), `page` mulai 1 (bawaan 1), `limit` 1–50 (bawaan 20).
+ */
 export const serverLogFilterSchema = z.object({
   level: z.enum(["error", "slow"], { error: "Level tidak dikenal." }).optional(),
   q: z
