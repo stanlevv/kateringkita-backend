@@ -12,7 +12,7 @@ const tanda = (key: string) => {
   };
 };
 
-describe("notifikasiSah", () => {
+describe("isValidNotification", () => {
   afterEach(() => {
     env.MIDTRANS_SERVER_KEY = undefined;
     env.MIDTRANS_SIGNATURE_KEY = undefined;

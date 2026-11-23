@@ -33,7 +33,7 @@ const numberField = (label: string, min: number, max: number) =>
 // Templat pesan WhatsApp: tidak boleh kosong, maksimal 1.000 huruf, dan setiap `{...}` harus kata kunci yang dikenal
 // (lihat WA_PLACEHOLDERS). Kata kunci asing disebut satu kali di pesan galat.
 const waTemplateSchema = z.string({ error: "Templat tidak boleh kosong." }).superRefine((template, context) => {
-  const reportIssue = (message: string) => context.addIssue({ code: "custom", message: message });
+  const reportIssue = (message: string) => context.addIssue({ code: "custom", message });
   // 1. Tolak templat kosong atau lebih dari 1.000 huruf.
   if (template.trim() === "") return reportIssue("Templat tidak boleh kosong.");
   if (template.length > 1000) return reportIssue("Templat maksimal 1.000 karakter.");

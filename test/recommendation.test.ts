@@ -251,7 +251,7 @@ describe("rekomendasi AI pembeli", () => {
   });
 });
 
-test("kataKunci: buang kata umum, angka, dan kata setelah negasi", () => {
+test("extractKeywords: buang kata umum, angka, dan kata setelah negasi", () => {
   expect(extractKeywords("Makan siang 5 orang, TIDAK pedas; nasi-goreng!!")).toEqual(["siang", "nasi", "goreng"]);
   expect(extractKeywords("tanpa daging, ayam ayam ok")).toEqual(["ayam"]);
 });

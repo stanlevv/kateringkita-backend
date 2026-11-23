@@ -15,7 +15,7 @@ const login = async (identifier: string, password: string) => {
 };
 const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-describe("bolehAkses (tingkat admin)", () => {
+describe("canAccess (tingkat admin)", () => {
   test.each([
     ["super", "POST", "/admins", true],
     ["ops", "GET", "/admins", false],

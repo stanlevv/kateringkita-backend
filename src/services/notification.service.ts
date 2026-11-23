@@ -16,7 +16,7 @@ type OrderNotificationFields = { code: string; merchantName: string; reason: str
  * Templat judul dan isi notifikasi untuk pembeli, satu per status tujuan pesanan. Status yang tidak ada di sini
  * (misalnya `holding` dan `completed`) tidak dikirimi notifikasi.
  */
-export const ORDER_NOTIFICATION_TEMPLATE: Partial<
+export const ORDER_NOTIFICATION_TEMPLATES: Partial<
   Record<Status, (details: OrderNotificationFields) => { title: string; body: string }>
 > = {
   confirmed: (details) => ({
@@ -59,7 +59,7 @@ export async function createOrderNotification(
 ): Promise<void> {
   // 1. Pilih templat untuk status tujuan. Pesanan meja dibuat tamu tanpa akun, jadi tidak ada penerima; tamu
   //    memantau status lewat halaman pesanannya.
-  const template = ORDER_NOTIFICATION_TEMPLATE[toStatus];
+  const template = ORDER_NOTIFICATION_TEMPLATES[toStatus];
   if (!template || !order.customer_id) return;
   // 2. Isi templat dengan nama toko, lalu simpan notifikasi bertipe `order_status` untuk pembeli.
   const [[merchant]] = await conn.query<RowDataPacket[]>("SELECT business_name FROM merchants WHERE id = ?", [

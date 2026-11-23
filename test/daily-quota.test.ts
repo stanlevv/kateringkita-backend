@@ -3,7 +3,7 @@ import db from "../src/config/db";
 import { getWibDate, refreshDailyQuota } from "../src/services/merchant-quota.service";
 import { menuRow, prepareMerchants, insertMenu } from "./helpers/merchant";
 
-test("hariIniWib: tanggal di zona Asia/Jakarta (UTC+7)", () => {
+test("getWibDate: tanggal di zona Asia/Jakarta (UTC+7)", () => {
   expect(getWibDate(new Date("2026-10-31T17:30:00Z"))).toBe("2026-11-01");
   expect(getWibDate(new Date("2026-10-31T16:59:59Z"))).toBe("2026-10-31");
 });

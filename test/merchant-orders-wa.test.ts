@@ -45,7 +45,7 @@ test("templat toko dipakai; placeholder asing dibiarkan; nama dengan & # ter-enc
   expect(teks(d.url)).toBe(`Pesanan ${code} siap, Budi & #1. {asing}`);
 });
 
-test("TEMPLAT_BAWAAN sama persis dengan fe/lib/wa-template.ts", () => {
+test("DEFAULT_WA_TEMPLATE sama persis dengan fe/lib/wa-template.ts", () => {
   // monorepo tim memakai fe/, monorepo C:\DIEGO-UATAMA memakai frontend/
   const berkas = ["fe", "frontend"]
     .map((d) => join(__dirname, "../..", d, "lib/wa-template.ts"))

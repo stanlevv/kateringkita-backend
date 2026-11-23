@@ -47,7 +47,7 @@ describe("seed demo (F18)", () => {
     expect(await query("SELECT id FROM menus WHERE image_url IS NOT NULL")).toHaveLength(0);
   });
 
-  test("hostLokal: hanya localhost/127.0.0.1/::1", () => {
+  test("isLocalHost: hanya localhost/127.0.0.1/::1", () => {
     expect(isLocalHost("mysql://root@127.0.0.1:3306/kk")).toBe(true);
     expect(isLocalHost("mysql://root@localhost/kk")).toBe(true);
     expect(isLocalHost("mysql://root@[::1]:3306/kk")).toBe(true);

@@ -39,7 +39,7 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-describe("kadaluarsakan (D1, D4, D5)", () => {
+describe("expireHeldOrders (D1, D4, D5)", () => {
   test("kriteria backlog: lewat waktu → expired, stok kembali, notifikasi; panggilan kedua idempoten", async () => {
     const [a, b, c] = [
       await placeOrder(s.customerToken, s.menu, 2),
@@ -145,7 +145,7 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
   });
 });
 
-describe("mulaiJobKadaluarsa (D2)", () => {
+describe("startExpiryJob (D2)", () => {
   afterEach(() => {
     vi.useRealTimers();
   });

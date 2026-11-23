@@ -7,7 +7,7 @@ import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { releaseStock } from "../src/services/order-stock.service";
 import { menuRow, prepareCheckout, insertMenu } from "./helpers/merchant";
 
-// F06 Task 5: lepasStok untuk F07/F08 (R-01, R-03, R-12, D14)
+// F06 Task 5: releaseStock untuk F07/F08 (R-01, R-03, R-12, D14)
 let s: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const pesan = async (items: { menu_id: number; qty: number }[]) => {

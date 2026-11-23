@@ -161,7 +161,7 @@ test("R-05: harga menu berubah setelah checkout → pesanan tetap harga lama", a
   expect(g.body.data.total).toBe(36000);
 });
 
-test("stok kemarin di-reset lewat segarkanKuota sebelum hold", async () => {
+test("stok kemarin di-reset lewat refreshDailyQuota sebelum hold", async () => {
   await db.query("UPDATE menus SET stock_date = DATE_SUB(stock_date, INTERVAL 1 DAY), held_today = 7 WHERE id = ?", [
     s.menu,
   ]);
