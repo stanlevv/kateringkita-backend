@@ -36,11 +36,11 @@ const removeHit = (bucket: Bucket, key: string) => {
 function getClientIp(req: Request): string | undefined {
   const secret = env.INTERNAL_API_SECRET;
   const sentSecret = req.get("x-internal-secret");
-  const ip = req.get("x-client-ip");
-  if (!secret || !sentSecret || !ip || !isIP(ip)) return req.ip;
+  const forwardedIp = req.get("x-client-ip");
+  if (!secret || !sentSecret || !forwardedIp || !isIP(forwardedIp)) return req.ip;
   const secretBuffer = Buffer.from(secret);
   const sentBuffer = Buffer.from(sentSecret);
-  return secretBuffer.length === sentBuffer.length && timingSafeEqual(secretBuffer, sentBuffer) ? ip : req.ip;
+  return secretBuffer.length === sentBuffer.length && timingSafeEqual(secretBuffer, sentBuffer) ? forwardedIp : req.ip;
 }
 
 export const loginLimiter: RequestHandler & { reset: () => void } = Object.assign(

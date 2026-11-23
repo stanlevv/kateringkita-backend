@@ -10,7 +10,7 @@ export const fieldsFromIssues = (issues: readonly z.core.$ZodIssue[], rootKey = 
 };
 
 // Parse atau lempar 400 VALIDATION_ERROR dengan fields.
-export const parse = <T extends z.ZodType>(schema: T, body: unknown, rootKey = ""): z.output<T> => {
+export const parse = <Schema extends z.ZodType>(schema: Schema, body: unknown, rootKey = ""): z.output<Schema> => {
   const result = schema.safeParse(body);
   if (!result.success)
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fieldsFromIssues(result.error.issues, rootKey));

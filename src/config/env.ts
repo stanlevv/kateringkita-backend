@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // "" di .env = tidak diisi
-const optional = <T extends z.ZodType>(fieldSchema: T) =>
+const optional = <Schema extends z.ZodType>(fieldSchema: Schema) =>
   z.preprocess((value) => (value === "" ? undefined : value), fieldSchema.optional());
 
 // format durasi jsonwebtoken, mis. "15m", "1d"

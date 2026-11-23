@@ -64,7 +64,7 @@ export function presignSigV4Url(request: {
     request.method,
     path,
     query,
-    headerNames.map((n) => `${n}:${headers[n]}\n`).join(""),
+    headerNames.map((headerName) => `${headerName}:${headers[headerName]}\n`).join(""),
     signedHeaders,
     "UNSIGNED-PAYLOAD",
   ].join("\n");
