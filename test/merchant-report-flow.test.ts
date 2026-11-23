@@ -1,3 +1,7 @@
+// Isi file: test laporan toko (GET /merchant/reports/summary, hourly, transactions) dari alur pesanan sungguhan:
+// pesanan dibuat lewat checkout dan diselesaikan penjual lewat API (konfirmasi, masak, siap, selesai), lalu angka
+// laporannya dicek. Bedanya dengan merchant-reports.test.ts: file itu mengatur status dan waktu pesanan langsung lewat
+// SQL untuk menguji kasus tepi (batas hari WIB, salinan harga, kunci baris, validasi query) secara rinci.
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
@@ -6,7 +10,6 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// Laporan toko dari alur pesanan sungguhan: GET /merchant/reports/{summary,hourly,transactions}
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let kode: string;
 const hariIni = getWibDate();

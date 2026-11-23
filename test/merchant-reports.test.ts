@@ -1,3 +1,7 @@
+// Isi file: test rinci laporan toko /merchant/reports/*: angka ringkasan, batas hari WIB, kunci baris transaksi, dan
+// validasi query. Status dan waktu selesai pesanan diatur langsung lewat SQL supaya kasus tepi bisa dibuat tepat.
+// Bedanya dengan merchant-report-flow.test.ts: file itu memakai alur pesanan sungguhan lewat API dari checkout sampai
+// selesai, untuk memastikan laporan cocok dengan alur nyata.
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
@@ -7,7 +11,6 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { toUtcRange } from "../src/services/merchant-report.service";
 import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
-// Laporan toko /merchant/reports/*: angka ringkasan, batas hari WIB, kunci baris transaksi, dan validasi query
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const codes: Record<string, string> = {};
 
