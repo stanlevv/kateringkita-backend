@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { menuRow, createCustomer, prepareCheckout } from "./helpers/merchant";
 
-// F06 Task 4: idempotensi & checkout paralel tanpa oversell (R-02, BE-03, D4, D6, D11)
+// Idempotensi & checkout paralel tanpa oversell
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const pesan = (token: string, key: string, item: Record<string, unknown> = {}) =>
@@ -24,7 +24,7 @@ beforeEach(async () => {
   setup = await prepareCheckout();
 });
 
-describe("tanpa oversell (R-02)", () => {
+describe("tanpa oversell", () => {
   test("sisa 1, 2 pembeli paralel → tepat 1 sukses", async () => {
     await kuota(1);
     const lain = await createCustomer(1);
@@ -47,7 +47,7 @@ describe("tanpa oversell (R-02)", () => {
     expect(await count("SELECT SUM(qty) n FROM order_items")).toBe(3);
   });
 
-  test("D11: 1 pembeli, 5 kunci berbeda paralel → tepat 3 sukses, sisanya CONFLICT batas", async () => {
+  test("1 pembeli, 5 kunci berbeda paralel → tepat 3 sukses, sisanya CONFLICT batas", async () => {
     const responses = await Promise.all(Array.from({ length: 5 }, () => pesan(setup.customerToken, randomUUID())));
     expect(status(responses)).toEqual([201, 201, 201, 409, 409]);
     for (const res of responses.filter((response) => response.status === 409)) {
@@ -61,7 +61,7 @@ describe("tanpa oversell (R-02)", () => {
   });
 });
 
-describe("idempotensi (D6)", () => {
+describe("idempotensi", () => {
   test("kunci sama, 3 paralel → 1 pesanan, kode sama, stok ditahan sekali", async () => {
     const idempotencyKey = randomUUID();
     const responses = await Promise.all([1, 2, 3].map(() => pesan(setup.customerToken, idempotencyKey, { qty: 2 })));

@@ -5,7 +5,7 @@ import { createAdmin } from "../src/scripts/create-admin";
 import { isLocalHost, run } from "../src/scripts/seed-demo";
 import { resetTestDatabase } from "./helpers/db";
 
-describe("seed demo (F18)", () => {
+describe("seed demo", () => {
   let url: string;
   const query = async (sql: string) => {
     const conn = await mysql.createConnection(url);
@@ -22,10 +22,10 @@ describe("seed demo (F18)", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await run({ NODE_ENV: "production", DEMO_PASSWORD: "rahasia123" })).toBe(1);
     expect(await run({})).toBe(1);
-    // sandi lemah ditolak dengan aturan sandi yang sama dengan registrasi (review akhir A2)
+    // sandi lemah ditolak dengan aturan sandi yang sama dengan registrasi
     expect(await run({ DEMO_PASSWORD: "lemah" })).toBe(1);
     expect(await run({ DEMO_PASSWORD: "hanyahuruf" })).toBe(1);
-    // DB bukan lokal ditolak kecuali --paksa (review akhir A2)
+    // DB bukan lokal ditolak kecuali --paksa
     expect(await run({ DEMO_PASSWORD: "rahasia123", DATABASE_URL: "mysql://u:p@db.contoh.com:4000/kk" })).toBe(1);
     err.mockRestore();
     expect(await query("SELECT id FROM merchants")).toHaveLength(0);
@@ -43,7 +43,7 @@ describe("seed demo (F18)", () => {
     expect(rows[3].r).toBeTruthy();
     expect(await query("SELECT id FROM admin_audit_logs")).toHaveLength(0);
     expect(await query("SELECT id FROM menus WHERE image_url IS NULL")).not.toHaveLength(0);
-    // tanpa nama berkas palsu: menu demo tidak punya foto (review akhir A2)
+    // tanpa nama berkas palsu: menu demo tidak punya foto
     expect(await query("SELECT id FROM menus WHERE image_url IS NOT NULL")).toHaveLength(0);
   });
 

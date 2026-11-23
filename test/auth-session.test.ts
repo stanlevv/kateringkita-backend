@@ -125,7 +125,7 @@ test("/me merchant: tidak ada password_hash di mana pun dalam body", async () =>
   expect(JSON.stringify(res.body)).not.toContain("password_hash");
 });
 
-// AUD-29: login yang sudah lolos bcrypt.compare dengan sandi lama tidak boleh mendapat sesi setelah sandi diganti
+// Sandi diganti saat login berjalan: login yang sudah lolos bcrypt.compare dengan sandi lama tidak boleh mendapat sesi setelah sandi diganti
 test("login yang dijeda setelah compare, lalu sandi diganti → login itu 401", async () => {
   const asli = bcrypt.compare.bind(bcrypt) as (plain: string, hash: string) => Promise<boolean>;
   let lepas!: () => void;

@@ -4,7 +4,7 @@ import { migrate } from "../src/scripts/migrate";
 import { createAdmin, run } from "../src/scripts/create-admin";
 import { resetTestDatabase } from "./helpers/db";
 
-describe("admin:create (A-05)", () => {
+describe("admin:create", () => {
   let url: string;
   beforeAll(async () => {
     url = await resetTestDatabase();

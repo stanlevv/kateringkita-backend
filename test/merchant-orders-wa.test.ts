@@ -7,7 +7,7 @@ import db from "../src/config/db";
 import { DEFAULT_WA_TEMPLATE } from "../src/services/merchant-order.service";
 import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F07 Task 5: GET /merchant/orders/:code/whatsapp memakai templat toko (M-04, M-11; D17)
+// GET /merchant/orders/:code/whatsapp memakai templat toko
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let code: string;
 

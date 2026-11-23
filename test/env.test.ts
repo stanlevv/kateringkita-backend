@@ -44,7 +44,7 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...valid, NODE_ENV: "production" })).toThrow(/CORS_ORIGIN/);
   });
 
-  test("R2_* semua-atau-tidak (D13)", () => {
+  test("R2_* semua-atau-tidak", () => {
     const r2Env = {
       R2_ACCOUNT_ID: "acc",
       R2_ACCESS_KEY_ID: "id",
@@ -64,7 +64,7 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...valid, ...r2Env, R2_PUBLIC_URL: "http://foto.test" })).toThrow(/R2_PUBLIC_URL/);
   });
 
-  test("SMTP_* semua-atau-tidak (F11)", () => {
+  test("SMTP_* semua-atau-tidak", () => {
     const smtp = {
       SMTP_HOST: "smtp.test",
       SMTP_PORT: "465",

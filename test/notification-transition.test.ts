@@ -7,7 +7,7 @@ import { withTransaction } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F08 Task 1: notifikasi status pesanan di dalam transaksi transisi (C-21, R-10; D8, D10–D12)
+// Notifikasi status pesanan dibuat di dalam transaksi transisi
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let penjual: Actor;
 let penjualB: Actor;
@@ -54,7 +54,7 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-describe("notifikasi untuk pembeli (D8, D12)", () => {
+describe("notifikasi untuk pembeli", () => {
   test("confirm → cook → ready → complete: tepat 3 notifikasi, complete tanpa notifikasi", async () => {
     const code = await siap();
     for (const action of ["confirm", "cook", "ready", "complete"] as OrderAction[]) await jalan(code, action, penjual);
@@ -112,7 +112,7 @@ describe("notifikasi untuk pembeli (D8, D12)", () => {
     expect(await notif()).toEqual([]);
   });
 
-  test("transisi gagal → tanpa notifikasi (D10)", async () => {
+  test("transisi gagal → tanpa notifikasi", async () => {
     const code = await siap();
     await expect(jalan(code, "cook", penjual)).rejects.toMatchObject({ status: 409 });
     await expect(jalan(code, "confirm", penjualB)).rejects.toMatchObject({ status: 404 });
@@ -121,7 +121,7 @@ describe("notifikasi untuk pembeli (D8, D12)", () => {
     expect(await notif()).toEqual([]);
   });
 
-  test("tanpa data pembeli; penjual tidak menerima notifikasi (D9)", async () => {
+  test("tanpa data pembeli; penjual tidak menerima notifikasi", async () => {
     const code = await siap();
     await jalan(code, "confirm", penjual);
     const code2 = await siap();
@@ -133,8 +133,8 @@ describe("notifikasi untuk pembeli (D8, D12)", () => {
   });
 });
 
-// D11: urutan kunci users → orders untuk semua aktor; tanpa itu INSERT notifikasi (FK users) membentuk siklus dengan checkout/batal pembeli
-describe("balapan tanpa deadlock (D11)", () => {
+// Urutan kunci users → orders untuk semua aktor; tanpa itu INSERT notifikasi (FK users) membentuk siklus dengan checkout/batal pembeli
+describe("balapan tanpa deadlock", () => {
   test("tolak penjual paralel dengan checkout pembeli yang sama, 5 putaran → tanpa 500", async () => {
     let ditolak = 0;
     for (let i = 0; i < 5; i++) {

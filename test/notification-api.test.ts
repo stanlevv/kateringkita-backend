@@ -7,7 +7,7 @@ import { withTransaction } from "../src/services/admin-audit.service";
 import { transitionOrder } from "../src/services/order-status.service";
 import { createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F08 Task 3: GET /me/notifications & POST /me/notifications/read (C-21, R-10; D13, D14)
+// GET /me/notifications & POST /me/notifications/read
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let tAni: string;
 let budi: number;
@@ -64,7 +64,7 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-describe("GET /me/notifications (D13)", () => {
+describe("GET /me/notifications", () => {
   test("milik sendiri, terbaru dulu, bentuk & meta", async () => {
     const res = await get().expect(200);
     expect(res.body.data.map((notification: any) => notification.title)).toEqual(["Tiga", "Dua", "Satu"]);
@@ -113,7 +113,7 @@ describe("GET /me/notifications (D13)", () => {
     expect(res.body.meta).toEqual({ page: 2, limit: 1, total: 3, unread_count: 2 });
   });
 
-  test("filter type (tab Pesanan/Promo/Info), bisa digabung unread; total ikut filter, unread_count tetap semua (D13)", async () => {
+  test("filter type (tab Pesanan/Promo/Info), bisa digabung unread; total ikut filter, unread_count tetap semua", async () => {
     const promo = await sisip(budi, "Promo", "2026-01-01 05:00:00", null, "promo");
     await sisip(budi, "Promo lama", "2026-01-01 00:30:00", DIBACA, "promo");
     await sisip(budi, "Info", "2026-01-01 06:00:00", null, "info");
@@ -177,7 +177,7 @@ describe("GET /me/notifications (D13)", () => {
   });
 });
 
-describe("POST /me/notifications/read (D14)", () => {
+describe("POST /me/notifications/read", () => {
   test("ids: milik orang lain/tak dikenal diabaikan", async () => {
     const res = await tandai({ ids: [ids.b1, ids.a1, 999999] }).expect(200);
     expect(res.body).toEqual({ data: { unread_count: 1 } });

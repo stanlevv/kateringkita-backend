@@ -7,7 +7,7 @@ import { transitionOrder } from "../src/services/order-status.service";
 import { expireHeldOrders, startExpiryJob, SYSTEM_ACTOR } from "../src/services/order-expiry.service";
 import { freezeClock, menuRow, placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
-// F08 Task 2: job kadaluarsa holding (R-03, X-04, C-21; D2–D7)
+// Job kadaluarsa pesanan holding yang belum dibayar
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let budi: number;
 let menuB: number;
@@ -40,7 +40,7 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-describe("expireHeldOrders (D1, D4, D5)", () => {
+describe("expireHeldOrders", () => {
   test("kriteria backlog: lewat waktu → expired, stok kembali, notifikasi; panggilan kedua idempoten", async () => {
     const [firstCode, secondCode, thirdCode] = [
       await placeOrder(setup.customerToken, setup.menu, 2),
@@ -115,7 +115,7 @@ describe("expireHeldOrders (D1, D4, D5)", () => {
     expect(err).not.toHaveBeenCalled();
   });
 
-  test("dua sapuan paralel → tiap pesanan expired tepat sekali (D3)", async () => {
+  test("dua sapuan paralel → tiap pesanan expired tepat sekali", async () => {
     const codes = [
       await placeOrder(setup.customerToken, setup.menu, 2),
       await placeOrder(setup.customerToken, setup.menu, 2),
@@ -146,7 +146,7 @@ describe("expireHeldOrders (D1, D4, D5)", () => {
   });
 });
 
-describe("startExpiryJob (D2)", () => {
+describe("startExpiryJob", () => {
   afterEach(() => {
     vi.useRealTimers();
   });

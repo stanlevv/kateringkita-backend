@@ -6,7 +6,7 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { createCustomer, prepareCheckout } from "./helpers/merchant";
 
-// F06 Task 6: GET /orders/:code/whatsapp (C-13, D15)
+// GET /orders/:code/whatsapp: tautan WhatsApp pembeli ke toko
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const pesan = async (overrides: Record<string, unknown> = {}) => {

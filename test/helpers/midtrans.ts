@@ -4,7 +4,7 @@ import { vi } from "vitest";
 import app from "../../src/app";
 
 // Notifikasi Midtrans bertanda tangan sama dengan Midtrans: SHA512(order_id + status_code + gross_amount + key).
-// AUD-23: server memeriksa ulang lewat Get Status. `honest` = Get Status menjawab isi notifikasi yang sama;
+// Cek ulang pembayaran: server memeriksa ulang lewat Get Status. `honest` = Get Status menjawab isi notifikasi yang sama;
 // panggilan fetch lain diteruskan ke stub sebelumnya.
 export function sendNotification(notification: Record<string, string>, key: string, honest = true) {
   if (honest) {

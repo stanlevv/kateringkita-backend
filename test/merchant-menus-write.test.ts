@@ -36,7 +36,7 @@ afterEach(() => {
   setR2Env(false);
 });
 
-test("POST valid lengkap → 201 bentuk D3, kuota hari ini = harian, teks dirapikan", async () => {
+test("POST valid lengkap → 201 bentuk respons menu, kuota hari ini = harian, teks dirapikan", async () => {
   const foto = photoUrl(`merchants/${idA}/menu/`, "webp");
   const res = await post({
     ...dasar(),
@@ -183,7 +183,7 @@ test("PATCH sebagian: antar-field dibanding nilai tersimpan; kuota harian tidak 
   });
 });
 
-test("opsi D8: sinkron berdasarkan nama, id dipertahankan, yang hilang dinonaktifkan", async () => {
+test("opsi: sinkron berdasarkan nama, id dipertahankan, yang hilang dinonaktifkan", async () => {
   const id = await insertMenu(idA);
   await db.query("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Keju', 1000), (?, 'Sambal', 0)", [
     id,
@@ -227,7 +227,7 @@ test("data lama: foto bukan R2 & kategori nonaktif yang sama dengan tersimpan di
   expect((await patch(id, { image_url: "" }).expect(200)).body.data.image_url).toBeNull();
 });
 
-test("BE-01: penjual B PATCH menu A → 404, menu A utuh; id aneh → 404", async () => {
+test("penjual B PATCH menu A → 404, menu A utuh; id aneh → 404", async () => {
   const id = await insertMenu(idA);
   const before = await menuRow(id);
   const res = await patch(id, { name: "Dibajak", price: 50000 }, tokenB).expect(404);
@@ -240,7 +240,7 @@ test("BE-01: penjual B PATCH menu A → 404, menu A utuh; id aneh → 404", asyn
     .expect(404);
 });
 
-test("ubah menu menggeser updated_at (checklist F18)", async () => {
+test("ubah menu menggeser updated_at (checklist toko di panel admin)", async () => {
   const id = await insertMenu(idA, { updated_at: "2026-01-01 00:00:00" });
   await patch(id, { name: "Ganti" }).expect(200);
   expect((await menuRow(id)).updated_at.toISOString()).not.toBe("2026-01-01T00:00:00.000Z");

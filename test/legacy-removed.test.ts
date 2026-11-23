@@ -13,7 +13,7 @@ test("endpoint auth lama /api/auth/login sudah dihapus → 404", async () => {
   expect(res.status).toBe(404);
 });
 
-test("router menu lama /api/menus sudah dihapus → 404 (F04 D17)", async () => {
+test("router menu lama /api/menus sudah dihapus → 404", async () => {
   expect((await request(app).get("/api/menus")).status).toBe(404);
   expect((await request(app).delete("/api/menus/1").set("Authorization", "Bearer x")).status).toBe(404);
 });

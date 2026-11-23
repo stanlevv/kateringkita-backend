@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
-// F07 Task 3: GET /merchant/orders & /merchant/orders/:code (M-04, R-10, R-11; D9, D11–D13)
+// GET /merchant/orders & /merchant/orders/:code
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const codes: Record<string, string> = {};
 

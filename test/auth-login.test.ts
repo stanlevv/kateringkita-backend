@@ -106,22 +106,19 @@ test("6× salah → percobaan ke-6 429; identifier lain tetap 401", async () => 
   expect(other.status).toBe(401);
 });
 
-test("F01-SEC-1: email beraksen dengan password benar → 401 generik, bukan 200", async () => {
+test("email beraksen dengan password benar → 401 generik, bukan 200", async () => {
   const res = await login({ identifier: "búdi@màil.cóm", password: "rahasia123", client: "web" });
   expect(res.status).toBe(401);
   expect(res.body.error.message).toBe(GENERIC);
 });
 
-test.each([["\u0001"], ["\u007f"]])(
-  "F01-SEC-1: karakter kontrol %j di email dengan password benar → 401",
-  async (controlChar) => {
-    const res = await login({ identifier: `bu${controlChar}di@mail.com`, password: "rahasia123", client: "web" });
-    expect(res.status).toBe(401);
-    expect(res.body.error.message).toBe(GENERIC);
-  },
-);
+test.each([["\u0001"], ["\u007f"]])("karakter kontrol %j di email dengan password benar → 401", async (controlChar) => {
+  const res = await login({ identifier: `bu${controlChar}di@mail.com`, password: "rahasia123", client: "web" });
+  expect(res.status).toBe(401);
+  expect(res.body.error.message).toBe(GENERIC);
+});
 
-test("F01-SEC-1: varian aksen memakai bucket limiter yang sama → 429", async () => {
+test("varian aksen memakai bucket limiter yang sama → 429", async () => {
   for (let i = 0; i < 5; i++) {
     expect((await login({ identifier: "budi@mail.com", password: "salah12345", client: "web" })).status).toBe(401);
   }
@@ -135,12 +132,12 @@ test("identifier 300 karakter → 400 VALIDATION_ERROR", async () => {
   expect(res.body.error.code).toBe("VALIDATION_ERROR");
 });
 
-test("F01-SEC-2: login berhasil tidak memakan jatah (5 berhasil lalu salah → 401)", async () => {
+test("login berhasil tidak memakan jatah (5 berhasil lalu salah → 401)", async () => {
   for (let i = 0; i < 5; i++) expect((await login(benar)).status).toBe(200);
   expect((await login(salah)).status).toBe(401);
 });
 
-test("F01-SEC-2: X-Client-IP dipercaya hanya bila secret cocok; bucket per IP klien", async () => {
+test("X-Client-IP dipercaya hanya bila secret cocok; bucket per IP klien", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
     for (let i = 0; i < 5; i++) expect((await loginDari("203.0.113.1", salah)).status).toBe(401);
@@ -151,7 +148,7 @@ test("F01-SEC-2: X-Client-IP dipercaya hanya bila secret cocok; bucket per IP kl
   }
 });
 
-test("F01-SEC-2: X-Client-IP diabaikan bila secret salah/kosong/tak dikonfigurasi", async () => {
+test("X-Client-IP diabaikan bila secret salah/kosong/tak dikonfigurasi", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
     for (const secret of ["salah-salah-salah-salah-salah-salah-1", "x".repeat(SECRET.length), "pendek", null]) {
@@ -168,7 +165,7 @@ test("F01-SEC-2: X-Client-IP diabaikan bila secret salah/kosong/tak dikonfiguras
   }
 });
 
-test("F01-SEC-2: 10 gagal dari 10 IP → IP baru 429 walau sandi benar; varian aksen ikut", async () => {
+test("10 gagal dari 10 IP → IP baru 429 walau sandi benar; varian aksen ikut", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
     for (let i = 0; i < 10; i++) expect((await loginDari(`198.51.100.${i + 1}`, salah)).status).toBe(401);
@@ -179,7 +176,7 @@ test("F01-SEC-2: 10 gagal dari 10 IP → IP baru 429 walau sandi benar; varian a
   }
 });
 
-test("F01-SEC-2: 8 login salah paralel dari satu IP → tepat 5×401, sisanya 429", async () => {
+test("8 login salah paralel dari satu IP → tepat 5×401, sisanya 429", async () => {
   const responses = await Promise.all(Array.from({ length: 8 }, () => login(salah)));
   expect(responses.filter((res) => res.status === 401)).toHaveLength(5);
   expect(responses.filter((res) => res.status === 429)).toHaveLength(3);

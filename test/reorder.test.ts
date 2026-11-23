@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { createCustomer, prepareCheckout } from "./helpers/merchant";
 
-// F14: POST /orders/:code/reorder
+// POST /orders/:code/reorder: pesan lagi isi pesanan lama
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let kode: string;
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });

@@ -7,7 +7,7 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { codeGenerator } from "../src/services/order.service";
 import { menuRow, createCustomer, prepareCheckout, makeVisible } from "./helpers/merchant";
 
-// F06 Task 3: POST /orders tunai + GET /orders/:code (C-09, C-11, R-02, R-05, R-06, D3–D9, D11, D12, D16)
+// POST /orders tunai + GET /orders/:code
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const KUNCI_ORDER = [
@@ -155,7 +155,7 @@ test("DB: salinan pesanan, item, log status, held_today naik; nama dari body", a
   expect(order3).toEqual({ customer_name: "Budi", customer_phone: "081234567890" });
 });
 
-test("R-05: harga menu berubah setelah checkout → pesanan tetap harga lama", async () => {
+test("harga menu berubah setelah checkout → pesanan tetap harga lama", async () => {
   const res = await pesan(isi()).expect(201);
   await db.query("UPDATE menus SET price = 50000, name = 'Ganti' WHERE id = ?", [setup.menu]);
   const detailRes = await baca(res.body.data.code).expect(200);
@@ -199,7 +199,7 @@ test("OUT_OF_STOCK: 409 dengan sisa per baris, tidak ada pesanan, held_today tet
 });
 
 describe("validasi", () => {
-  test("payment_method selain cod/va/online (termasuk qris, dihapus F26) / tidak ada → 400", async () => {
+  test("payment_method selain cod/va/online (termasuk qris yang sudah dihapus) / tidak ada → 400", async () => {
     for (const paymentMethod of ["transfer", "tunai", "qris", undefined]) {
       const res = await pesan(isi({ payment_method: paymentMethod })).expect(400);
       expect(res.body.error.fields.payment_method).toEqual(["Pilih bayar tunai, Virtual Account, atau bayar online."]);
@@ -219,7 +219,7 @@ describe("validasi", () => {
     expect(await hitung("orders")).toBe(0);
   });
 
-  test("R-14 / tutup lewat POST /orders → 409, tanpa baris tertinggal", async () => {
+  test("toko tidak tersedia / tutup lewat POST /orders → 409, tanpa baris tertinggal", async () => {
     await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [setup.idA]);
     expect((await pesan(isi()).expect(409)).body.error.code).toBe("MERCHANT_UNAVAILABLE");
     await makeVisible(setup.idA, { open: false });
@@ -229,7 +229,7 @@ describe("validasi", () => {
   });
 });
 
-test("D11: 3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async () => {
+test("3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async () => {
   for (let i = 0; i < 3; i++) await pesan(isi({}, { qty: 1 })).expect(201);
   const idempotencyKey = randomUUID();
   const res = await pesan(isi({}, { qty: 1 }), idempotencyKey).expect(409);
@@ -241,7 +241,7 @@ test("D11: 3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async ()
   await pesan(isi({}, { qty: 1 }), idempotencyKey).expect(201);
 });
 
-test("D7: kode bentrok → buat ulang; selalu bentrok → 500 tanpa sisa", async () => {
+test("kode bentrok → buat ulang; selalu bentrok → 500 tanpa sisa", async () => {
   const hari = getWibDate().replace(/-/g, "");
   vi.spyOn(codeGenerator, "random").mockReturnValueOnce("AAAA").mockReturnValueOnce("AAAA").mockReturnValueOnce("BBBB");
   expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-AAAA`);
@@ -262,7 +262,7 @@ test("pickup_at ikut di Order (ISO UTC)", async () => {
 });
 
 // Injeksi galat memakai CREATE TRIGGER; TiDB tidak punya trigger, jadi blok ini hanya jalan di MySQL
-describe.skipIf(process.env.DATABASE_URL?.includes("tidbcloud.com"))("galat di tengah transaksi (D6, D7)", () => {
+describe.skipIf(process.env.DATABASE_URL?.includes("tidbcloud.com"))("galat di tengah transaksi", () => {
   afterEach(async () => {
     await db.query("DROP TRIGGER IF EXISTS uji_gagal");
   });

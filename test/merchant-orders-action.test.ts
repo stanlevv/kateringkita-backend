@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { menuRow, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F07 Task 4: POST /merchant/orders/:code/:aksi + balapan (M-04, M-08; D1, D4–D8)
+// POST /merchant/orders/:code/:aksi + balapan antar aksi
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const aksi = (code: string, action: string, body?: unknown, token = setup.tokenA) => {
@@ -89,7 +89,7 @@ describe("body diabaikan selain reject (review)", () => {
   });
 });
 
-describe("reject (D8)", () => {
+describe("reject", () => {
   test("tanpa alasan / spasi → 400, status tetap", async () => {
     const code = await placeOrder(setup.customerToken, setup.menu);
     for (const body of [undefined, {}, { reason: "  " }]) {
@@ -137,8 +137,8 @@ describe("kepemilikan", () => {
   });
 });
 
-describe("balapan (D5, D6)", () => {
-  // Pesanan online lunas: tunai yang sudah dikonfirmasi masih boleh dibatalkan pembeli (D1), jadi pada tunai keduanya bisa 200
+describe("balapan", () => {
+  // Pesanan online lunas: tunai yang sudah dikonfirmasi masih boleh dibatalkan pembeli, jadi pada tunai keduanya bisa 200
   // secara berurutan. Online lunas membuat kedua urutan saling meniadakan → tepat satu 200.
   test.each([1, 2, 3])("putaran %i: konfirmasi penjual vs batal pembeli → tepat satu 200", async () => {
     const code = await placeOrder(setup.customerToken, setup.menu, 2);

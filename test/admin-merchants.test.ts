@@ -260,7 +260,7 @@ test("/me penjual ditangguhkan mengembalikan suspended_reason", async () => {
   expect(profile.merchant).toMatchObject({ verification_status: "suspended", suspended_reason: "Menu palsu" });
 });
 
-test("close-today hanya dari verified; sudah tutup → 200 tanpa log & tanpa ubah updated_at (review akhir A4)", async () => {
+test("close-today hanya dari verified; sudah tutup → 200 tanpa log & tanpa ubah updated_at", async () => {
   const logCountBefore = await logCount();
   const andi = await merchantRow(andiId);
   await post(`/merchants/${andiId}/close-today`).expect(409);
@@ -274,12 +274,12 @@ test("close-today hanya dari verified; sudah tutup → 200 tanpa log & tanpa uba
   expect(await logCount()).toBe(logCountBefore);
 });
 
-test("id tidak valid pada aksi beralasan → 404 walau body kosong (review akhir A5)", async () => {
+test("id tidak valid pada aksi beralasan → 404 walau body kosong", async () => {
   await post("/merchants/abc/request-fix").expect(404);
   await post("/merchants/0/suspend").expect(404);
 });
 
-test("catat gagal setelah UPDATE → baris penjual tidak berubah (rollback) (review akhir A6)", async () => {
+test("catat gagal setelah UPDATE → baris penjual tidak berubah (rollback)", async () => {
   const logCountBefore = await logCount();
   const before = await merchantRow(andiId);
   const err = vi.spyOn(console, "error").mockImplementation(() => {});

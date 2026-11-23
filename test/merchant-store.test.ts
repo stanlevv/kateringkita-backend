@@ -61,7 +61,7 @@ test("role: tanpa token 401, pembeli & admin 403", async () => {
   expect((await patch("/status", { is_open: false }, adminToken)).status).toBe(403);
 });
 
-test("GET /merchant/profile: bentuk D3 milik penjual sendiri", async () => {
+test("GET /merchant/profile: bentuk respons profil milik penjual sendiri", async () => {
   const res = await get("/profile", tokenA).expect(200);
   expect(Object.keys(res.body.data).sort()).toEqual([
     "address",
@@ -108,7 +108,7 @@ test("PATCH /merchant/status", async () => {
   expect(bad.body.error.fields.is_open).toBeDefined();
 });
 
-test("D9: toggle status tidak menggeser updated_at", async () => {
+test("toggle status tidak menggeser updated_at", async () => {
   await db.query("UPDATE merchants SET updated_at = '2026-01-01 00:00:00' WHERE id = ?", [idA]);
   await patch("/status", { is_open: false }, tokenA).expect(200);
   const [rows] = await db.query<any[]>(

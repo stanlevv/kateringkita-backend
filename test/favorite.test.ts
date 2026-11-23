@@ -57,7 +57,7 @@ test("PUT idempoten 204, GET kartu is_favorite true, DELETE idempoten", async ()
   expect(bad.body.error.message).toBe("Menu tidak ditemukan.");
 });
 
-test("D14: is_favorite di katalog; token rusak/logout/penjual tidak 401", async () => {
+test("is_favorite di katalog; token rusak/logout/penjual tidak 401", async () => {
   await api("put", `/me/favorites/${menuA1}`, customerToken).expect(204);
   const fav = async (token?: string) => {
     const daftar = (await api("get", "/menus", token).expect(200)).body.data;
@@ -80,7 +80,7 @@ test("D14: is_favorite di katalog; token rusak/logout/penjual tidak 401", async 
   expect(await fav(customerToken)).toEqual(mati);
 });
 
-test("D14: galat DB saat membaca sesi, akun nonaktif, sesi kedaluwarsa → katalog 200 sebagai tamu", async () => {
+test("galat DB saat membaca sesi, akun nonaktif, sesi kedaluwarsa → katalog 200 sebagai tamu", async () => {
   await api("put", `/me/favorites/${menuA1}`, customerToken).expect(204);
   const favA1 = async () =>
     (await api("get", "/menus", customerToken).expect(200)).body.data.find((menu: any) => menu.id === menuA1)
@@ -118,7 +118,7 @@ test("PUT: menu tersembunyi/id tidak valid 404, toko tutup 204", async () => {
   expect(await jumlahBaris()).toBe(1);
 });
 
-test("D13: hanya menu tampil, terbaru dulu, toko tutup & habis tetap ada, paginated", async () => {
+test("hanya menu tampil, terbaru dulu, toko tutup & habis tetap ada, paginated", async () => {
   for (const [id, favoritedAt] of [
     [menuA1, "2026-01-01 00:00:00"],
     [menuA2, "2026-01-02 00:00:00"],

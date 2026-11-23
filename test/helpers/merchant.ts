@@ -91,7 +91,7 @@ export const photoUrl = (prefix: string, extension = "png") =>
 // "Sekarang" katalog dibekukan 10:00 WIB hari ini agar test tidak bergantung jam nyata (stok tetap tanggal hari ini)
 export const freezeClock = () => vi.spyOn(clock, "now").mockReturnValue(Date.parse(`${getWibDate()}T10:00:00+07:00`));
 
-// Toko lolos R-14 (verified) dan buka 07:00–16:00, atau tutup karena jam 11:00–12:00 (relatif ke freezeClock)
+// Toko lolos syarat tampil (verified, pemilik aktif) dan buka 07:00–16:00, atau tutup karena jam 11:00–12:00 (relatif ke freezeClock)
 export async function makeVisible(merchantId: number, { open = true } = {}) {
   await db.query(
     "UPDATE merchants SET verification_status = 'verified', is_open = TRUE, open_time = ?, close_time = ? WHERE id = ?",
@@ -99,7 +99,7 @@ export async function makeVisible(merchantId: number, { open = true } = {}) {
   );
 }
 
-// Kunci yang tidak boleh ada di respons publik (R-11, BE-02)
+// Kunci yang tidak boleh ada di respons publik (angka internal toko dan data pribadi)
 export const PRIVATE_KEYS = [
   '"hpp"',
   '"margin"',
@@ -122,7 +122,7 @@ export async function createCustomer(i: number): Promise<string> {
   return login(email);
 }
 
-// F06: toko A tampil & buka (jam dibekukan 10:00 WIB), titik temu 1 dilayani A,
+// Data checkout: toko A tampil & buka (jam dibekukan 10:00 WIB), titik temu 1 dilayani A,
 // menu Nasi Ayam 15000 (kuota 20, opsi Keju 3000 aktif + Basi nonaktif) dan Es Teh 5000
 export async function prepareCheckout() {
   freezeClock();
@@ -142,7 +142,7 @@ export async function prepareCheckout() {
   return { ...merchants, menu, menu2, keju: cheeseOption.insertId as number, basi: inactiveOption.insertId as number };
 }
 
-// F07: pesanan tunai lewat POST /orders (kunci idempotensi baru) → kode
+// Pesanan tunai lewat POST /orders (kunci idempotensi baru) → kode
 export async function placeOrder(token: string, menuId: number, qty = 1): Promise<string> {
   const res = await request(app)
     .post("/api/v1/orders")

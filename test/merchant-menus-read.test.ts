@@ -59,7 +59,7 @@ test("DELETE /api/menus/1 dengan token penjual → 404 (router lama dihapus)", a
   expect((await request(app).delete("/api/menus/1").set("Authorization", `Bearer ${tokenA}`)).status).toBe(404);
 });
 
-test("GET /merchant/menus: milik sendiri saja, urut id DESC, bentuk D3", async () => {
+test("GET /merchant/menus: milik sendiri saja, urut id DESC, bentuk respons menu", async () => {
   const res = await get("/menus").expect(200);
   expect(res.body.data.map((menu: any) => menu.id)).toEqual([nonaktif, aktif]);
   const menu = res.body.data[1];
@@ -113,7 +113,7 @@ test("GET /merchant/menus/:id: milik sendiri 200; lainnya 404 seragam", async ()
   expect((await get(`/menus/${milikB}`, tokenB).expect(200)).body.data.name).toBe("Punya B");
 });
 
-test("R-12: stock_date lama direset saat dibaca tanpa menggeser updated_at; toko lain tidak", async () => {
+test("stock_date lama direset saat dibaca tanpa menggeser updated_at; toko lain tidak", async () => {
   const lama = {
     stock_date: "2000-01-01",
     daily_quota: 20,

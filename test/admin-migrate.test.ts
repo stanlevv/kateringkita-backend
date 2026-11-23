@@ -9,7 +9,7 @@ import { resetTestDatabase } from "./helpers/db";
 
 const MIGRATIONS = path.join(__dirname, "../database/migrations");
 
-describe("migrasi 002_admin (A-05)", () => {
+describe("migrasi 002_admin", () => {
   let url: string;
   let lamaId: number;
 

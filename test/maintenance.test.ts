@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
 import { login, prepareMerchants } from "./helpers/merchant";
 
-// F27: mode pemeliharaan — admin super menyalakan; penjual & pembeli dapat 503, admin/login/webhook tetap jalan.
+// Mode pemeliharaan — admin super menyalakan; penjual & pembeli dapat 503, admin/login/webhook tetap jalan.
 let adminToken: string, opsToken: string, tokenA: string, customerToken: string;
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
 const nyalakan = (body: object, token = adminToken) =>

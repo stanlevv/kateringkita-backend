@@ -198,7 +198,7 @@ test("register & login menyertakan avatar_url dan favorite_pickup_point_id null"
   expect(res.body.data.user).toMatchObject({ avatar_url: null, favorite_pickup_point_id: null });
 });
 
-// F04 D10/D15: avatar hanya dari unggahan milik pengguna sendiri (dulu diabaikan, F02 D1 dicabut)
+// Avatar hanya dari unggahan milik pengguna sendiri (dulu diabaikan, aturan itu dicabut)
 test("avatar_url: unggahan sendiri diterima, null mengosongkan, selain itu 400", async () => {
   setR2Env();
   const [[customer]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");

@@ -123,7 +123,7 @@ test("merchant dengan phone yang sudah dipakai → 409 dan tidak ada baris baru"
   expect(merchants).toHaveLength(1);
 });
 
-// AUD-37: nomor/email yang sudah terdaftar ditolak sebelum bcrypt (tidak membakar CPU), dan pendaftaran per sumber dibatasi
+// Batas daftar: nomor/email yang sudah terdaftar ditolak sebelum bcrypt (tidak membakar CPU), dan pendaftaran per sumber dibatasi
 test("nomor sudah terdaftar → 409 tanpa menjalankan bcrypt", async () => {
   await request(app).post("/api/v1/auth/customer/register").send(customer).expect(201);
   const hash = vi.spyOn(bcrypt, "hash");

@@ -60,7 +60,7 @@ test("validasi body kuota", async () => {
   expect(hasil.body.error.fields.quota_today).toEqual(["Kuota hari ini maksimal 10.000."]);
 });
 
-test("R-12: reset harian sebelum tulis", async () => {
+test("reset harian sebelum tulis", async () => {
   const id = await insertMenu(idA, { stock_date: "2000-01-01", daily_quota: 20, quota_today: 10, sold_today: 8 });
   const res = await kuota(id, { quota_today: 0 }).expect(200);
   expect(res.body.data).toMatchObject({ quota_today: 0, sold_today: 0, held_today: 0, available: 0 });
@@ -77,7 +77,7 @@ test("konkurensi: 10 × −1 dengan sisa batas 2 → tepat 2 sukses; 20 × +1 ta
   expect((await menuRow(id)).quota_today).toBe(23);
 });
 
-test("D7: ubah kuota tidak menggeser updated_at & tidak memunculkan 'diperbarui penjual'", async () => {
+test("ubah kuota tidak menggeser updated_at & tidak memunculkan 'diperbarui penjual'", async () => {
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   const adminToken = await login("081300000009");
   const id = await insertMenu(idA, { updated_at: "2026-01-01 00:00:00" });

@@ -151,7 +151,7 @@ test("templat WA", async () => {
   ]);
 });
 
-// F04 D10/D15: logo hanya dari unggahan milik toko sendiri (dulu diabaikan, F03 D4 dicabut). F26: QRIS toko dihapus.
+// Logo hanya dari unggahan milik toko sendiri (dulu diabaikan, aturan itu dicabut). QRIS toko sudah dihapus.
 test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400; qris_image_url tidak diterima lagi", async () => {
   setR2Env();
   const logo = photoUrl(`merchants/${idA}/logo/`);

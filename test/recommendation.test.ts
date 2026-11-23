@@ -8,7 +8,7 @@ import { extractKeywords } from "../src/services/recommendation.service";
 import { AppError } from "../src/utils/errors";
 import { PRIVATE_KEYS, freezeClock, prepareMerchants, insertMenu, makeVisible } from "./helpers/merchant";
 
-// F24: POST /assistant/recommendations — kandidat dari DB, AI memilih, backend memvalidasi ulang
+// POST /assistant/recommendations — kandidat dari DB, AI memilih, backend memvalidasi ulang
 let setup: Awaited<ReturnType<typeof prepareMerchants>>;
 let spesial: number, geprek: number, esTeh: number, kampung: number, habis: number, mati: number, minimal: number;
 const minta = (body: Record<string, unknown>, token: string | null = setup.customerToken) => {

@@ -7,7 +7,7 @@ import { env } from "../src/config/env";
 import { sendNotification } from "./helpers/midtrans";
 import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F26: QRIS statis toko (verifikasi manual) dihapus; pre-order bayar online lewat Snap Midtrans (di-stub) → notifikasi → diterima otomatis
+// QRIS statis toko (verifikasi manual) dihapus; pre-order bayar online lewat Snap Midtrans (di-stub) → notifikasi → diterima otomatis
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const KEY = "SB-Mid-server-uji";
 const SNAP = "https://app.sandbox.midtrans.com/snap/v4/redirection/pre-order";
@@ -45,7 +45,7 @@ beforeAll(async () => {
   env.MIDTRANS_SERVER_KEY = undefined;
   env.MIDTRANS_IS_PRODUCTION = "false";
 });
-// batas 3 holding per pembeli (D11)
+// batas 3 holding per pembeli
 afterEach(async () => {
   env.MIDTRANS_SERVER_KEY = undefined;
   vi.unstubAllGlobals();

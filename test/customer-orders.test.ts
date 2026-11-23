@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F07 Task 2: GET /me/orders 3 tab, POST /orders/:code/cancel & /complete (C-14, C-15, C-16, R-10, R-11; D2, D8–D11, D13)
+// GET /me/orders 3 tab, POST /orders/:code/cancel & /complete
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let tLain: string;
 const codes: Record<string, string> = {};
@@ -211,7 +211,7 @@ describe("penjaga", () => {
   });
 });
 
-describe("D5: checkout & batal pembeli yang sama berbarengan", () => {
+describe("checkout & batal pembeli yang sama berbarengan", () => {
   test.each([1, 2, 3])("putaran %i: keduanya sukses (tanpa deadlock)", async () => {
     const code = await placeOrder(setup.customerToken, setup.menu);
     const [cancelRes, orderRes] = await Promise.all([

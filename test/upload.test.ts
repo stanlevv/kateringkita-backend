@@ -6,7 +6,7 @@ import { uploadLimiter } from "../src/middleware/rate-limiter";
 import { presignPut, getR2Config, presignSigV4Url } from "../src/utils/r2";
 import { TEST_R2_ENV, setR2Env, prepareMerchants } from "./helpers/merchant";
 
-describe("SigV4 (D11)", () => {
+describe("SigV4", () => {
   test("vektor resmi AWS: GET test.txt presigned 86400 detik", () => {
     const url = presignSigV4Url({
       method: "GET",
@@ -51,7 +51,7 @@ describe("SigV4 (D11)", () => {
   });
 });
 
-describe("endpoint unggah (D12–D14)", () => {
+describe("endpoint unggah", () => {
   let tokenA: string, tokenB: string, customerToken: string, idA: number;
   const requestUpload = (token: string | null, body: object, path = "/merchant/uploads") => {
     const req = request(app).post(`/api/v1${path}`).send(body);
@@ -112,7 +112,7 @@ describe("endpoint unggah (D12–D14)", () => {
     expect(
       (await requestUpload(tokenA, { ...MENU, purpose: "avatar" }).expect(400)).body.error.fields.purpose,
     ).toBeDefined();
-    // F26: QRIS toko dihapus
+    // QRIS toko sudah dihapus
     expect((await requestUpload(tokenA, { ...MENU, purpose: "qris" }).expect(400)).body.error.fields.purpose).toEqual([
       "Jenis foto tidak dikenal.",
     ]);

@@ -7,7 +7,7 @@ import { env } from "../src/config/env";
 import { sendNotification } from "./helpers/midtrans";
 import { menuRow, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F10: VA Midtrans — checkout VA, POST /orders/:code/va (Midtrans di-stub), notifikasi POST /payments/midtrans
+// VA Midtrans — checkout VA, POST /orders/:code/va (Midtrans di-stub), notifikasi POST /payments/midtrans
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const KEY = "SB-Mid-server-uji";
 const VA_NUMBER = "8127000012345";
@@ -68,7 +68,7 @@ beforeAll(async () => {
   env.MIDTRANS_SERVER_KEY = undefined;
   env.MIDTRANS_IS_PRODUCTION = "false";
 });
-// batas 3 holding per pembeli (D11)
+// batas 3 holding per pembeli
 afterEach(async () => {
   env.MIDTRANS_SERVER_KEY = undefined;
   vi.unstubAllGlobals();
@@ -161,7 +161,7 @@ describe("notifikasi Midtrans", () => {
     expect((await bayar(code))[0].status).toBe("expired");
   });
 
-  // AUD-23: transaction_status tidak ikut ditandatangani; body pending asli (201) yang statusnya diganti tidak boleh melunasi
+  // Cek ulang status: transaction_status tidak ikut ditandatangani; body pending asli (201) yang statusnya diganti tidak boleh melunasi
   test("body bertanda tangan sah dengan status diganti settlement → dicek ke Get Status Midtrans (masih pending), tidak lunas", async () => {
     const code = await siapVa();
     await notif({ order_id: code, status_code: "201", transaction_status: "settlement" }, KEY, false).expect(200);

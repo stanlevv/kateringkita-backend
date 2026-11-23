@@ -225,7 +225,7 @@ test("dua titik temu satu toko dinonaktifkan bersamaan: tepat satu 200 dan satu 
   }
 });
 
-test("registrasi penjual dengan jenis usaha nonaktif → 400 merchant_type_id (review akhir A1)", async () => {
+test("registrasi penjual dengan jenis usaha nonaktif → 400 merchant_type_id", async () => {
   const id = (await post("/master/merchant-types", { name: "Jenis Pensiun" }).expect(201)).body.data.id;
   await post(`/master/merchant-types/${id}/deactivate`).expect(200);
   const res = await request(app)

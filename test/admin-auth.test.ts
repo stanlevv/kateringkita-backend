@@ -137,7 +137,7 @@ test("catat tersimpan & terbaca sebagai objek; rollback tidak meninggalkan baris
   expect(res.body.meta.total).toBe(1);
 });
 
-test("rute tulis admin: token penjual → 403 tanpa baris log (review akhir A6)", async () => {
+test("rute tulis admin: token penjual → 403 tanpa baris log", async () => {
   const [[{ n: logCount }]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs");
   const [[merchant]] = await db.query<any[]>("SELECT id, verification_status FROM merchants LIMIT 1");
   await request(app)

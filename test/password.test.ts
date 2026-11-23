@@ -78,7 +78,7 @@ test("tanpa token -> 401", async () => {
 
 afterEach(() => vi.restoreAllMocks());
 
-// AUD-29: hash ditulis sebelum sesi dicabut, jadi kegagalan di langkah ini belum mengubah apa pun (aman diulang)
+// Urutan ganti sandi: hash ditulis sebelum sesi dicabut, jadi kegagalan di langkah ini belum mengubah apa pun (aman diulang)
 test("UPDATE hash gagal -> 500, belum ada yang berubah: sesi lain tetap, sandi lama tetap berlaku", async () => {
   const orig = db.query.bind(db) as (...args: unknown[]) => Promise<unknown>;
   vi.spyOn(db, "query").mockImplementation(((sql: unknown, ...rest: unknown[]) =>

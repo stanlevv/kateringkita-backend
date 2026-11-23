@@ -6,7 +6,7 @@ import { loginLimiter, otpLimiter } from "../src/middleware/rate-limiter";
 import { mailer } from "../src/utils/mail";
 import { login, prepareMerchants } from "./helpers/merchant";
 
-// F11: POST /auth/password/{forgot,verify,reset} — OTP email
+// POST /auth/password/{forgot,verify,reset} — OTP email
 const EMAIL = "budi@mail.com";
 const kirim = vi.spyOn(mailer, "send").mockResolvedValue();
 const post = (path: string, body: object) => request(app).post(`/api/v1/auth/password/${path}`).send(body);
@@ -49,7 +49,7 @@ describe("forgot", () => {
     expect((await post("forgot", { email: EMAIL }).expect(429)).body.error.code).toBe("RATE_LIMITED");
   });
 
-  // AUD-28: router Express tidak peka huruf besar-kecil dan menerima garis miring akhir; varian path tidak boleh dapat bucket baru
+  // Varian path: router Express tidak peka huruf besar-kecil dan menerima garis miring akhir; varian path tidak boleh dapat bucket baru
   test("varian huruf besar dan garis miring akhir memakai batas per email yang sama", async () => {
     for (let i = 0; i < 5; i++) await post("forgot", { email: EMAIL }).expect(200);
     await request(app).post("/api/v1/AUTH/password/Forgot").send({ email: EMAIL }).expect(429);

@@ -76,7 +76,7 @@ beforeEach(async () => {
   await db.query("UPDATE pickup_points SET description = 'Lobi' WHERE id = 1");
 });
 
-test("GET /menus/:id: bentuk D7, opsi & titik temu aktif saja, tanpa angka internal", async () => {
+test("GET /menus/:id: bentuk detail publik, opsi & titik temu aktif saja, tanpa angka internal", async () => {
   const res = await get(`/menus/${menu}`).expect(200);
   const data = res.body.data;
   expect(Object.keys(data).sort()).toEqual(KUNCI);
@@ -109,14 +109,14 @@ test("GET /menus/:id: bentuk D7, opsi & titik temu aktif saja, tanpa angka inter
   for (const key of PRIVATE_KEYS) expect(json).not.toContain(key);
 });
 
-test("D3: toko tutup (saklar atau jam) tetap 200 dengan is_open false", async () => {
+test("toko tutup (saklar atau jam) tetap 200 dengan is_open false", async () => {
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   expect((await get(`/menus/${menu}`).expect(200)).body.data.merchant.is_open).toBe(false);
   await makeVisible(idA, { open: false });
   expect((await get(`/menus/${menu}`).expect(200)).body.data.merchant.is_open).toBe(false);
 });
 
-test("D1/BE-11: menu tersembunyi atau id tidak valid → 404", async () => {
+test("menu tersembunyi atau id tidak valid → 404", async () => {
   const mati = await insertMenu(idA, { name: "Mati", is_active: false });
   const hapus = await insertMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
   for (const id of [mati, hapus, "abc", "0", "99999"]) await tolak(`/menus/${id}`);
@@ -127,12 +127,12 @@ test("D1/BE-11: menu tersembunyi atau id tidak valid → 404", async () => {
   await tolak(`/menus/${menu}`);
 });
 
-test("D5: stock_date lama → available = daily_quota", async () => {
+test("stock_date lama → available = daily_quota", async () => {
   const basi = await insertMenu(idA, { stock_date: "2000-01-01", daily_quota: 30, quota_today: 5, sold_today: 5 });
   expect((await get(`/menus/${basi}`).expect(200)).body.data).toMatchObject({ available: 30, badge: "available" });
 });
 
-test("D11: ulasan publik terbaru dulu, nama disamarkan, paginated", async () => {
+test("ulasan publik terbaru dulu, nama disamarkan, paginated", async () => {
   await db.query(
     "INSERT INTO users (role, full_name, phone, password_hash) VALUES ('customer', ' Rahmawati ', '081200000001', 'x')",
   );
@@ -171,7 +171,7 @@ test("D11: ulasan publik terbaru dulu, nama disamarkan, paginated", async () => 
   await tolak(`/menus/${menu}/reviews`);
 });
 
-test("D12: profil toko publik tanpa alamat/WA/status verifikasi", async () => {
+test("profil toko publik tanpa alamat/WA/status verifikasi", async () => {
   await db.query(
     "UPDATE merchants SET description = 'Masakan rumah', rating_avg = 4.25, rating_count = 8 WHERE id = ?",
     [idA],

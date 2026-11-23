@@ -7,7 +7,7 @@ import { withTransaction } from "../src/services/admin-audit.service";
 import { releaseStock } from "../src/services/order-stock.service";
 import { menuRow, prepareCheckout, insertMenu } from "./helpers/merchant";
 
-// F06 Task 5: releaseStock untuk F07/F08 (R-01, R-03, R-12, D14)
+// releaseStock: stok dikembalikan saat pesanan batal atau kedaluwarsa
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const pesan = async (items: { menu_id: number; qty: number }[]) => {
@@ -93,7 +93,7 @@ test("dua menu (baris menu sama dijumlah) → keduanya diperbarui; stock_date NU
   expect(await stok(setup.menu)).toEqual({ held: 2, sold: 3, total: 5 });
 });
 
-// AUD-31: batas 3 pesanan menunggu tidak cukup (satu pesanan bisa berisi ratusan porsi); porsi tertahan juga dibatasi
+// Batas porsi: batas 3 pesanan menunggu tidak cukup (satu pesanan bisa berisi ratusan porsi); porsi tertahan juga dibatasi
 test("satu pembeli maksimal 20 porsi menunggu", async () => {
   const besar = await insertMenu(setup.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
   await pesan([{ menu_id: besar, qty: 15 }]);

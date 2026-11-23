@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import db from "../src/config/db";
 import { prepareMerchants } from "./helpers/merchant";
 
-// F06 Task 1 (BE-03, D17): orders.stock_date + tabel idempotensi per pengguna
+// Migrasi checkout: orders.stock_date + tabel idempotensi per pengguna
 describe("migrasi 003_checkout", () => {
   let budi: number;
   let siti: number;

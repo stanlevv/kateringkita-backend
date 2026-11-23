@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { menuRow, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
-// F06 Task 2: POST /orders/quote (C-09, R-07, R-13, R-14, D1–D3, D10, D13)
+// POST /orders/quote: hitung harga keranjang tanpa membuat pesanan
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
 const quote = (body: unknown, token = setup.customerToken) =>
@@ -144,7 +144,7 @@ test("total melewati batas angka → 400 items", async () => {
   await quote(satu({}, { qty: 1000 })).expect(200);
 });
 
-describe("urutan validasi D3", () => {
+describe("urutan validasi", () => {
   test("menu nonaktif / terhapus / tidak ada → items.0.menu_id", async () => {
     const mati = await insertMenu(setup.idA, { is_active: false });
     const hapus = await insertMenu(setup.idA, { deleted_at: new Date() });
@@ -168,7 +168,7 @@ describe("urutan validasi D3", () => {
     );
   });
 
-  test("R-14: toko pending / suspended / pemilik nonaktif → MERCHANT_UNAVAILABLE", async () => {
+  test("toko pending / suspended / pemilik nonaktif → MERCHANT_UNAVAILABLE", async () => {
     for (const status of ["pending", "suspended"]) {
       await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [status, setup.idA]);
       await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
@@ -180,7 +180,7 @@ describe("urutan validasi D3", () => {
     await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
   });
 
-  test("R-13: saklar mati / di luar jam → MERCHANT_CLOSED dengan jam buka", async () => {
+  test("saklar mati / di luar jam → MERCHANT_CLOSED dengan jam buka", async () => {
     await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [setup.idA]);
     await tolak409(satu(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 07.00–16.00 WIB.");
     await makeVisible(setup.idA, { open: false });
@@ -217,7 +217,7 @@ describe("urutan validasi D3", () => {
   });
 });
 
-describe("pickup_at (D13)", () => {
+describe("pickup_at", () => {
   const RENTANG = "Waktu ambil harus di masa depan, paling lambat 7 hari lagi.";
   test("kemarin / +8 hari → 400; besok → 200", async () => {
     await tolak400(satu({ pickup_at: wib(-1) }), "pickup_at", RENTANG);

@@ -35,7 +35,7 @@ beforeEach(async () => {
   esTeh = await insertMenu(idB, { name: "Es Teh", category_id: 5, price: 5000, hpp: 2000, sold_total: 1 });
 });
 
-test("GET /menus tanpa token: kartu D6, tanpa angka internal (R-11, BE-02)", async () => {
+test("GET /menus tanpa token: kartu menu publik, tanpa angka internal", async () => {
   const res = await get("/menus").expect(200);
   expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 2 });
   expect(res.body.data.map((menu: any) => menu.id)).toEqual([ayam, esTeh]);
@@ -59,7 +59,7 @@ test("GET /menus tanpa token: kartu D6, tanpa angka internal (R-11, BE-02)", asy
   for (const kunci of PRIVATE_KEYS) expect(json).not.toContain(kunci);
 });
 
-test("R-14: toko belum terverifikasi, pemilik nonaktif, menu nonaktif/terhapus tidak tampil", async () => {
+test("toko belum terverifikasi, pemilik nonaktif, menu nonaktif/terhapus tidak tampil", async () => {
   for (const status of ["pending", "needs_fix", "suspended"]) {
     await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [status, idB]);
     expect(await ids()).toEqual([ayam]);
@@ -73,7 +73,7 @@ test("R-14: toko belum terverifikasi, pemilik nonaktif, menu nonaktif/terhapus t
   expect(await ids()).toEqual([ayam, esTeh]);
 });
 
-test("D2: toko tutup (saklar atau jam) tidak tampil; rentang lewat tengah malam dihormati", async () => {
+test("toko tutup (saklar atau jam) tidak tampil; rentang lewat tengah malam dihormati", async () => {
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   expect(await ids()).toEqual([esTeh]);
   await makeVisible(idA, { open: false });
@@ -85,7 +85,7 @@ test("D2: toko tutup (saklar atau jam) tidak tampil; rentang lewat tengah malam 
   expect(await ids()).toEqual([esTeh]);
 });
 
-test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko tutup tetap berisi menu)", async () => {
+test("filter merchant=<slug> tidak memakai syarat buka (profil toko tutup tetap berisi menu)", async () => {
   const habis = await insertMenu(idA, { name: "Habis", quota_today: 5, sold_today: 5, sold_total: 999 });
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   const res = (await get(`/menus?merchant=${slugA}`).expect(200)).body;
@@ -101,7 +101,7 @@ test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko t
   expect(await ids(`?merchant=${slugA}`)).toEqual([]);
 });
 
-test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async () => {
+test("badge, habis paling akhir, reset harian tanpa menulis DB", async () => {
   const habis = await insertMenu(idA, {
     name: "Habis",
     daily_quota: 10,
@@ -144,7 +144,7 @@ test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async ()
   expect(row).toEqual({ s: "2000-01-01", quota_today: 5, sold_today: 5 });
 });
 
-test("D8: q nama menu/toko dengan escape, kategori, toko, titik temu", async () => {
+test("q nama menu/toko dengan escape, kategori, toko, titik temu", async () => {
   expect(await ids("?q=ayam")).toEqual([ayam]);
   expect(await ids("?q=%20siti%20")).toEqual([ayam]);
   expect(await ids("?q=%25")).toEqual([]);
@@ -166,7 +166,7 @@ test("D8: q nama menu/toko dengan escape, kategori, toko, titik temu", async () 
   }
 });
 
-test("D9: urutan", async () => {
+test("urutan", async () => {
   const murah = await insertMenu(idA, {
     name: "Murah",
     price: 2000,
@@ -195,7 +195,7 @@ test("D9: urutan", async () => {
   }
 });
 
-test("D10: pagination", async () => {
+test("pagination", async () => {
   await db.query("DELETE FROM menu_options");
   await db.query("DELETE FROM menus");
   for (let i = 0; i < 25; i++) await insertMenu(idA, { name: `Menu ${i}` });

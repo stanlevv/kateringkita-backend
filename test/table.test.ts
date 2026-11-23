@@ -7,7 +7,7 @@ import { tableOrderLimiter } from "../src/middleware/rate-limiter";
 import { sendNotification } from "./helpers/midtrans";
 import { menuRow, prepareCheckout, insertMenu } from "./helpers/merchant";
 
-// F21 pesan dari meja: penjual kelola meja, tamu tanpa login lihat menu → pesan → bayar Snap (di-stub) → notifikasi → status
+// Pesan dari meja (QR): penjual kelola meja, tamu tanpa login lihat menu → pesan → bayar Snap (di-stub) → notifikasi → status
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let token = "";
 const KEY = "SB-Mid-server-uji";
@@ -107,7 +107,7 @@ describe("menu meja (tanpa login)", () => {
 });
 
 describe("pesanan tamu", () => {
-  // AUD-45: token bukan 32-hex (mis. 4096 karakter) ditolak sebelum masuk Map limiter
+  // Batas token meja: token bukan 32-hex (mis. 4096 karakter) ditolak sebelum masuk Map limiter
   test("token meja berformat salah → 404 tanpa menambah isi limiter", async () => {
     const res = await request(app)
       .post(`/api/v1/tables/${"a".repeat(4096)}/orders`)
@@ -176,7 +176,7 @@ describe("pesanan tamu", () => {
     );
   });
 
-  // AUD-32: tamu anonim tanpa bayar dulu tidak boleh menahan seluruh sisa stok lewat satu meja
+  // Batas stok tamu: tamu anonim tanpa bayar dulu tidak boleh menahan seluruh sisa stok lewat satu meja
   test("maksimal 30 porsi menunggu per meja", async () => {
     const besar = await insertMenu(setup.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
     await pesan({ items: [{ menu_id: besar, qty: 25 }] }).expect(201);

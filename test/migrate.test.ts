@@ -44,7 +44,7 @@ describe("migrasi", () => {
     expect(await migrate(url)).toEqual([]);
   });
 
-  test("menghapus user pemilik toko ditolak (bukan cascade) — BE-12", async () => {
+  test("menghapus user pemilik toko ditolak (bukan cascade)", async () => {
     const conn = await mysql.createConnection(url);
     const [rows] = await conn.query<mysql.RowDataPacket[]>(
       `SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS

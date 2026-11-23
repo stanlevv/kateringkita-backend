@@ -43,7 +43,7 @@ test("DELETE → 204 soft delete; semua rute penjual lalu 404; baris tetap ada",
   expect(row.is_active).toBe(0);
 });
 
-test("R-05: menu yang sudah dipesan tetap bisa dihapus, order_items utuh", async () => {
+test("menu yang sudah dipesan tetap bisa dihapus, order_items utuh", async () => {
   const id = await insertMenu(idA, { name: "Nasi Ayam", price: 15000, hpp: 9000 });
   const [[cust]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
   const [result] = await db.query<any>(
@@ -61,7 +61,7 @@ test("R-05: menu yang sudah dipesan tetap bisa dihapus, order_items utuh", async
   expect(after).toEqual(before);
 });
 
-test("BE-01: penjual B DELETE menu A → 404, menu A utuh; id aneh → 404", async () => {
+test("penjual B DELETE menu A → 404, menu A utuh; id aneh → 404", async () => {
   const id = await insertMenu(idA);
   const before = await menuRow(id);
   await req("delete", `/menus/${id}`, tokenB).expect(404);
@@ -69,7 +69,7 @@ test("BE-01: penjual B DELETE menu A → 404, menu A utuh; id aneh → 404", asy
   await req("delete", "/menus/abc").expect(404);
 });
 
-test("checklist F18: hapus atau nonaktif membuat active_menu & menu_with_photo false", async () => {
+test("checklist toko di panel admin: hapus atau nonaktif membuat active_menu & menu_with_photo false", async () => {
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   const adminToken = await login("081300000009");
   const cek = async () =>

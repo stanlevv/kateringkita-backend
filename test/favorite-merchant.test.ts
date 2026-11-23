@@ -13,7 +13,7 @@ import {
   makeVisible,
 } from "./helpers/merchant";
 
-// F05 favorit toko ("Dapur Favorit"): GET/PUT/DELETE /me/favorite-merchants + is_favorite di GET /merchants/:slug (D13, D14)
+// Favorit toko ("Dapur Favorit"): GET/PUT/DELETE /me/favorite-merchants + is_favorite di GET /merchants/:slug
 let tokenA: string, customerToken: string, idA: number, idB: number, slugA: string, slugB: string;
 
 const api = (method: "get" | "put" | "delete", path: string, token?: string) => {
@@ -110,7 +110,7 @@ test("PUT: toko tersembunyi/id tidak valid 404, toko tutup 204", async () => {
   ]);
 });
 
-test("D13: terbaru dulu, toko tersembunyi tidak tampil tapi barisnya tetap, paginated", async () => {
+test("terbaru dulu, toko tersembunyi tidak tampil tapi barisnya tetap, paginated", async () => {
   // A difavoritkan lebih baru walau id-nya lebih kecil: urutan dari created_at, bukan id
   for (const [id, favoritedAt] of [
     [idA, "2026-01-03 00:00:00"],
@@ -123,7 +123,7 @@ test("D13: terbaru dulu, toko tersembunyi tidak tampil tapi barisnya tetap, pagi
   const page2 = await api("get", "/me/favorite-merchants?limit=1&page=2", customerToken).expect(200);
   expect(page2.body.data.map((merchant: any) => merchant.id)).toEqual([idB]);
   expect(page2.body.meta).toEqual({ page: 2, limit: 1, total: 2 });
-  // D10: halaman tidak valid → bawaan, limit > 100 → 100
+  // Halaman tidak valid → bawaan, limit > 100 → 100
   expect((await api("get", "/me/favorite-merchants?page=x&limit=999", customerToken).expect(200)).body.meta).toEqual({
     page: 1,
     limit: 100,
@@ -172,7 +172,7 @@ test("auth: tanpa token 401, penjual & admin 403, favorit per pembeli", async ()
   expect(await favIds("", tLain)).toEqual([idA]);
 });
 
-test("D14: is_favorite di GET /merchants/:slug hanya untuk pembeli pemilik; tamu & peran lain tetap 200", async () => {
+test("is_favorite di GET /merchants/:slug hanya untuk pembeli pemilik; tamu & peran lain tetap 200", async () => {
   await api("put", `/me/favorite-merchants/${idA}`, customerToken).expect(204);
   const fav = async (slug: string, token?: string) =>
     (await api("get", `/merchants/${slug}`, token).expect(200)).body.data.is_favorite;

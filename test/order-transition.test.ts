@@ -5,7 +5,7 @@ import { withTransaction } from "../src/services/admin-audit.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F07 Task 1: mesin status & stok tepat sekali (C-15, C-16, M-04, M-08, R-03; D1–D7)
+// Mesin status pesanan & stok yang berubah tepat sekali
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let penjual: Actor;
 let penjualB: Actor;
@@ -61,7 +61,7 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-describe("tabel D1: aksi × status asal", () => {
+describe("tabel aksi × status asal", () => {
   const SAH: Partial<Record<OrderAction, Partial<Record<Status, Status>>>> = {
     confirm: { holding: "confirmed" },
     cook: { confirmed: "cooking" },
@@ -125,7 +125,7 @@ describe("aktor & kepemilikan", () => {
   });
 });
 
-describe("pembayaran (D1, D3)", () => {
+describe("pembayaran", () => {
   test("cancel dari confirmed non-tunai → 409", async () => {
     const code = await siap("confirmed", { payment_method: "online" });
     await expect(jalan(code, "cancel", pembeli)).rejects.toMatchObject({ status: 409, message: BERUBAH });
@@ -142,7 +142,7 @@ describe("pembayaran (D1, D3)", () => {
   });
 });
 
-describe("lewat waktu (D2)", () => {
+describe("lewat waktu", () => {
   test.each(["confirm", "cancel", "reject"] as const)("%s → 409 habis, status & held tetap", async (aksi) => {
     const code = await siap("holding");
     await lewat(code);
@@ -175,7 +175,7 @@ describe("lewat waktu (D2)", () => {
   });
 });
 
-describe("kolom & log (D7)", () => {
+describe("kolom & log", () => {
   test("confirm → confirmed_at, log, updated_at bergeser", async () => {
     const code = await siap("holding");
     await db.query("UPDATE orders SET updated_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE code = ?", [code]);
@@ -216,7 +216,7 @@ describe("kolom & log (D7)", () => {
   });
 });
 
-describe("stok (D4), qty 2", () => {
+describe("stok, qty 2", () => {
   test("confirm → held −2, sold +2", async () => {
     const code = await siap("holding");
     await jalan(code, "confirm", penjual);
