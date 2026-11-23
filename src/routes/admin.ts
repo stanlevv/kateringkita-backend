@@ -1,3 +1,11 @@
+// Isi file: daftar alamat (rute) panel admin di /api/v1/admin. Lapisan pertama dari alur routes → handlers →
+// services → database. Sebelum masuk ke sini, app.ts sudah memasang requireAuth (wajib login), requireRole("admin"),
+// dan adminAccess (middleware/admin-access.ts) yang membatasi menurut tingkat admin:
+// - super: semua rute;
+// - ops: semua rute kecuali yang khusus super, yaitu /admins, /ai-*, /finance, /payouts, /refunds, /server-*, dan
+//   mengubah /settings;
+// - support: hanya membaca (GET) di luar rute khusus super, ditambah membalas dan menutup tiket (/tickets).
+// Di file ini dipasang pemeriksa isi permintaan (validate dengan skema zod) sebelum handler.
 import { RequestHandler, Router } from "express";
 import {
   createAdminSchema,
@@ -80,10 +88,10 @@ import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
 
-// Penjaga (requireAuth + requireRole("admin")) dipasang sekali di app.ts.
+/** Router panel admin; dipasang di app.ts pada /api/v1/admin setelah penjaga login, peran, dan tingkat admin. */
 export const admin = Router();
 
-// POST <path>/activate dan <path>/deactivate
+// Memasang pasangan rute POST <path>/activate (handler(true)) dan POST <path>/deactivate (handler(false)).
 const toggle = (path: string, handler: (active: boolean) => RequestHandler) => {
   for (const [action, active] of [
     ["activate", true],
@@ -93,26 +101,29 @@ const toggle = (path: string, handler: (active: boolean) => RequestHandler) => {
   }
 };
 
+// Log audit: catatan setiap perubahan yang dilakukan admin.
 admin.get("/audit-logs", listAuditLogsHandler);
 
-// Fase 1 kelola admin (khusus super; lihat middleware/admin-access.ts)
+// Kelola akun admin (khusus super; lihat middleware/admin-access.ts).
 admin.get("/admins", listAdminsHandler);
 admin.post("/admins", validate(createAdminSchema), createAdminHandler);
 admin.patch("/admins/:id/level", validate(updateAdminLevelSchema), updateAdminLevelHandler);
 toggle("/admins/:id", setAdminActiveHandler);
 admin.post("/admins/:id/reset-password", resetAdminPasswordHandler);
 
+// Penjual: daftar, antrean verifikasi, detail, dan aksi status.
 admin.get("/merchants", listMerchantsHandler);
 
 admin.get("/verification-queue", getVerificationQueueHandler);
 
 admin.get("/merchants/:id", getMerchantDetailHandler);
 
-// id dicek sebelum body: id tak valid → 404 walau body kosong
+// id dicek sebelum isi permintaan: id tidak valid dijawab 404 walaupun isinya kosong.
 const checkMerchantId: RequestHandler = (req, _res, next) => {
   parseMerchantId(req.params.id);
   next();
 };
+// Satu rute per aksi; minta perbaikan dan tangguhkan wajib menyertakan alasan.
 for (const name of ACTION_NAMES) {
   const needsReason = name === "request-fix" || name === "suspend";
   admin.post(
@@ -123,11 +134,13 @@ for (const name of ACTION_NAMES) {
   );
 }
 
+// Data master: :kind = categories, pickup-points, atau merchant-types.
 admin.get("/master/:kind", listMasterDataHandler);
 admin.post("/master/:kind", createMasterDataHandler);
 admin.patch("/master/:kind/:id", updateMasterDataHandler);
 toggle("/master/:kind/:id", setMasterActiveHandler);
 
+// Promo platform, pengaturan aplikasi (mengubahnya khusus super), pengumuman, dan ringkasan beranda.
 admin.get("/promos", listPromosHandler);
 admin.post("/promos", createPromoHandler);
 admin.patch("/promos/:id", updatePromoHandler);
@@ -139,17 +152,17 @@ admin.put("/settings/maintenance", validate(maintenanceSchema), updateMaintenanc
 admin.post("/broadcasts", validate(announcementSchema), sendAnnouncementHandler);
 admin.get("/summary", getSummaryHandler);
 
-// F20 rekap keuangan per toko
+// Rekap keuangan per toko.
 admin.get("/finance", getFinanceSummaryHandler);
 
-// F26 pencairan dana Midtrans ke penjual & pengembalian dana pesanan batal yang sudah lunas
+// Pencairan dana Midtrans ke penjual dan pengembalian dana (refund) pesanan batal yang sudah lunas.
 admin.get("/payouts/balances", listBalancesHandler);
 admin.get("/payouts", listPayoutHistoryHandler);
 admin.post("/payouts", validate(payoutSchema), recordPayoutHandler);
 admin.get("/refunds", listRefundsHandler);
 admin.post("/refunds/:code", validate(refundSchema), markRefundedHandler);
 
-// F19 moderasi ulasan & menu (suspend toko: /merchants/:id/suspend)
+// Moderasi ulasan dan menu (menangguhkan toko lewat /merchants/:id/suspend); sembunyikan dan turunkan wajib beralasan.
 admin.get("/reviews", listAdminReviewsHandler);
 admin.post("/reviews/:id/hide", validate(adminReasonSchema), moderateReviewHandler(true));
 admin.post("/reviews/:id/unhide", moderateReviewHandler(false));
@@ -158,38 +171,41 @@ admin.post("/menus/:id/takedown", validate(adminReasonSchema), moderateMenuHandl
 admin.post("/menus/:id/restore", moderateMenuHandler(false));
 admin.post("/menus/:id/photos/remove", validate(removePhotoSchema), removeMenuPhotoHandler);
 
-// F22 AI gateway: penyedia AI, urutan fallback, uji koneksi
+// AI gateway: penyedia AI, urutan fallback, uji koneksi.
 admin.get("/ai-providers", listAiProvidersHandler);
 admin.post("/ai-providers", validate(aiProviderSchema), createAiProviderHandler);
 admin.patch("/ai-providers/:id", validate(updateAiProviderSchema), updateAiProviderHandler);
 admin.delete("/ai-providers/:id", deleteAiProviderHandler);
 admin.post("/ai-providers/:id/test", testAiProviderHandler);
-// F25 pemakaian AI: token, panggilan, gagal, latensi
+// Pemakaian AI: token, panggilan, gagal, latensi.
 admin.get("/ai-usage", getAiUsageHandler);
-// Banner beranda (rancangan voucher 2026-11-16 §5.4): semua tingkat melihat, super & ops memutuskan; unggah gambar platform
+// Banner beranda: semua tingkat admin melihat, super dan ops membuat dan meninjau; unggah gambar platform untuk banner
+// dan pop-up.
 admin.get("/banners", listAdminBannersHandler);
 admin.post("/banners", createAdminBannerHandler);
 admin.patch("/banners/:id", reviewBannerHandler);
 admin.post("/uploads", validate(adminUploadSchema), uploadLimiter, uploadAdminHandler);
-// Pop-up promo mobile: semua tingkat melihat, super & ops membuat / mengubah
+// Pop-up promo aplikasi mobile: semua tingkat melihat, super dan ops membuat dan mengubah.
 admin.get("/popups", listPopupsHandler);
 admin.post("/popups", createPopupHandler);
 admin.patch("/popups/:id", updatePopupHandler);
-// Rubrik AI: hasil AI tersimpan diverifikasi manual (ops & super; support hanya melihat — bukan path "ai-" khusus super)
+// Moderasi ulasan dan menu (menangguhkan toko lewat /merchants/:id/suspend); sembunyikan dan turunkan wajib
+// beralasan.
+// berawalan "ai-", sehingga tidak ikut aturan khusus super.
 admin.get("/hasil-ai", listAiResultsHandler);
 admin.patch("/hasil-ai/:id", validate(verifyAiResultSchema), verifyAiResultHandler);
 
-// F23 dashboard server: status, error 5xx & request lambat
+// Dasbor server: status, galat 5xx, dan request lambat.
 admin.get("/server-status", getServerStatusHandler);
 admin.get("/server-logs", listServerLogsHandler);
 
-// Tiket bantuan (CS) dari pembeli; semua tingkat admin boleh baca, balas, tutup (lihat middleware/admin-access.ts)
+// Tiket bantuan (CS) dari pembeli; semua tingkat admin boleh membaca, membalas, dan menutup.
 admin.get("/tickets", listAdminTicketsHandler);
 admin.get("/tickets/:code", getAdminTicketHandler);
 admin.post("/tickets/:code/messages", replyAdminTicketHandler);
 admin.post("/tickets/:code/close", closeAdminTicketHandler);
 
-// path admin tak dikenal berhenti di sini (404), tidak jatuh ke router v1
+// Path admin yang tidak dikenal berhenti di sini (404), tidak diteruskan ke router /api/v1 lain.
 admin.use(() => {
   throw new AppError(404, "NOT_FOUND", "Data tidak ditemukan.");
 });
