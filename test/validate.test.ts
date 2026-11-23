@@ -6,13 +6,13 @@ import { validate } from "../src/middleware/validate";
 import { errorHandler } from "../src/middleware/error-handler";
 
 function makeApp(schema: z.ZodType) {
-  const testApp = express();
-  testApp.use(express.json());
-  testApp.post("/x", validate(schema), (req, res) => {
+  const expressApp = express();
+  expressApp.use(express.json());
+  expressApp.post("/x", validate(schema), (req, res) => {
     res.json({ data: req.body });
   });
-  testApp.use(errorHandler);
-  return testApp;
+  expressApp.use(errorHandler);
+  return expressApp;
 }
 
 describe("validate()", () => {

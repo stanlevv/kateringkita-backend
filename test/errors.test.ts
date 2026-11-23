@@ -12,30 +12,30 @@ beforeAll(async () => {
 });
 
 function makeApp() {
-  const testApp = express();
-  testApp.use(express.json());
-  testApp.get("/conflict", () => {
+  const expressApp = express();
+  expressApp.use(express.json());
+  expressApp.get("/conflict", () => {
     throw new AppError(409, "CONFLICT", "Email sudah terdaftar.", { email: ["Sudah dipakai."] });
   });
-  testApp.get("/boom", async () => {
+  expressApp.get("/boom", async () => {
     throw new Error("ER_NO_SUCH_TABLE: Table 'kk.menus' doesn't exist");
   });
-  testApp.get("/dup", () => {
+  expressApp.get("/dup", () => {
     throw Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY" });
   });
-  testApp.get("/sql", () => {
+  expressApp.get("/sql", () => {
     throw Object.assign(new Error("Check constraint 'menus_chk_2' is violated."), {
       code: "ER_CHECK_CONSTRAINT_VIOLATED",
       errno: 3819,
       sql: "INSERT INTO orders (customer_phone) VALUES ('081234567890')",
     });
   });
-  testApp.post("/echo", (req, res) => {
+  expressApp.post("/echo", (req, res) => {
     res.json({ data: req.body });
   });
-  testApp.use(notFoundHandler);
-  testApp.use(errorHandler);
-  return testApp;
+  expressApp.use(notFoundHandler);
+  expressApp.use(errorHandler);
+  return expressApp;
 }
 
 describe("error terpusat", () => {
