@@ -1,3 +1,5 @@
+// Isi file: daftar route katalog publik, voucher/banner/pop-up publik, favorit, dan rekomendasi AI pembeli. Alurnya
+// request masuk → middleware (login, peran, pemeriksa body, pembatas laju) → handler di file ini → service → database.
 import { Router } from "express";
 import {
   listFavoritesHandler,
@@ -20,7 +22,9 @@ import { optionalAuth, requireAuth, requireRole } from "../middleware/auth";
 import { assistantLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
-// Katalog publik (C-05, C-06, C-07) + favorit (C-19); dipasang di /api/v1 sebelum v1
+// `optionalAuth` = login boleh ada boleh tidak (tamu tetap dilayani); `requireAuth` + `requireRole("customer")` = wajib
+// login sebagai pembeli.
+/** Router katalog. Dipasang di app.ts pada `/api/v1`, sebelum router pesanan dan router auth. */
 export const catalog = Router();
 
 catalog.get("/menus", optionalAuth, listCatalogHandler);
@@ -46,7 +50,8 @@ catalog.put("/me/favorites/:menuId", requireAuth, requireRole("customer"), saveF
 
 catalog.delete("/me/favorites/:menuId", requireAuth, requireRole("customer"), deleteFavoriteHandler);
 
-// F05 favorit toko ("Dapur Favorit"); tanpa pembatas laju, sama dengan favorit menu: tulis idempoten satu baris ber-PK
+// Toko favorit ("Dapur Favorit"). Seperti favorit menu, tanpa pembatas laju: menyimpan atau menghapus berkali-kali
+// hanya menyentuh satu baris yang sama, jadi hasilnya tetap sama.
 catalog.get("/me/favorite-merchants", requireAuth, requireRole("customer"), listFavoriteMerchantsHandler);
 
 catalog.put("/me/favorite-merchants/:merchantId", requireAuth, requireRole("customer"), saveFavoriteMerchantHandler);
@@ -58,7 +63,8 @@ catalog.delete(
   deleteFavoriteMerchantHandler,
 );
 
-// F24 rekomendasi AI pembeli (RAG); kuota bersama asisten AI: 10 per pengguna per 10 menit
+// Rekomendasi AI pembeli. Body diperiksa dulu, baru dihitung pembatas laju yang sama dengan asisten AI penjual:
+// 10 permintaan per pengguna per 10 menit, karena setiap panggilan AI berbayar.
 catalog.post(
   "/assistant/recommendations",
   requireAuth,
