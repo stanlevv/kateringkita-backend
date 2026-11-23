@@ -1,7 +1,7 @@
 import { Request, RequestHandler } from "express";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { halamanSchema } from "../dto/pencairan.dto";
+import { halamanSchema } from "../dto/payout.dto";
 import {
   catatPencairan,
   daftarRefund,
@@ -10,7 +10,7 @@ import {
   riwayatPencairan,
   tandaiRefund,
   ubahRekening,
-} from "../services/pencairan.service";
+} from "../services/payout.service";
 
 // F26 pencairan dana; body sudah divalidasi di rute
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;

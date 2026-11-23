@@ -5,7 +5,7 @@ import {
   buatTiketHandler,
   daftarTiketSayaHandler,
   tutupTiketSayaHandler,
-} from "../handlers/tiket.handler";
+} from "../handlers/ticket.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { ticketLimiter } from "../middleware/rate-limiter";
 

@@ -1,7 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { Rentang } from "../dto/merchant-laporan.dto";
-import { rentangUtc } from "./merchant-laporan.service";
+import { Rentang } from "../dto/merchant-report.dto";
+import { rentangUtc } from "./merchant-report.service";
 
 // F20 rekap keuangan platform: pesanan completed per toko (per completed_at, tanggal WIB).
 // Diskon dipisah per slot voucher (migrasi 014): voucher toko ditanggung toko, voucher platform ditanggung platform.

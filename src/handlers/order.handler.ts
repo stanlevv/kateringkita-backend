@@ -10,7 +10,7 @@ import {
   idempotencyKeySchema,
   orderSchema,
 } from "../dto/order.dto";
-import { kirimUlasan } from "../services/ulasan.service";
+import { kirimUlasan } from "../services/review.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import {

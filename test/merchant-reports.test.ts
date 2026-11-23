@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
-import { rentangUtc } from "../src/services/merchant-laporan.service";
+import { rentangUtc } from "../src/services/merchant-report.service";
 import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
 // F09: /merchant/reports/* (M-09, R-10; D1–D9)

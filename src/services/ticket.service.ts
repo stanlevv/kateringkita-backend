@@ -4,7 +4,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
 import { getWibDate } from "./merchant-quota.service";
-import { BuatTiket, DaftarTiket } from "../dto/tiket.dto";
+import { BuatTiket, DaftarTiket } from "../dto/ticket.dto";
 
 // Tiket bantuan (CS) dua arah pembeli ↔ tim admin (migrasi 012). Sisi admin: admin-tiket.service.ts.
 // Urusan pesanan (menu, waktu ambil) tetap langsung ke penjual lewat WhatsApp.

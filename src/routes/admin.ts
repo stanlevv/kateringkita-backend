@@ -62,20 +62,20 @@ import {
   ujiAiHandler,
 } from "../handlers/ai.handler";
 import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
-import { pencairanSchema, refundSchema } from "../dto/pencairan.dto";
+import { pencairanSchema, refundSchema } from "../dto/payout.dto";
 import {
   catatPencairanHandler,
   daftarRefundHandler,
   daftarSaldoHandler,
   riwayatPencairanHandler,
   tandaiRefundHandler,
-} from "../handlers/pencairan.handler";
+} from "../handlers/payout.handler";
 import {
   balasTiketAdminHandler,
   daftarTiketAdminHandler,
   detailTiketAdminHandler,
   tutupTiketAdminHandler,
-} from "../handlers/tiket.handler";
+} from "../handlers/ticket.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";

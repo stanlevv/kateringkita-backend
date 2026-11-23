@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
-import { BANK_PENCAIRAN, namaBank, PencairanInput, RefundInput, RekeningInput } from "../dto/pencairan.dto";
+import { BANK_PENCAIRAN, namaBank, PencairanInput, RefundInput, RekeningInput } from "../dto/payout.dto";
 import { catat, dalamTransaksi } from "./admin-audit.service";
 
 // F26 pencairan dana. Pembayaran non-tunai (VA, online) masuk akun Midtrans platform. Bagian penjual per pesanan selesai

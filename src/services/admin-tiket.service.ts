@@ -1,6 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { DaftarTiketAdmin } from "../dto/tiket.dto";
+import { DaftarTiketAdmin } from "../dto/ticket.dto";
 import { catat, Conn, dalamTransaksi } from "./admin-audit.service";
 import { likePattern } from "./order.service";
 import {
@@ -12,9 +12,9 @@ import {
   ringkas,
   tambahPesan,
   tiketDitutup,
-} from "./tiket.service";
+} from "./ticket.service";
 
-// Tiket bantuan (CS) sisi admin; semua tingkat admin boleh baca & balas (middleware/admin-access.ts). Pembeli: tiket.service.ts.
+// Tiket bantuan (CS) sisi admin; semua tingkat admin boleh baca & balas (middleware/admin-access.ts). Pembeli: ticket.service.ts.
 
 // 1 kueri halaman + 1 COUNT + 1 hitungan per status
 export async function daftarTiketAdmin(f: DaftarTiketAdmin) {

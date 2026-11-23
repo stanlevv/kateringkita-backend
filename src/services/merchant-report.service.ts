@@ -1,6 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { jumlahHari, Rentang } from "../dto/merchant-laporan.dto";
+import { jumlahHari, Rentang } from "../dto/merchant-report.dto";
 import { getMerchantId } from "./merchant-menu.service";
 
 // F09 laporan toko (LP-N1..N4): hanya pesanan completed, dihitung per completed_at; tanggal WIB → rentang UTC [from, to).

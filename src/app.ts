@@ -10,7 +10,7 @@ import { catalog } from "./routes/catalog";
 import { table } from "./routes/table";
 import { order } from "./routes/order";
 import { notification } from "./routes/notification";
-import { tiket } from "./routes/tiket";
+import { tiket } from "./routes/ticket";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { recordServerLog, requestId, requestLogger } from "./middleware/request-logger";
 import { healthHandler } from "./handlers/health.handler";

@@ -1,10 +1,10 @@
 import { Request, RequestHandler } from "express";
 import { bodyObject } from "../dto/order.dto";
-import { balasTiketSchema, buatTiketSchema, daftarTiketAdminSchema, daftarTiketSchema } from "../dto/tiket.dto";
+import { balasTiketSchema, buatTiketSchema, daftarTiketAdminSchema, daftarTiketSchema } from "../dto/ticket.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { balasTiketAdmin, daftarTiketAdmin, detailTiketAdmin, tutupTiketAdmin } from "../services/admin-tiket.service";
-import { bacaTiketSaya, balasTiketSaya, buatTiket, daftarTiketSaya, tutupTiketSaya } from "../services/tiket.service";
+import { bacaTiketSaya, balasTiketSaya, buatTiket, daftarTiketSaya, tutupTiketSaya } from "../services/ticket.service";
 
 // Tiket bantuan (CS). Body bukan objek (kosong, teks) dianggap {} agar galat tetap per field.
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;

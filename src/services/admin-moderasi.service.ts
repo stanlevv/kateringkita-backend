@@ -4,7 +4,7 @@ import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { likePattern } from "./order.service";
 import { parseGallery } from "./merchant-menu.service";
-import { hitungUlangRating } from "./ulasan.service";
+import { hitungUlangRating } from "./review.service";
 
 // F19 moderasi admin: sembunyikan ulasan & turunkan menu (suspend toko sudah ada di admin-merchant F18). Semua aksi dicatat audit.
 type Filter = { q?: string; status?: string; page: number; limit: number };

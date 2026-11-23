@@ -4,7 +4,7 @@
 import { RequestHandler } from "express";
 import { quotaSchema, menuQuerySchema } from "../dto/merchant-menu.dto";
 import { merchantOrdersQuerySchema } from "../dto/merchant-order.dto";
-import { rentangSchema, tanggalSchema } from "../dto/merchant-laporan.dto";
+import { rentangSchema, tanggalSchema } from "../dto/merchant-report.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { fieldsFromIssues, parse } from "../middleware/validate";
 import {
@@ -25,10 +25,10 @@ import {
   getMerchantOrderWhatsapp,
 } from "../services/merchant-order.service";
 import { getProfile, setOpen, updateProfile } from "../services/merchant.service";
-import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-laporan.service";
+import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-report.service";
 import { buatPromoToko, daftarPromoToko, hapusPromoToko, ubahPromoToko } from "../services/merchant-promo.service";
-import { daftarUlasanToko } from "../services/ulasan.service";
-import { tanyaAsisten } from "../services/asisten.service";
+import { daftarUlasanToko } from "../services/review.service";
+import { tanyaAsisten } from "../services/assistant.service";
 import { createUpload } from "../services/upload.service";
 import { AppError } from "../utils/errors";
 

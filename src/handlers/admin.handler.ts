@@ -16,7 +16,7 @@ import {
 import { kirimPengumuman } from "../services/admin-pengumuman.service";
 import { ringkasan } from "../services/admin-summary.service";
 import { rekapKeuangan } from "../services/admin-keuangan.service";
-import { rentangAdminSchema } from "../dto/merchant-laporan.dto";
+import { rentangAdminSchema } from "../dto/merchant-report.dto";
 import { parse } from "../middleware/validate";
 import {
   daftarMenuAdmin,

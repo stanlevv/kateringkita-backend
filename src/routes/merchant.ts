@@ -11,11 +11,11 @@ import {
   hapusBannerTokoHandler,
   ubahBannerTokoHandler,
 } from "../handlers/banner.handler";
-import { tanyaSchema } from "../dto/asisten.dto";
+import { tanyaSchema } from "../dto/assistant.dto";
 import { tableSchema, updateTableSchema } from "../dto/table.dto";
-import { rekeningSchema } from "../dto/pencairan.dto";
+import { rekeningSchema } from "../dto/payout.dto";
 import { createTableHandler, listTablesHandler, updateTableHandler } from "../handlers/table.handler";
-import { pencairanSayaHandler, ubahRekeningHandler } from "../handlers/pencairan.handler";
+import { pencairanSayaHandler, ubahRekeningHandler } from "../handlers/payout.handler";
 import {
   transitionMerchantOrderHandler,
   getMenuHandler,

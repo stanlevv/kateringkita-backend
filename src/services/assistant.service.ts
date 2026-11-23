@@ -6,7 +6,7 @@ import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { ai } from "./ai.service";
 import { simpanHasil } from "./hasil-ai.service";
 import { getWibDate } from "./merchant-quota.service";
-import { ringkasanToko } from "./merchant-laporan.service";
+import { ringkasanToko } from "./merchant-report.service";
 import { getMerchantId } from "./merchant-menu.service";
 
 // F17 asisten AI toko: konteks hanya data toko sendiri (menu + HPP + penjualan 30 hari).

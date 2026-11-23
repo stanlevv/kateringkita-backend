@@ -185,5 +185,5 @@ export const reviewSchema = z.object(
   },
   { error: "Data ulasan tidak valid." },
 );
-/** Isi ulasan yang sudah lolos {@link reviewSchema}; diproses `kirimUlasan` di ulasan.service. */
+/** Isi ulasan yang sudah lolos {@link reviewSchema}; diproses `kirimUlasan` di review.service. */
 export type ReviewInput = z.infer<typeof reviewSchema>;
