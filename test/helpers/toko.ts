@@ -5,7 +5,7 @@ import app from "../../src/app";
 import db from "../../src/config/db";
 import { env } from "../../src/config/env";
 import { migrate } from "../../src/scripts/migrate";
-import { loginLimiter } from "../../src/middleware/rateLimiter";
+import { loginLimiter } from "../../src/middleware/rate-limiter";
 import { hariIniWib } from "../../src/services/merchant-kuota.service";
 import { jam } from "../../src/services/katalog.service";
 import { resetTestDatabase } from "./db";

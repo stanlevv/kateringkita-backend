@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vite
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { mejaLimiter } from "../src/middleware/rateLimiter";
+import { mejaLimiter } from "../src/middleware/rate-limiter";
 import { kirimNotif } from "./helpers/midtrans";
 import { menuRow, siapCheckout, sisipMenu } from "./helpers/toko";
 

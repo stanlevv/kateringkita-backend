@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { uploadLimiter } from "../src/middleware/rateLimiter";
+import { uploadLimiter } from "../src/middleware/rate-limiter";
 import { presignPut, r2Config, sigv4Query } from "../src/utils/r2";
 import { R2_UJI, isiR2, siapkanToko } from "./helpers/toko";
 

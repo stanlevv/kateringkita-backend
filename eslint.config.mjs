@@ -7,7 +7,7 @@ export default tseslint.config({ ignores: ["dist/"] }, js.configs.recommended, .
     "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     // pola `a, b` (sequence) dipakai di beberapa service; menulis ulang menyentuh kode logika
     "@typescript-eslint/no-unused-expressions": "warn",
-    // regex pembersih karakter non-ASCII di rateLimiter sengaja memuat karakter kontrol NUL
+    // regex pembersih karakter non-ASCII di rate-limiter sengaja memuat karakter kontrol NUL
     "no-control-regex": "warn",
     // migrate.ts memuat env secara lazy saat dijalankan langsung (require.main)
     "@typescript-eslint/no-require-imports": "warn",

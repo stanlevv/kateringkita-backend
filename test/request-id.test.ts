@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, test } from "vitest";
-import { requestId } from "../src/middleware/requestLogger";
+import { requestId } from "../src/middleware/request-logger";
 
 const app = express()
   .use(requestId)

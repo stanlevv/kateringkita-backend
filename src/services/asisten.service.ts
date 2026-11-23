@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
-import { adaInjeksi, samarkan } from "../utils/prompt-aman";
+import { adaInjeksi, samarkan } from "../utils/safe-prompt";
 import { ai } from "./ai.service";
 import { simpanHasil } from "./hasil-ai.service";
 import { hariIniWib } from "./merchant-kuota.service";

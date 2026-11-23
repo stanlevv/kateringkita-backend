@@ -9,7 +9,7 @@ import {
   createTableOrderHandler,
   getGuestOrderHandler,
 } from "../handlers/table.handler";
-import { mejaLimiter } from "../middleware/rateLimiter";
+import { mejaLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 /**

@@ -7,7 +7,7 @@ Kode memakai nama bahasa Inggris; teks untuk manusia tetap bahasa Indonesia.
 | Objek                    | Aturan                                                  | Contoh                                                     |
 | ------------------------ | ------------------------------------------------------- | ---------------------------------------------------------- |
 | File layanan/handler/DTO | `<feature>[-part].{service,handler,dto}.ts`, kebab-case | `admin-keuangan.service.ts`, `auth.handler.ts`             |
-| File lain                | kebab-case                                              | `rateLimiter.ts` menjadi `rate-limiter.ts`                 |
+| File lain                | kebab-case                                              | `orderStatus.ts` menjadi `order-status.ts`                 |
 | Fungsi dan variabel      | camelCase                                               | `loadEnv`; `bacaSesi` menjadi `getSession`                 |
 | Tipe dan interface       | PascalCase                                              | `Env`; `PengumumanInput` menjadi `AnnouncementInput`       |
 | Konstanta                | `UPPER_SNAKE`                                           | `WA_PLACEHOLDERS`; `BANK_PENCAIRAN` menjadi `PAYOUT_BANKS` |

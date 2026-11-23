@@ -7,7 +7,7 @@ import {
   tutupTiketSayaHandler,
 } from "../handlers/tiket.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { tiketLimiter } from "../middleware/rateLimiter";
+import { tiketLimiter } from "../middleware/rate-limiter";
 
 // Tiket bantuan (CS) pembeli ↔ tim admin; dipasang di /api/v1 sebelum v1. Sisi admin: routes/admin.ts (/admin/tickets).
 export const tiket = Router();

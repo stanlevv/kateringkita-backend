@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
-import { loginLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter } from "../src/middleware/rate-limiter";
 import { rentangHariWib, ringkasan, sedangBuka } from "../src/services/admin-summary.service";
 import { resetTestDatabase } from "./helpers/db";
 

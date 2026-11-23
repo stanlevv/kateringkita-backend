@@ -24,7 +24,7 @@ import {
   uploadAvatarHandler,
 } from "../handlers/auth.handler";
 import { requireAuth } from "../middleware/auth";
-import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rateLimiter";
+import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 export const v1 = Router();

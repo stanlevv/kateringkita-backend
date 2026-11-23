@@ -4,18 +4,18 @@ import { v1 } from "./routes/auth";
 import { requireAuth, requireRole } from "./middleware/auth";
 import { meta } from "./routes/meta";
 import { admin } from "./routes/admin";
-import { aksesAdmin } from "./middleware/admin-akses";
+import { aksesAdmin } from "./middleware/admin-access";
 import { merchant } from "./routes/merchant";
 import { katalog } from "./routes/katalog";
 import { table } from "./routes/table";
 import { order } from "./routes/order";
 import { notifikasi } from "./routes/notifikasi";
 import { tiket } from "./routes/tiket";
-import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
-import { catatLogServer, requestId, requestLogger } from "./middleware/requestLogger";
+import { errorHandler, notFoundHandler } from "./middleware/error-handler";
+import { catatLogServer, requestId, requestLogger } from "./middleware/request-logger";
 import { healthHandler } from "./handlers/health.handler";
 import { env } from "./config/env";
-import { pemeliharaan } from "./middleware/pemeliharaan";
+import { pemeliharaan } from "./middleware/maintenance";
 
 const app: Application = express();
 

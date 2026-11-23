@@ -2,7 +2,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { env } from "../config/env";
 import { AppError } from "../utils/errors";
-import { dekripsi, enkripsi } from "../utils/kripto";
+import { dekripsi, enkripsi } from "../utils/crypto";
 import type { AiInput, UbahAiInput } from "../dto/ai.dto";
 import { catat, dalamTransaksi, type Conn } from "./admin-audit.service";
 import { hariIniWib } from "./merchant-kuota.service";

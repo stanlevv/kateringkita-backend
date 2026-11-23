@@ -38,7 +38,7 @@ import {
   uploadFotoHandler,
   waPesananTokoHandler,
 } from "../handlers/merchant.handler";
-import { asistenLimiter, passwordLimiter, uploadLimiter } from "../middleware/rateLimiter";
+import { asistenLimiter, passwordLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 // Penjaga (requireAuth + requireRole("merchant")) dipasang sekali di app.ts; toko selalu dari token (R-10).

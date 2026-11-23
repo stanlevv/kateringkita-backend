@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { AppError } from "../src/utils/errors";
-import { errorHandler, notFoundHandler } from "../src/middleware/errorHandler";
+import { errorHandler, notFoundHandler } from "../src/middleware/error-handler";
 import app from "../src/app";
 import { migrate } from "../src/scripts/migrate";
 import { resetTestDatabase } from "./helpers/db";

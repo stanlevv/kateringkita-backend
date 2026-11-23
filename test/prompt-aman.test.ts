@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { adaInjeksi, samarkan } from "../src/utils/prompt-aman";
+import { adaInjeksi, samarkan } from "../src/utils/safe-prompt";
 
 // Rubrik keamanan AI: filter prompt injection + anonimisasi sebelum teks pengguna masuk prompt
 describe("adaInjeksi", () => {

@@ -17,7 +17,7 @@ import { bannerPublikHandler } from "../handlers/banner.handler";
 import { popupPublikHandler } from "../handlers/popup.handler";
 import { rekomendasiSchema } from "../dto/rekomendasi.dto";
 import { authOpsional, requireAuth, requireRole } from "../middleware/auth";
-import { asistenLimiter } from "../middleware/rateLimiter";
+import { asistenLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 // Katalog publik (C-05, C-06, C-07) + favorit (C-19); dipasang di /api/v1 sebelum v1

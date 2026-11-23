@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
-import { loginLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 
 const GENERIC = "Email/WA atau password salah.";

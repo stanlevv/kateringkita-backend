@@ -7,7 +7,7 @@ import { createAdmin } from "../src/scripts/create-admin";
 import { ai } from "../src/services/ai.service";
 import { bersihkanLog } from "../src/services/log-server.service";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
-import { dekripsi } from "../src/utils/kripto";
+import { dekripsi } from "../src/utils/crypto";
 import { login, siapkanToko } from "./helpers/toko";
 
 // F22 AI gateway: penyedia dikelola admin, key terenkripsi & tak pernah keluar, fallback berurutan dengan istirahat

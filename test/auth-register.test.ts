@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import request from "supertest";
 import { RowDataPacket } from "mysql2";
 import { beforeEach, expect, test, vi } from "vitest";
-import { registerLimiter } from "../src/middleware/rateLimiter";
+import { registerLimiter } from "../src/middleware/rate-limiter";
 import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";

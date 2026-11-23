@@ -51,7 +51,7 @@ import {
   uploadAdminHandler,
 } from "../handlers/banner.handler";
 import { buatPopupHandler, daftarPopupHandler, ubahPopupHandler } from "../handlers/popup.handler";
-import { uploadLimiter } from "../middleware/rateLimiter";
+import { uploadLimiter } from "../middleware/rate-limiter";
 import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/hasil-ai.handler";
 import {
   buatAiHandler,
@@ -95,7 +95,7 @@ const toggle = (path: string, handler: (aktif: boolean) => RequestHandler) => {
 
 admin.get("/audit-logs", daftarLogHandler);
 
-// Fase 1 kelola admin (khusus super; lihat middleware/admin-akses.ts)
+// Fase 1 kelola admin (khusus super; lihat middleware/admin-access.ts)
 admin.get("/admins", daftarAdminHandler);
 admin.post("/admins", validate(buatAdminSchema), buatAdminHandler);
 admin.patch("/admins/:id/level", validate(levelAdminSchema), ubahLevelAdminHandler);
@@ -178,7 +178,7 @@ admin.patch("/hasil-ai/:id", validate(verifikasiAiSchema), verifikasiHasilAiHand
 admin.get("/server-status", statusServerHandler);
 admin.get("/server-logs", daftarLogServerHandler);
 
-// Tiket bantuan (CS) dari pembeli; semua tingkat admin boleh baca, balas, tutup (lihat middleware/admin-akses.ts)
+// Tiket bantuan (CS) dari pembeli; semua tingkat admin boleh baca, balas, tutup (lihat middleware/admin-access.ts)
 admin.get("/tickets", daftarTiketAdminHandler);
 admin.get("/tickets/:code", detailTiketAdminHandler);
 admin.post("/tickets/:code/messages", balasTiketAdminHandler);

@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
-import { loginLimiter, passwordLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter, passwordLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 import { fotoUrl, isiR2 } from "./helpers/toko";
 

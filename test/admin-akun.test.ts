@@ -4,8 +4,8 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
-import { loginLimiter } from "../src/middleware/rateLimiter";
-import { bolehAkses } from "../src/middleware/admin-akses";
+import { loginLimiter } from "../src/middleware/rate-limiter";
+import { bolehAkses } from "../src/middleware/admin-access";
 import { resetTestDatabase } from "./helpers/db";
 
 const login = async (identifier: string, password: string) => {

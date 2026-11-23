@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { loginLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter } from "../src/middleware/rate-limiter";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { transitionOrder } from "../src/services/order-status.service";
 import { pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";

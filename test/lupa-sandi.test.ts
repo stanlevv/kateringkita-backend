@@ -2,7 +2,7 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { loginLimiter, otpLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter, otpLimiter } from "../src/middleware/rate-limiter";
 import { surel } from "../src/utils/mail";
 import { login, siapkanToko } from "./helpers/toko";
 

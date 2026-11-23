@@ -14,7 +14,7 @@ import {
   tiketDitutup,
 } from "./tiket.service";
 
-// Tiket bantuan (CS) sisi admin; semua tingkat admin boleh baca & balas (middleware/admin-akses.ts). Pembeli: tiket.service.ts.
+// Tiket bantuan (CS) sisi admin; semua tingkat admin boleh baca & balas (middleware/admin-access.ts). Pembeli: tiket.service.ts.
 
 // 1 kueri halaman + 1 COUNT + 1 hitungan per status
 export async function daftarTiketAdmin(f: DaftarTiketAdmin) {

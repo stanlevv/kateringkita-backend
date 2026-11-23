@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import { registerLimiter } from "../../src/middleware/rateLimiter";
+import { registerLimiter } from "../../src/middleware/rate-limiter";
 
 // Kosongkan DB uji yang ditunjuk DATABASE_URL (diisi vitest.config.ts dari TEST_DATABASE_URL).
 export async function resetTestDatabase(): Promise<string> {

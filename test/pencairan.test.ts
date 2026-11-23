@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
-import { passwordLimiter } from "../src/middleware/rateLimiter";
+import { passwordLimiter } from "../src/middleware/rate-limiter";
 import { createAdmin } from "../src/scripts/create-admin";
 import { kirimNotif } from "./helpers/midtrans";
 import { login, pesanDulu, siapCheckout } from "./helpers/toko";

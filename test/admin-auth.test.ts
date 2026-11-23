@@ -6,7 +6,7 @@ import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
 import { createAdmin } from "../src/scripts/create-admin";
 import { catat } from "../src/services/admin-audit.service";
-import { loginLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 
 const GENERIC = "Email/WA atau password salah.";

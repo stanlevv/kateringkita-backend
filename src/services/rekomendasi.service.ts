@@ -5,7 +5,7 @@ import { RekomendasiInput } from "../dto/rekomendasi.dto";
 import { ai } from "./ai.service";
 import { BUKA, DARI, JOIN_FAVORIT, KOLOM_KARTU, MenuCard, SISA, TAMPIL, jam, jamWib, kartu } from "./katalog.service";
 import { AppError } from "../utils/errors";
-import { adaInjeksi, samarkan } from "../utils/prompt-aman";
+import { adaInjeksi, samarkan } from "../utils/safe-prompt";
 import { simpanHasil } from "./hasil-ai.service";
 import { hariIniWib } from "./merchant-kuota.service";
 

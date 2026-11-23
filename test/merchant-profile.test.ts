@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
-import { loginLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 import { fotoUrl, isiR2 } from "./helpers/toko";
 

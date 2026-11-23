@@ -3,7 +3,7 @@ import request from "supertest";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import { validate } from "../src/middleware/validate";
-import { errorHandler } from "../src/middleware/errorHandler";
+import { errorHandler } from "../src/middleware/error-handler";
 
 function makeApp(schema: z.ZodType) {
   const a = express();
