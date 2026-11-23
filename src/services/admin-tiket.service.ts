@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { DaftarTiketAdmin } from "../dto/tiket.dto";
 import { catat, Conn, dalamTransaksi } from "./admin-audit.service";
-import { pola } from "./pesanan.service";
+import { pola } from "./order.service";
 import {
   KOLOM_RINGKAS,
   NAMA_TIM,

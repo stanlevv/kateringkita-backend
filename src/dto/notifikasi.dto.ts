@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { daftarDasar } from "./pesanan.dto";
+import { daftarDasar } from "./order.dto";
 
 // Tipe yang benar-benar ditulis ke tabel notifications: order_status (transisi pesanan), promo (promo toko ke pemfavorit),
 // info (pengumuman admin; balasan/penutupan tiket bantuan dengan data.ticket_code). Tambah di sini bila ada INSERT tipe baru.

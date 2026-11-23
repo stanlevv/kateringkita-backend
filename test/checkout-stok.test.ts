@@ -4,7 +4,7 @@ import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { lepasStok } from "../src/services/pesanan-stok.service";
+import { lepasStok } from "../src/services/order-stock.service";
 import { menuRow, siapCheckout, sisipMenu } from "./helpers/toko";
 
 // F06 Task 5: lepasStok untuk F07/F08 (R-01, R-03, R-12, D14)

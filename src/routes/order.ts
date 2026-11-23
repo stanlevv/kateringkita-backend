@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { quoteSchema, ulasanSchema, vaSchema } from "../dto/pesanan.dto";
+import { quoteSchema, ulasanSchema, vaSchema } from "../dto/order.dto";
 import {
   bacaPesananHandler,
   batalkanHandler,
@@ -14,7 +14,7 @@ import {
   quoteHandler,
   selesaikanHandler,
   waPesananHandler,
-} from "../handlers/pesanan.handler";
+} from "../handlers/order.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 

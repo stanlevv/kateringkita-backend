@@ -6,7 +6,7 @@ import {
   daftarSayaSchema,
   kunciSchema,
   pesananSchema,
-} from "../dto/pesanan.dto";
+} from "../dto/order.dto";
 import { kirimUlasan } from "../services/ulasan.service";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
@@ -19,7 +19,7 @@ import {
   quote,
   selesaikan,
   waPesanan,
-} from "../services/pesanan.service";
+} from "../services/order.service";
 import { bayarOnline, buatQris, buatVa, terimaNotifikasiMidtrans } from "../services/pembayaran-va.service";
 
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;

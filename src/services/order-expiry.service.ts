@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
-import { Aktor, transisi } from "./pesanan-status.service";
+import { Aktor, transisi } from "./order-status.service";
 
 // F08 job kadaluarsa holding (R-03, X-04, C-21; D1–D7). Hanya server.ts yang memulai penjadwal; test mengimpor app saja.
 export const SISTEM: Aktor = { jenis: "system" };

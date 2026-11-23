@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vite
 import db from "../src/config/db";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { Aksi, Aktor, Status, transisi } from "../src/services/pesanan-status.service";
+import { Aksi, Aktor, Status, transisi } from "../src/services/order-status.service";
 import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F07 Task 1: mesin status & stok tepat sekali (C-15, C-16, M-04, M-08, R-03; D1–D7)

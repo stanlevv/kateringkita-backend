@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { daftarDasar } from "./pesanan.dto";
-import { Status } from "../services/pesanan-status.service";
+import { daftarDasar } from "./order.dto";
+import { Status } from "../services/order-status.service";
 
 // F07 D12: query GET /merchant/orders
 const STATUS: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];

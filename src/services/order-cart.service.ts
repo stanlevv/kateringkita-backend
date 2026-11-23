@@ -4,7 +4,7 @@ import { rentangHariWib } from "./admin-summary.service";
 import { AppError } from "../utils/errors";
 import { SISA, tokoBuka } from "./katalog.service";
 import { segarkanKuota } from "./merchant-kuota.service";
-import { QuoteInput } from "../dto/pesanan.dto";
+import { QuoteInput } from "../dto/order.dto";
 
 // F06 keranjang (C-09, R-07): muat → periksa (urutan D3) → hitung (D1). Dipakai quote (tanpa kunci) dan buatPesanan (dalam transaksi).
 

@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { loginLimiter } from "../src/middleware/rateLimiter";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { transisi } from "../src/services/pesanan-status.service";
+import { transisi } from "../src/services/order-status.service";
 import { pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F08 Task 3: GET /me/notifications & POST /me/notifications/read (C-21, R-10; D13, D14)

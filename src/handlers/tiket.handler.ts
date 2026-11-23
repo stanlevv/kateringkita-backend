@@ -1,5 +1,5 @@
 import { Request, RequestHandler } from "express";
-import { bodyObjek } from "../dto/pesanan.dto";
+import { bodyObjek } from "../dto/order.dto";
 import { balasTiketSchema, buatTiketSchema, daftarTiketAdminSchema, daftarTiketSchema } from "../dto/tiket.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";

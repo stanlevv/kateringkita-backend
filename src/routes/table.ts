@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { bayarMejaSchema, pesananMejaSchema } from "../dto/meja.dto";
-import { bayarMejaHandler, menuMejaHandler, pesanMejaHandler, statusMejaHandler } from "../handlers/meja.handler";
+import { bayarMejaSchema, pesananMejaSchema } from "../dto/table.dto";
+import { bayarMejaHandler, menuMejaHandler, pesanMejaHandler, statusMejaHandler } from "../handlers/table.handler";
 import { mejaLimiter } from "../middleware/rateLimiter";
 import { validate } from "../middleware/validate";
 

@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { Aksi, Aktor, Status, transisi } from "../src/services/pesanan-status.service";
+import { Aksi, Aktor, Status, transisi } from "../src/services/order-status.service";
 import { pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F08 Task 1: notifikasi status pesanan di dalam transaksi transisi (C-21, R-10; D8, D10–D12)

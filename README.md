@@ -138,7 +138,7 @@ database/
 test/                  Uji integrasi per fitur (satu DB uji, berjalan berurutan)
 ```
 
-Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai: `auth`, `admin`, `merchant`, `katalog`, `pesanan`, `notifikasi`, `tiket`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `pesanan-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
+Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama fitur yang dipakai: `auth`, `admin`, `merchant`, `katalog`, `order`, `notifikasi`, `tiket`, `meta`, dan `upload`. Fitur yang logikanya besar dipecah per bagian, misalnya `order-status.service.ts` untuk mesin status pesanan dan `merchant-menu.service.ts` untuk menu toko.
 
 ---
 

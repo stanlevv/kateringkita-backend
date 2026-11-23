@@ -3,9 +3,9 @@ import db from "../config/db";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { parse } from "../middleware/validate";
-import { alasanSchema, bodyObjek } from "../dto/pesanan.dto";
-import { transisi } from "./pesanan-status.service";
-import { dasarPesanan, halaman, Item, KOLOM, muatItem, nilaiWa, pola, render, tautanWa } from "./pesanan.service";
+import { alasanSchema, bodyObjek } from "../dto/order.dto";
+import { transisi } from "./order-status.service";
+import { dasarPesanan, halaman, Item, KOLOM, muatItem, nilaiWa, pola, render, tautanWa } from "./order.service";
 import { idToko } from "./merchant-menu.service";
 import { DaftarToko } from "../dto/merchant-order.dto";
 

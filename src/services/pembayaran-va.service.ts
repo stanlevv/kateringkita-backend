@@ -4,8 +4,8 @@ import { env } from "../config/env";
 import { AppError } from "../utils/errors";
 import { BankVa, buatQrisMidtrans, buatSnap, buatVaMidtrans, notifikasiSah, statusMidtrans } from "../utils/midtrans";
 import { dalamTransaksi } from "./admin-audit.service";
-import { bacaPesanan } from "./pesanan.service";
-import { transisi } from "./pesanan-status.service";
+import { bacaPesanan } from "./order.service";
+import { transisi } from "./order-status.service";
 
 // Pembayaran Midtrans: VA (F10), halaman Snap untuk pesanan meja (F21) dan pre-order (F26), notifikasi untuk semuanya.
 const konflik = (pesan: string) => new AppError(409, "CONFLICT", pesan);

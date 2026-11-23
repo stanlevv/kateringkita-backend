@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
-import { pola } from "./pesanan.service";
+import { pola } from "./order.service";
 import { galeri } from "./merchant-menu.service";
 import { hitungUlangRating } from "./ulasan.service";
 

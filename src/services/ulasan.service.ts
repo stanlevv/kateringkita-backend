@@ -1,6 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { UlasanInput } from "../dto/pesanan.dto";
+import { UlasanInput } from "../dto/order.dto";
 import { AppError } from "../utils/errors";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
 import { idToko } from "./merchant-menu.service";

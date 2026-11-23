@@ -1,6 +1,6 @@
 import { Request, RequestHandler } from "express";
 import { AuthedRequest } from "../middleware/auth";
-import { bayarMeja, buatMeja, daftarMeja, menuMeja, pesanMeja, statusMeja, ubahMeja } from "../services/meja.service";
+import { bayarMeja, buatMeja, daftarMeja, menuMeja, pesanMeja, statusMeja, ubahMeja } from "../services/table.service";
 
 // F21 pesan dari meja. Body sudah divalidasi skema di rute.
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;

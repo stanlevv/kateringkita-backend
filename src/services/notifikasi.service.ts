@@ -1,7 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import db from "../config/db";
-import type { Status } from "./pesanan-status.service";
+import type { Status } from "./order-status.service";
 import type { DaftarNotif, Tandai } from "../dto/notifikasi.dto";
 
 // F08 (C-21; D8, D12): teks notifikasi pembeli per status tujuan; status tanpa entri tidak dinotifikasi

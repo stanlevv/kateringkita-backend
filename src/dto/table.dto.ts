@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { quoteSchema } from "./pesanan.dto";
+import { quoteSchema } from "./order.dto";
 
 // F21 pesan dari meja. Pesanan tamu: titik temu, waktu ambil, dan promo tidak dipakai (field lain dibuang z.object).
 const NAMA = "Nama 1–60 karakter.";

@@ -3,8 +3,8 @@ import db from "../src/config/db";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { AppError } from "../src/utils/errors";
-import { transisi } from "../src/services/pesanan-status.service";
-import { kadaluarsakan, mulaiJobKadaluarsa, SISTEM } from "../src/services/pesanan-kadaluarsa.service";
+import { transisi } from "../src/services/order-status.service";
+import { kadaluarsakan, mulaiJobKadaluarsa, SISTEM } from "../src/services/order-expiry.service";
 import { bekukanJam, menuRow, pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
 
 // F08 Task 2: job kadaluarsa holding (R-03, X-04, C-21; D2–D7)

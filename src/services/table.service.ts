@@ -2,13 +2,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
-import { PesananMejaInput, UbahMejaInput } from "../dto/meja.dto";
+import { PesananMejaInput, UbahMejaInput } from "../dto/table.dto";
 import { dalamTransaksi } from "./admin-audit.service";
 import { asalSah, bukaSnap, KOLOM_SNAP, URL_BAYAR } from "./pembayaran-va.service";
 import { DARI, jam, JOIN_FAVORIT, kartu, KOLOM_KARTU, TAMPIL, tokoBuka, TOKO_TAMPIL } from "./katalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
 import { idToko } from "./merchant-menu.service";
-import { muatKeranjang, periksa } from "./pesanan-keranjang.service";
+import { muatKeranjang, periksa } from "./order-cart.service";
 import {
   habis,
   MAKS_PORSI_MEJA,
@@ -17,7 +17,7 @@ import {
   sisipPesanan,
   tahanStokDanItem,
   totalPorsi,
-} from "./pesanan.service";
+} from "./order.service";
 
 // F21 pesan dari meja: QR meja → menu tanpa login → pesanan tamu → bayar lewat Snap → status lewat token tamu.
 // Token tamu hanya dipegang peramban tamu; DB menyimpan SHA-256-nya.

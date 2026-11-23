@@ -9,9 +9,9 @@ import {
   ubahBannerTokoHandler,
 } from "../handlers/banner.handler";
 import { tanyaSchema } from "../dto/asisten.dto";
-import { mejaSchema, ubahMejaSchema } from "../dto/meja.dto";
+import { mejaSchema, ubahMejaSchema } from "../dto/table.dto";
 import { rekeningSchema } from "../dto/pencairan.dto";
-import { buatMejaHandler, daftarMejaHandler, ubahMejaHandler } from "../handlers/meja.handler";
+import { buatMejaHandler, daftarMejaHandler, ubahMejaHandler } from "../handlers/table.handler";
 import { pencairanSayaHandler, ubahRekeningHandler } from "../handlers/pencairan.handler";
 import {
   aksiPesananTokoHandler,

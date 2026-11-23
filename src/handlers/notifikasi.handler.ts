@@ -1,6 +1,6 @@
 import { Request, RequestHandler } from "express";
 import { daftarNotifSchema, tandaiSchema } from "../dto/notifikasi.dto";
-import { bodyObjek } from "../dto/pesanan.dto";
+import { bodyObjek } from "../dto/order.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { daftarNotifikasi, tandaiDibaca } from "../services/notifikasi.service";

@@ -16,9 +16,9 @@ import {
   terapkanVoucher,
   tolakPromo,
   voucherTerpakai,
-} from "./pesanan-keranjang.service";
-import { DaftarSaya, PesananInput, QuoteInput, quoteSchema } from "../dto/pesanan.dto";
-import { Status, transisi } from "./pesanan-status.service";
+} from "./order-cart.service";
+import { DaftarSaya, PesananInput, QuoteInput, quoteSchema } from "../dto/order.dto";
+import { Status, transisi } from "./order-status.service";
 
 // F06 pesanan pembeli (C-09, C-11, C-13)
 

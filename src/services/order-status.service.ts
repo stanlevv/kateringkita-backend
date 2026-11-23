@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/errors";
 import { buatNotifikasiPesanan } from "./notifikasi.service";
-import { lepasStok } from "./pesanan-stok.service";
+import { lepasStok } from "./order-stock.service";
 
 // F07 mesin status pesanan (C-15, C-16, M-04, M-08, R-03; D1–D7). Dipakai rute pembeli, rute penjual, dan job kadaluarsa F08
 // (D18: `expire` dengan aktor sistem, galat 409 ditelan). F08: notifikasi in-app pembeli (C-21) dibuat di transaksi yang sama.
