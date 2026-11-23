@@ -7,7 +7,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { TableOrderInput, UpdateTableInput } from "../dto/table.dto";
 import { dalamTransaksi } from "./admin-audit.service";
-import { asalSah, bukaSnap, KOLOM_SNAP, URL_BAYAR } from "./va-payment.service";
+import { isAllowedOrigin, openSnapPayment, SNAP_COLUMNS, PAYMENT_URL_SQL } from "./va-payment.service";
 import {
   MENU_FROM,
   clock,
@@ -307,7 +307,7 @@ export async function getGuestOrder(code: string, guestToken: string) {
   // 1. Cari pesanan dengan kode + hash token tamu (token salah = 404).
   const [[order]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.status, o.payment_status, o.customer_name, o.note, o.subtotal, o.service_fee, o.total, o.hold_until, o.created_at,
-       GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, t.label, m.business_name, m.slug, ${URL_BAYAR} AS url
+       GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, t.label, m.business_name, m.slug, ${PAYMENT_URL_SQL} AS url
      FROM orders o JOIN merchants m ON m.id = o.merchant_id LEFT JOIN merchant_tables t ON t.id = o.table_id
      WHERE o.code = ? AND o.guest_token_hash = ?`,
     [code, hash(guestToken)],
@@ -336,7 +336,7 @@ export async function getGuestOrder(code: string, guestToken: string) {
 
 /**
  * Membuka halaman bayar Snap untuk pesanan tamu, atau memakai ulang halaman yang sudah pernah dibuat. Logikanya
- * dipakai bersama pembayaran online pembeli, di bukaSnap (va-payment.service).
+ * dipakai bersama pembayaran online pembeli, di openSnapPayment (va-payment.service).
  * @param code       kode pesanan
  * @param guestToken token tamu dari header X-Guest-Token
  * @param returnUrl  alamat web tujuan setelah bayar; harus alamat web KateringKita sendiri (CORS_ORIGIN), supaya
@@ -346,12 +346,12 @@ export async function getGuestOrder(code: string, guestToken: string) {
  *   409 pesanan tidak sedang menunggu pembayaran, 409 batas waktu pesanan sudah habis
  */
 export async function payGuestOrder(code: string, guestToken: string, returnUrl: string) {
-  if (!asalSah(returnUrl))
+  if (!isAllowedOrigin(returnUrl))
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { kembali: ["Alamat kembali tidak diizinkan."] });
   const [[order]] = await db.query<RowDataPacket[]>(
-    `SELECT ${KOLOM_SNAP} FROM orders o WHERE o.code = ? AND o.guest_token_hash = ?`,
+    `SELECT ${SNAP_COLUMNS} FROM orders o WHERE o.code = ? AND o.guest_token_hash = ?`,
     [code, hash(guestToken)],
   );
   if (!order) throw orderNotFound();
-  return { payment_url: await bukaSnap(order, code, returnUrl) };
+  return { payment_url: await openSnapPayment(order, code, returnUrl) };
 }

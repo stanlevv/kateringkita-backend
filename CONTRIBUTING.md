@@ -96,6 +96,8 @@ Wajib dipakai saat memberi nama baru. Mengikuti nama tabel DB dan peran PRD.
 | galeri (foto tambahan)  | gallery           | sinkronkan                  | sync               |
 | HPP (harga pokok)       | costPrice         | siapkan                     | prepare            |
 | isian templat `{…}`     | placeholder       | basi (lewat hari)           | stale              |
+| alamat kembali          | returnUrl         | belum dibaca                | unread             |
+| asal web yang diizinkan | allowedOrigin     | terima (webhook)            | handle             |
 
 Istilah yang belum ada di tabel: pilih padanan Inggris yang umum, lalu tambahkan ke tabel ini pada commit yang sama.
 

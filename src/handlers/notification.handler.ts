@@ -1,16 +1,16 @@
 import { Request, RequestHandler } from "express";
-import { daftarNotifSchema, tandaiSchema } from "../dto/notification.dto";
+import { listNotificationsSchema, markAsReadSchema } from "../dto/notification.dto";
 import { bodyObject } from "../dto/order.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { daftarNotifikasi, tandaiDibaca } from "../services/notification.service";
+import { listNotifications, markAsRead } from "../services/notification.service";
 
-const uid = (req: Request) => (req as AuthedRequest).auth.userId;
+const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
 
-export const daftarNotifikasiHandler: RequestHandler = async (req, res) => {
-  res.json(await daftarNotifikasi(uid(req), parse(daftarNotifSchema, req.query)));
+export const listNotificationsHandler: RequestHandler = async (req, res) => {
+  res.json(await listNotifications(getUserId(req), parse(listNotificationsSchema, req.query)));
 };
 
-export const tandaiDibacaHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await tandaiDibaca(uid(req), parse(tandaiSchema, bodyObject(req.body))) });
+export const markAsReadHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await markAsRead(getUserId(req), parse(markAsReadSchema, bodyObject(req.body))) });
 };

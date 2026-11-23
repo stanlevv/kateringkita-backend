@@ -4,7 +4,7 @@
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/errors";
-import { buatNotifikasiPesanan } from "./notification.service";
+import { createOrderNotification } from "./notification.service";
 import { releaseStock } from "./order-stock.service";
 
 /** Status pesanan, sama dengan nilai kolom `orders.status`. */
@@ -194,7 +194,7 @@ export async function transitionOrder(
     [order.id, fromStatus, rule.to, actor.kind === "system" ? null : actor.userId],
   );
   if (actor.kind !== "customer")
-    await buatNotifikasiPesanan(
+    await createOrderNotification(
       conn,
       { customer_id: order.customer_id, merchant_id: order.merchant_id, code },
       rule.to,

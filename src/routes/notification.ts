@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { daftarNotifikasiHandler, tandaiDibacaHandler } from "../handlers/notification.handler";
+import { listNotificationsHandler, markAsReadHandler } from "../handlers/notification.handler";
 import { requireAuth } from "../middleware/auth";
 
 // F08 (C-21, R-10): notifikasi in-app milik pengguna yang login (semua peran; penjual/admin hanya mendapat daftar kosong, D13)
-export const notifikasi = Router();
+export const notification = Router();
 
-notifikasi.get("/me/notifications", requireAuth, daftarNotifikasiHandler);
+notification.get("/me/notifications", requireAuth, listNotificationsHandler);
 
-notifikasi.post("/me/notifications/read", requireAuth, tandaiDibacaHandler);
+notification.post("/me/notifications/read", requireAuth, markAsReadHandler);

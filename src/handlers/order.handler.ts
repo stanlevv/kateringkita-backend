@@ -23,7 +23,7 @@ import {
   completeMyOrder,
   getMyOrderWhatsapp,
 } from "../services/order.service";
-import { bayarOnline, buatQris, buatVa, terimaNotifikasiMidtrans } from "../services/va-payment.service";
+import { payOnline, createQris, createVa, handleMidtransNotification } from "../services/va-payment.service";
 
 // id pengguna yang login, sudah dipasang middleware requireAuth di rute.
 const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
@@ -33,7 +33,7 @@ const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
  * untuk pesanan ini. Isi permintaan (bank pilihan) sudah diperiksa vaSchema di rute.
  */
 export const createVaHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await buatVa(getUserId(req), String(req.params.code), req.body.bank) });
+  res.json({ data: await createVa(getUserId(req), String(req.params.code), req.body.bank) });
 };
 
 /**
@@ -42,12 +42,12 @@ export const createVaHandler: RequestHandler = async (req, res) => {
  */
 export const payOnlineHandler: RequestHandler = async (req, res) => {
   const { kembali: returnUrl } = parse(payOnlineSchema, bodyObject(req.body));
-  res.json({ data: await bayarOnline(getUserId(req), String(req.params.code), returnUrl) });
+  res.json({ data: await payOnline(getUserId(req), String(req.params.code), returnUrl) });
 };
 
 /** `POST /orders/:code/qris`: membuat kode QRIS Midtrans yang digambar langsung di aplikasi; tanpa isi permintaan. */
 export const createQrisHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await buatQris(getUserId(req), String(req.params.code)) });
+  res.json({ data: await createQris(getUserId(req), String(req.params.code)) });
 };
 
 /**
@@ -57,7 +57,7 @@ export const createQrisHandler: RequestHandler = async (req, res) => {
  * sukses.
  */
 export const midtransNotificationHandler: RequestHandler = async (req, res) => {
-  await terimaNotifikasiMidtrans(bodyObject(req.body) as Record<string, unknown>);
+  await handleMidtransNotification(bodyObject(req.body) as Record<string, unknown>);
   res.json({ data: { ok: true } });
 };
 
