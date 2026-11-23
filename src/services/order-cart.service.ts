@@ -1,5 +1,7 @@
 // Logika keranjang bersama untuk quote, checkout pembeli, dan pesanan meja: muat data menu/toko, periksa aturan,
-// hitung harga, dan terapkan voucher. Dipanggil order.service dan table.service; tidak menulis ke database.
+// hitung harga, dan terapkan voucher. Dipanggil order.service dan table.service. Satu-satunya tulisan ke database:
+// loadCart dengan `segarkan: true` (checkout dan pesanan meja) memanggil segarkanKuota, yang me-reset kuota harian
+// menu toko (UPDATE menus) bila tanggal stoknya sudah lewat; quote tidak menulis apa pun.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { rentangHariWib } from "./admin-summary.service";

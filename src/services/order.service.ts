@@ -496,9 +496,11 @@ export async function listMyOrders(userId: number, f: MyOrdersQuery) {
 }
 
 /**
- * Detail satu pesanan pembeli: bentuk {@link mapCustomerOrder} ditambah `payment` (metode, status, jumlah). Untuk metode
- * `online` ditambah `payment_url` Snap dan `qris`; untuk `va` ditambah data VA. Keduanya null bila belum dibuat atau
- * pesanan tidak menunggu bayar lagi.
+ * Detail satu pesanan pembeli: bentuk {@link mapCustomerOrder} ditambah `payment` (metode, status, jumlah).
+ * Metode `online`: ditambah `payment_url` (halaman Snap terbaru) dan `qris` (QR terbaru); keduanya null bila belum
+ * dibuat atau pesanan tidak lagi menunggu bayar (bukan holding, atau sudah lunas).
+ * Metode `va`: ditambah `va` (bank, nomor, kedaluwarsa VA terbaru), null hanya bila VA belum dibuat; setelah lunas
+ * atau batal tetap dikirim. Metode `cod` (dan `qris` lama): hanya `payment` dasar.
  * D16: Order §1 + payment; R-10 customer_id dari sesi, bukan milik → 404.
  *
  * @throws AppError 404 NOT_FOUND bila pesanan tidak ada atau milik pembeli lain
