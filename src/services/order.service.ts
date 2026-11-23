@@ -280,7 +280,7 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
       // 1. Kunci baris pembeli lebih dulu. Checkout milik pembeli yang sama jadi antre satu per satu, sehingga batas
       //    3 pesanan menunggu tidak bisa ditembus dengan mengirim banyak permintaan sekaligus. Ini harus sebelum
       //    langkah 2: catatan idempotensi berelasi ke tabel users, dan menyimpannya ikut mengunci baris pembeli.
-      const [[buyer]] = await conn.query<RowDataPacket[]>(
+      const [[customer]] = await conn.query<RowDataPacket[]>(
         "SELECT full_name, phone FROM users WHERE id = ? FOR UPDATE",
         [userId],
       );
@@ -361,8 +361,8 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
           userId,
           cart.merchant.id,
           data.pickup_point_id,
-          data.customer_name ?? buyer.full_name,
-          data.customer_phone ?? buyer.phone,
+          data.customer_name ?? customer.full_name,
+          data.customer_phone ?? customer.phone,
           data.note,
           cart.subtotal,
           cart.discount,
