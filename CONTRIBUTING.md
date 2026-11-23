@@ -98,6 +98,10 @@ Wajib dipakai saat memberi nama baru. Mengikuti nama tabel DB dan peran PRD.
 | isian templat `{…}`     | placeholder       | basi (lewat hari)           | stale              |
 | alamat kembali          | returnUrl         | belum dibaca                | unread             |
 | asal web yang diizinkan | allowedOrigin     | terima (webhook)            | handle             |
+| saldo                   | balance           | riwayat                     | history            |
+| pencairan dicatat admin | record            | klaim (voucher)             | claim              |
+| tinjau (banner)         | review            | balas (tiket)               | reply              |
+| rentang (tanggal)       | range             | publik (tampil umum)        | public             |
 
 Istilah yang belum ada di tabel: pilih padanan Inggris yang umum, lalu tambahkan ke tabel ini pada commit yang sama.
 
