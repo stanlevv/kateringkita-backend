@@ -27,3 +27,6 @@ a3b93f011880b3c9cd178ad8a13ea87b4be87ae0
 
 # refactor(dasar): nama pendek tersisa jadi kata utuh (F28)
 d0b90c60c989d5d5d7ad63b6449c035da76a7a7e
+
+# refactor(dasar): shorthand durationMs di request-logger (F28)
+ea70f964152d666308cd1878e1960866add76064
