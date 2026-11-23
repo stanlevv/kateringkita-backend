@@ -1,12 +1,28 @@
+// Isi file: unggah foto ke penyimpanan Cloudflare R2. Dipakai handler foto profil (auth), foto toko/menu (merchant),
+// dan gambar banner/pop-up (banner); pemeriksa URL foto dipakai service yang menyimpan URL foto.
+// Server tidak menerima file fotonya. Server hanya membuat presigned upload URL: alamat unggah sementara yang sudah
+// ditandatangani server dan berlaku beberapa menit. Aplikasi mengirim fotonya langsung ke R2 lewat alamat itu, lalu
+// menyimpan URL publiknya lewat endpoint lain, yang memeriksanya dengan validateImageUrl.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { uploadSchema } from "../dto/upload.dto";
 import { AppError } from "../utils/errors";
 import { PRESIGN_SECONDS, presignPut, getR2Config } from "../utils/r2";
 
+// Ekstensi nama file untuk tiap tipe gambar yang diterima.
 const FILE_EXTENSIONS = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
 
-// Kunci objek selalu dibuat server di bawah awalan pemilik (D12)
+/**
+ * Membuat alamat unggah sementara untuk satu foto. Nama file (kunci objek) selalu dibuat server: awalan folder milik
+ * pengguna + UUID (id acak yang praktis tidak mungkin kembar) + ekstensi. Aplikasi tidak bisa memilih lokasi sendiri.
+ * @param prefix awalan folder pemilik, contoh `users/12/avatar/`; selalu dibentuk pemanggil dari data login, bukan dari
+ *               isi permintaan
+ * @param input  tipe gambar (`content_type`) dan ukuran dalam byte (`size`) yang sudah lolos uploadSchema; keduanya
+ *               ikut ditandatangani, jadi R2 menolak file dengan tipe atau ukuran lain
+ * @returns `upload_url` (alamat PUT ke R2), `public_url` (alamat foto setelah terunggah), dan `expires_at` (batas waktu
+ *          alamat unggah, format ISO)
+ * @throws 503 SERVICE_UNAVAILABLE bila pengaturan R2 belum diisi di server
+ */
 // shortcut: objek R2 yang diganti/ditinggalkan tidak pernah dihapus, pasang lifecycle rule bucket atau job pembersih bila biaya penyimpanan terasa
 export function createUpload(prefix: string, input: z.infer<typeof uploadSchema>) {
   const r2Config = getR2Config();
@@ -20,9 +36,19 @@ export function createUpload(prefix: string, input: z.infer<typeof uploadSchema>
   };
 }
 
+// Nama file yang dibuat createUpload: UUID huruf kecil + ekstensi jpg/png/webp.
 const OBJECT_NAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
 
-// D10: null, sama dengan tersimpan, atau tepat <R2_PUBLIC_URL>/<prefix><uuid>.<ext>; selain itu 400 di `field`.
+/**
+ * Memeriksa URL foto yang dikirim aplikasi sebelum disimpan, supaya pengguna hanya bisa memakai foto hasil unggahan
+ * ke foldernya sendiri. URL lolos bila kosong (`undefined`/`null`), sama dengan URL yang sudah tersimpan, atau persis
+ * berbentuk `<R2_PUBLIC_URL>/<prefix><uuid>.<ext>`. Bila R2 belum diatur, semua URL baru ditolak.
+ * @param url      URL foto yang dikirim aplikasi
+ * @param savedUrl URL foto yang sekarang tersimpan di database (`null` bila belum ada)
+ * @param prefix   awalan folder yang diizinkan, contoh `merchants/5/logo/`
+ * @param field    nama kolom untuk pesan galat, contoh `logo_url`
+ * @throws 400 VALIDATION_ERROR di kolom `field` bila URL tidak memenuhi aturan di atas
+ */
 // shortcut: keberadaan objek di R2 tidak dicek (butuh jaringan), cek HEAD bila foto rusak jadi masalah nyata
 export function validateImageUrl(
   url: string | null | undefined,

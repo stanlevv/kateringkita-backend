@@ -1,3 +1,9 @@
+// Isi file: daftar alamat (rute) akun di /api/v1: daftar, masuk, keluar, profil sendiri (/me), ganti sandi, unggah
+// foto profil, dan lupa sandi. Lapisan pertama dari alur routes → handlers (auth.handler) → services (auth.service,
+// password-reset.service, upload.service) → database. Tiap rute menentukan urutan middleware: wajib login
+// (requireAuth), pemeriksa isi permintaan dengan skema zod (validate), dan pembatas jumlah percobaan (rate limit:
+// batas berapa kali sebuah aksi boleh diulang dalam waktu tertentu, untuk menahan tebak sandi dan spam).
+// validate dipasang sebelum limiter login, ubah profil, dan OTP, supaya limiter membaca isi yang sudah dirapikan.
 import { Router } from "express";
 import {
   changePasswordSchema,
@@ -27,6 +33,10 @@ import { requireAuth } from "../middleware/auth";
 import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
+/**
+ * Router akun; dipasang di /api/v1. Rute daftar, login, dan lupa sandi terbuka tanpa login; rute /me dan logout
+ * wajib login.
+ */
 export const auth = Router();
 
 auth.post("/auth/customer/register", registerLimiter, validate(registerCustomerSchema), registerCustomerHandler);
@@ -43,10 +53,10 @@ auth.patch("/me", requireAuth, validate(updateMeSchema), passwordLimiter, update
 
 auth.put("/me/password", requireAuth, validate(changePasswordSchema), passwordLimiter, changePasswordHandler);
 
-// Semua peran (D12); awalan kunci selalu dari token
+// Semua peran boleh mengunggah foto profil; folder tujuan selalu dibentuk dari id pengguna di token.
 auth.post("/me/avatar", requireAuth, validate(uploadSchema), uploadLimiter, uploadAvatarHandler);
 
-// F11 lupa sandi: OTP lewat email
+// Lupa sandi: minta kode OTP ke email, periksa kode, lalu ganti sandi dengan kode itu.
 auth.post("/auth/password/forgot", validate(forgotPasswordSchema), otpLimiter, forgotPasswordHandler);
 
 auth.post("/auth/password/verify", validate(verifyOtpSchema), otpLimiter, verifyOtpHandler);
