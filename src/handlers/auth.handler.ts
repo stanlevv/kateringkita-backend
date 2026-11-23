@@ -9,8 +9,8 @@ import {
   registerMerchant,
   updateMe,
 } from "../services/auth.service";
-import { cekOtp, mintaOtp, resetSandi } from "../services/password-reset.service";
-import { buatUnggahan } from "../services/upload.service";
+import { verifyOtp, requestOtp, resetPassword } from "../services/password-reset.service";
+import { createUpload } from "../services/upload.service";
 
 export const registerCustomerHandler: RequestHandler = async (req, res) => {
   res.status(201).json({ data: { user: await registerCustomer(req.body) } });
@@ -46,21 +46,21 @@ export const changePasswordHandler: RequestHandler = async (req, res) => {
 
 // Semua peran (D12); awalan kunci selalu dari token
 export const uploadAvatarHandler: RequestHandler = (req, res) => {
-  res.json({ data: buatUnggahan(`users/${(req as AuthedRequest).auth.userId}/avatar/`, req.body) });
+  res.json({ data: createUpload(`users/${(req as AuthedRequest).auth.userId}/avatar/`, req.body) });
 };
 
 // F11: jawaban sama untuk email terdaftar atau tidak (anti-enumerasi)
 export const forgotPasswordHandler: RequestHandler = async (req, res) => {
-  await mintaOtp(req.body.email);
+  await requestOtp(req.body.email);
   res.json({ data: { message: "Jika email terdaftar, kode verifikasi sudah dikirim." } });
 };
 
 export const verifyOtpHandler: RequestHandler = async (req, res) => {
-  await cekOtp(req.body.email, req.body.code);
+  await verifyOtp(req.body.email, req.body.code);
   res.json({ data: { valid: true } });
 };
 
 export const resetPasswordHandler: RequestHandler = async (req, res) => {
-  await resetSandi(req.body);
+  await resetPassword(req.body);
   res.json({ data: { ok: true } });
 };

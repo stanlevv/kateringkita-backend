@@ -16,7 +16,7 @@ import { PRESIGN_SECONDS } from "../utils/r2";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { jam } from "./katalog.service";
 import { idToko } from "./merchant-menu.service";
-import { cekUrlGambar } from "./upload.service";
+import { validateImageUrl } from "./upload.service";
 import { VoucherKartu, voucherTersedia } from "./voucher.service";
 
 // Banner beranda mobile (rancangan voucher 2026-11-16 §5.4). Penjual mengajukan (1 banner aktif per toko, tampil setelah
@@ -59,7 +59,7 @@ export function rapikan<S extends z.ZodType>(skema: S, body: unknown, prefix: st
   const url = (body as { image_url?: unknown } | null)?.image_url;
   if (typeof url === "string" && url.trim()) {
     try {
-      cekUrlGambar(url.trim(), null, prefix, "image_url");
+      validateImageUrl(url.trim(), null, prefix, "image_url");
     } catch (e) {
       if (e instanceof AppError && e.fields) Object.assign(fields, e.fields);
       else throw e;
@@ -276,7 +276,7 @@ export async function tinjauBanner(adminId: number, idRaw: unknown, body: unknow
             ends_at: d.ends_at && new Date(d.ends_at),
           }
         : {};
-    if (b.merchant_id === null && d.image_url) cekUrlGambar(d.image_url, b.image_url, PREFIX_PLATFORM, "image_url");
+    if (b.merchant_id === null && d.image_url) validateImageUrl(d.image_url, b.image_url, PREFIX_PLATFORM, "image_url");
     const ubah: Record<string, unknown> = Object.fromEntries(
       Object.entries({ ...isi, sort_order: d.sort_order }).filter(([, v]) => v !== undefined),
     );

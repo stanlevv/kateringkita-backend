@@ -7,7 +7,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { env as config } from "../config/env";
 import { insertUser } from "../services/auth.service";
-import { password as passwordSchema } from "../dto/auth.dto";
+import { passwordSchema } from "../dto/auth.dto";
 import { catat, dalamTransaksi } from "../services/admin-audit.service";
 
 // Status verifikasi penjual, sama dengan nilai kolom merchants.verification_status.

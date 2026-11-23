@@ -144,7 +144,7 @@ export async function moderasiMenu(adminId: number, idRaw: unknown, turun: boole
 }
 
 // Hapus satu foto melanggar; menu tetap dijual. Foto utama dihapus → foto tambahan pertama naik jadi foto utama (kartu katalog tidak kosong).
-// shortcut: objek di R2 tidak dihapus (sama dengan buatUnggahan)
+// shortcut: objek di R2 tidak dihapus (sama dengan createUpload)
 export async function hapusFotoMenu(adminId: number, idRaw: unknown, url: string, reason: string) {
   const id = await dalamTransaksi(async (conn) => {
     const x = await kunci(conn, "menus", idRaw, { where: "deleted_at IS NULL", notFound: "Menu tidak ditemukan." });

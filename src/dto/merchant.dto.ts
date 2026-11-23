@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { urlFoto } from "./upload.dto";
+import { imageUrlSchema } from "./upload.dto";
 
 export const statusSchema = z.object({ is_open: z.boolean("Status dapur wajib diisi.") });
 
@@ -41,9 +41,9 @@ export const updateProfileSchema = z
     hold_minutes: angka("Durasi tahan pesanan", 1, 30),
     daily_revenue_target: angka("Target omzet", 0, 1_000_000_000),
     wa_template: waTemplate,
-    logo_url: urlFoto,
+    logo_url: imageUrlSchema,
     // background profil toko (unggahan purpose cover)
-    cover_url: urlFoto,
+    cover_url: imageUrlSchema,
     // F21: terima pesanan dari meja (QR)
     dine_in_enabled: z.boolean({ error: "Pilihan pesan dari meja tidak valid." }),
     pickup_point_ids: z

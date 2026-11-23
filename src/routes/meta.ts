@@ -1,17 +1,17 @@
 import { Router } from "express";
 import {
-  daftarJenisUsahaHandler,
-  daftarKategoriHandler,
-  daftarTitikTemuHandler,
-  pengaturanHandler,
+  listMerchantTypesHandler,
+  listCategoriesHandler,
+  listPickupPointsHandler,
+  getSettingsHandler,
 } from "../handlers/meta.handler";
 
 export const meta = Router();
 
-meta.get("/meta/merchant-types", daftarJenisUsahaHandler);
+meta.get("/meta/merchant-types", listMerchantTypesHandler);
 
-meta.get("/meta/categories", daftarKategoriHandler);
+meta.get("/meta/categories", listCategoriesHandler);
 
-meta.get("/meta/pickup-points", daftarTitikTemuHandler);
+meta.get("/meta/pickup-points", listPickupPointsHandler);
 
-meta.get("/meta/settings", pengaturanHandler);
+meta.get("/meta/settings", getSettingsHandler);

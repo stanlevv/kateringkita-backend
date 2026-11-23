@@ -26,7 +26,7 @@ import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/m
 import { buatPromoToko, daftarPromoToko, hapusPromoToko, ubahPromoToko } from "../services/merchant-promo.service";
 import { daftarUlasanToko } from "../services/ulasan.service";
 import { tanyaAsisten } from "../services/asisten.service";
-import { buatUnggahan } from "../services/upload.service";
+import { createUpload } from "../services/upload.service";
 import { AppError } from "../utils/errors";
 
 // Toko selalu dari token (R-10).
@@ -82,7 +82,7 @@ export const ubahKuotaHandler: RequestHandler = async (req, res) => {
 
 export const uploadFotoHandler: RequestHandler = async (req, res) => {
   const { purpose, ...file } = req.body;
-  res.json({ data: buatUnggahan(`merchants/${await idToko(uid(req))}/${purpose}/`, file) });
+  res.json({ data: createUpload(`merchants/${await idToko(uid(req))}/${purpose}/`, file) });
 };
 
 export const daftarPesananTokoHandler: RequestHandler = async (req, res) => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { urlFoto } from "./upload.dto";
+import { imageUrlSchema } from "./upload.dto";
 
 const teks = z.string({ error: "Pencarian tidak valid." }).optional();
 
@@ -44,7 +44,7 @@ const fields = {
     .int("Kategori wajib dipilih.")
     .min(1, "Kategori wajib dipilih."),
   description: z.string({ error: "Deskripsi harus berupa teks." }).trim().max(500, "Maksimal 500 karakter.").nullable(),
-  image_url: urlFoto,
+  image_url: imageUrlSchema,
   // foto tambahan selain foto utama; aturan pemilik dicek service
   gallery: z
     .array(

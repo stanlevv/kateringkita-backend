@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
-import { cekUrlGambar } from "./upload.service";
+import { validateImageUrl } from "./upload.service";
 import { UpdateProfileInput } from "../dto/merchant.dto";
 
 export async function getProfile(userId: number) {
@@ -87,8 +87,8 @@ export async function updateProfile(userId: number, input: UpdateProfileInput) {
     );
     const m = r[0];
     if (!m) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
-    cekUrlGambar(input.logo_url, m.logo_url, `merchants/${m.id}/logo/`, "logo_url");
-    cekUrlGambar(input.cover_url, m.cover_url, `merchants/${m.id}/cover/`, "cover_url");
+    validateImageUrl(input.logo_url, m.logo_url, `merchants/${m.id}/logo/`, "logo_url");
+    validateImageUrl(input.cover_url, m.cover_url, `merchants/${m.id}/cover/`, "cover_url");
     // jam tutup harus setelah jam buka; yang tidak dikirim dibandingkan dengan nilai tersimpan
     if (
       (input.open_time !== undefined || input.close_time !== undefined) &&

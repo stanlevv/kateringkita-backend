@@ -27,28 +27,28 @@ import { requireAuth } from "../middleware/auth";
 import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
-export const v1 = Router();
+export const auth = Router();
 
-v1.post("/auth/customer/register", registerLimiter, validate(registerCustomerSchema), registerCustomerHandler);
+auth.post("/auth/customer/register", registerLimiter, validate(registerCustomerSchema), registerCustomerHandler);
 
-v1.post("/auth/merchant/register", registerLimiter, validate(registerMerchantSchema), registerMerchantHandler);
+auth.post("/auth/merchant/register", registerLimiter, validate(registerMerchantSchema), registerMerchantHandler);
 
-v1.post("/auth/login", validate(loginSchema), loginLimiter, loginHandler);
+auth.post("/auth/login", validate(loginSchema), loginLimiter, loginHandler);
 
-v1.post("/auth/logout", requireAuth, logoutHandler);
+auth.post("/auth/logout", requireAuth, logoutHandler);
 
-v1.get("/me", requireAuth, getMeHandler);
+auth.get("/me", requireAuth, getMeHandler);
 
-v1.patch("/me", requireAuth, validate(updateMeSchema), passwordLimiter, updateMeHandler);
+auth.patch("/me", requireAuth, validate(updateMeSchema), passwordLimiter, updateMeHandler);
 
-v1.put("/me/password", requireAuth, validate(changePasswordSchema), passwordLimiter, changePasswordHandler);
+auth.put("/me/password", requireAuth, validate(changePasswordSchema), passwordLimiter, changePasswordHandler);
 
 // Semua peran (D12); awalan kunci selalu dari token
-v1.post("/me/avatar", requireAuth, validate(uploadSchema), uploadLimiter, uploadAvatarHandler);
+auth.post("/me/avatar", requireAuth, validate(uploadSchema), uploadLimiter, uploadAvatarHandler);
 
 // F11 lupa sandi: OTP lewat email
-v1.post("/auth/password/forgot", validate(forgotPasswordSchema), otpLimiter, forgotPasswordHandler);
+auth.post("/auth/password/forgot", validate(forgotPasswordSchema), otpLimiter, forgotPasswordHandler);
 
-v1.post("/auth/password/verify", validate(verifyOtpSchema), otpLimiter, verifyOtpHandler);
+auth.post("/auth/password/verify", validate(verifyOtpSchema), otpLimiter, verifyOtpHandler);
 
-v1.post("/auth/password/reset", validate(resetPasswordSchema), otpLimiter, resetPasswordHandler);
+auth.post("/auth/password/reset", validate(resetPasswordSchema), otpLimiter, resetPasswordHandler);

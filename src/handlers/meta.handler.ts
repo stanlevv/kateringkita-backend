@@ -1,18 +1,18 @@
 import { RequestHandler } from "express";
-import { ambilPengaturan, daftarJenisUsaha, daftarKategori, daftarTitikTemu } from "../services/meta.service";
+import { getSettings, listMerchantTypes, listCategories, listPickupPoints } from "../services/meta.service";
 
-export const daftarJenisUsahaHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await daftarJenisUsaha() });
+export const listMerchantTypesHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await listMerchantTypes() });
 };
 
-export const daftarKategoriHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await daftarKategori() });
+export const listCategoriesHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await listCategories() });
 };
 
-export const daftarTitikTemuHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await daftarTitikTemu() });
+export const listPickupPointsHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await listPickupPoints() });
 };
 
-export const pengaturanHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await ambilPengaturan() });
+export const getSettingsHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await getSettings() });
 };

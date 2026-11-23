@@ -1,6 +1,6 @@
 import express, { Application } from "express";
 import cors from "cors";
-import { v1 } from "./routes/auth";
+import { auth } from "./routes/auth";
 import { requireAuth, requireRole } from "./middleware/auth";
 import { meta } from "./routes/meta";
 import { admin } from "./routes/admin";
@@ -38,7 +38,7 @@ app.get("/api/v1/health", healthHandler);
 // F27: saat mode pemeliharaan aktif semua rute selain pengecualian (admin, login, webhook, dll.) dibalas 503
 app.use(maintenanceGuard);
 
-// admin dipasang sebelum v1; path admin tak dikenal: tanpa token 401, bukan admin 403, admin 404 (notFound)
+// admin dipasang sebelum router auth; path admin tak dikenal: tanpa token 401, bukan admin 403, admin 404 (notFound)
 app.use("/api/v1/admin", requireAuth, requireRole("admin"), adminAccess, admin);
 app.use("/api/v1/merchant", requireAuth, requireRole("merchant"), merchant);
 // F21: menu & pesanan meja tanpa login
@@ -47,7 +47,7 @@ app.use("/api/v1", katalog);
 app.use("/api/v1", order);
 app.use("/api/v1", notifikasi);
 app.use("/api/v1", tiket);
-app.use("/api/v1", v1);
+app.use("/api/v1", auth);
 app.use("/api/v1", meta);
 
 app.use(notFoundHandler);

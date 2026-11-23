@@ -1,29 +1,37 @@
 import { z } from "zod";
-import { urlFoto } from "./upload.dto";
+import { imageUrlSchema } from "./upload.dto";
 
-export const fullName = z
+export const fullNameSchema = z
   .string("Nama lengkap wajib diisi.")
   .trim()
   .min(1, "Nama lengkap wajib diisi.")
   .max(150, "Nama lengkap maksimal 150 karakter.");
-const email = z.string("Email wajib diisi.").trim().toLowerCase().pipe(z.email("Format email tidak valid."));
-export const phone = z
+const emailSchema = z.string("Email wajib diisi.").trim().toLowerCase().pipe(z.email("Format email tidak valid."));
+export const phoneSchema = z
   .string("Nomor HP wajib diisi.")
   .regex(/^08\d{8,11}$/, "Nomor HP harus diawali 08 dan 10–13 digit.");
-export const password = z
+export const passwordSchema = z
   .string("Kata sandi wajib diisi.")
   .min(8, "Kata sandi minimal 8 karakter.")
   .max(72, "Kata sandi maksimal 72 karakter.")
   .regex(/[A-Za-z]/, "Kata sandi harus mengandung huruf.")
   .regex(/\d/, "Kata sandi harus mengandung angka.");
 
-export const registerCustomerSchema = z.object({ full_name: fullName, email, phone, password });
+export const registerCustomerSchema = z.object({
+  full_name: fullNameSchema,
+  email: emailSchema,
+  phone: phoneSchema,
+  password: passwordSchema,
+});
 
 export const registerMerchantSchema = z.object({
-  full_name: fullName,
-  phone,
-  email: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), email.optional()),
-  password,
+  full_name: fullNameSchema,
+  phone: phoneSchema,
+  email: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    emailSchema.optional(),
+  ),
+  password: passwordSchema,
   business_name: z
     .string("Nama usaha wajib diisi.")
     .trim()
@@ -39,15 +47,15 @@ export const registerMerchantSchema = z.object({
 
 // "" berarti "kosongkan email"; aturan per peran ada di service.updateMe
 export const updateMeSchema = z.object({
-  full_name: fullName.optional(),
-  phone: phone.optional(),
+  full_name: fullNameSchema.optional(),
+  phone: phoneSchema.optional(),
   email: z
     .preprocess(
-      (v) => (v === null || (typeof v === "string" && v.trim() === "") ? "" : v),
-      z.union([z.literal(""), email], "Format email tidak valid."),
+      (value) => (value === null || (typeof value === "string" && value.trim() === "") ? "" : value),
+      z.union([z.literal(""), emailSchema], "Format email tidak valid."),
     )
     .optional(),
-  avatar_url: urlFoto,
+  avatar_url: imageUrlSchema,
   favorite_pickup_point_id: z
     .number("Titik temu tidak tersedia.")
     .int("Titik temu tidak tersedia.")
@@ -65,7 +73,7 @@ export const changePasswordSchema = z.object({
     .string("Kata sandi lama wajib diisi.")
     .min(1, "Kata sandi lama wajib diisi.")
     .max(72, "Kata sandi maksimal 72 karakter."),
-  new_password: password,
+  new_password: passwordSchema,
 });
 
 export const loginSchema = z.object({
@@ -91,9 +99,9 @@ export type RegisterCustomerInput = z.infer<typeof registerCustomerSchema>;
 export type RegisterMerchantInput = z.infer<typeof registerMerchantSchema>;
 
 // F11 lupa sandi (OTP email)
-const KODE = "Kode berisi 6 angka.";
-const kode = z.string(KODE).regex(/^\d{6}$/, KODE);
-export const forgotPasswordSchema = z.object({ email });
-export const verifyOtpSchema = z.object({ email, code: kode });
-export const resetPasswordSchema = z.object({ email, code: kode, password });
+const OTP_CODE_MSG = "Kode berisi 6 angka.";
+const otpCodeSchema = z.string(OTP_CODE_MSG).regex(/^\d{6}$/, OTP_CODE_MSG);
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+export const verifyOtpSchema = z.object({ email: emailSchema, code: otpCodeSchema });
+export const resetPasswordSchema = z.object({ email: emailSchema, code: otpCodeSchema, password: passwordSchema });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { fullName, phone } from "./auth.dto";
+import { fullNameSchema, phoneSchema } from "./auth.dto";
 
 export const reasonBody = z.object({
   reason: z
@@ -46,5 +46,5 @@ export const pemeliharaanSchema = z.object({
 
 // Fase 1 kelola admin
 const adminLevel = z.enum(["super", "ops", "support"], { error: "Pilih tingkat admin." });
-export const buatAdminSchema = z.object({ full_name: fullName, phone, admin_level: adminLevel });
+export const buatAdminSchema = z.object({ full_name: fullNameSchema, phone: phoneSchema, admin_level: adminLevel });
 export const levelAdminSchema = z.object({ admin_level: adminLevel });

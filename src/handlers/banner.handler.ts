@@ -12,7 +12,7 @@ import {
   tinjauBanner,
   ubahBannerToko,
 } from "../services/banner.service";
-import { buatUnggahan } from "../services/upload.service";
+import { createUpload } from "../services/upload.service";
 
 // Banner beranda (rancangan voucher 2026-11-16 §5.4). Body divalidasi di service (zod + cek gambar sekaligus).
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
@@ -51,5 +51,5 @@ export const tinjauBannerHandler: RequestHandler = async (req, res) => {
 // Gambar banner / pop-up platform; body sudah divalidasi adminUploadSchema di rute
 export const uploadAdminHandler: RequestHandler = async (req, res) => {
   const { purpose, ...file } = req.body;
-  res.json({ data: buatUnggahan(`platform/${purpose}/`, file) });
+  res.json({ data: createUpload(`platform/${purpose}/`, file) });
 };

@@ -3,7 +3,7 @@ import { z } from "zod";
 import db from "../config/db";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
-import { cekUrlGambar } from "./upload.service";
+import { validateImageUrl } from "./upload.service";
 import { hariIniWib, segarkanKuota } from "./merchant-kuota.service";
 import { KuotaInput, MenuInput, MenuQuery, menuSchema } from "../dto/merchant-menu.dto";
 
@@ -182,12 +182,12 @@ async function kolomMenu(conn: Conn, merchantId: number, input: MenuInput, lama:
     ]);
     if (!c[0]) throw invalidField("category_id", "Kategori tidak ditemukan.");
   }
-  cekUrlGambar(input.image_url, lama?.image_url ?? null, `merchants/${merchantId}/menu/`, "image_url");
+  validateImageUrl(input.image_url, lama?.image_url ?? null, `merchants/${merchantId}/menu/`, "image_url");
   if (input.gallery !== undefined) {
     // foto tersimpan boleh dipertahankan / diurutkan ulang; yang baru wajib unggahan menu toko ini
     const tersimpan = galeri(lama?.gallery);
     for (const u of input.gallery)
-      if (!tersimpan.includes(u)) cekUrlGambar(u, null, `merchants/${merchantId}/menu/`, "gallery");
+      if (!tersimpan.includes(u)) validateImageUrl(u, null, `merchants/${merchantId}/menu/`, "gallery");
     sets.gallery = input.gallery.length ? JSON.stringify(input.gallery) : null;
   }
   return sets;

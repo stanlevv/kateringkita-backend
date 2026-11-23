@@ -4,11 +4,11 @@
 import "dotenv/config"; // harus pertama: env.ts (lewat db.ts) membaca process.env saat diimpor
 import { z } from "zod";
 import db from "../config/db";
-import { fullName, password, phone } from "../dto/auth.dto";
+import { fullNameSchema, passwordSchema, phoneSchema } from "../dto/auth.dto";
 import { dalamTransaksi } from "../services/admin-audit.service";
 import { simpanAdmin } from "../services/admin-akun.service";
 
-const adminSchema = z.object({ fullName, phone, password });
+const adminSchema = z.object({ fullName: fullNameSchema, phone: phoneSchema, password: passwordSchema });
 
 /**
  * Membuat akun admin super. Sandinya dipilih sendiri oleh operator lewat env, jadi tidak wajib diganti saat login
