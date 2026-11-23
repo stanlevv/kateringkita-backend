@@ -12,3 +12,6 @@ b12c34eabf3565ce2d52032158383d7d6cf9aba3
 
 # refactor(pesanan): akhiran _MSG untuk konstanta pesan tersisa (F28)
 a3b93f011880b3c9cd178ad8a13ea87b4be87ae0
+
+# refactor(pesanan): nama variabel dan properti internal yang jelas (F28)
+493b39a22c3c5f53fcadb4907ccdf85ead2ba246
