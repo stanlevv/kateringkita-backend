@@ -84,3 +84,12 @@ e82610290dc3ce548514bad5447c276fe4cb2645
 
 # refactor(fitur-lain): kode catatan internal di judul dan komentar test diganti kata-kata (F28)
 79a4eb3b2a05892073bdcb77543d43e8e6727dc6
+
+# refactor(admin): nama file bahasa Inggris (F28)
+b8788117a2a7d05d20f6ce21f15979880930932b
+
+# refactor(admin): nama kode bahasa Inggris yang jelas (F28)
+df07518e2e529888a1e547ff071ca5f989de8f5e
+
+# refactor(admin): nama pendek di test admin dan nama lama di komentar jadi kata utuh (F28)
+2a8092b7a20f08acc50fd7af5143b29d8230c0e4
