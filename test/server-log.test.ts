@@ -6,7 +6,7 @@ import db from "../src/config/db";
 import { errorHandler } from "../src/middleware/error-handler";
 import { recordServerLog, requestId } from "../src/middleware/request-logger";
 import { createAdmin } from "../src/scripts/create-admin";
-import { bersihkanLog } from "../src/services/log-server.service";
+import { bersihkanLog } from "../src/services/server-log.service";
 import { AppError } from "../src/utils/errors";
 import { login, prepareMerchants } from "./helpers/merchant";
 

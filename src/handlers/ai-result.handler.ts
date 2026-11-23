@@ -1,8 +1,8 @@
 import { RequestHandler } from "express";
-import { daftarHasilAiSchema } from "../dto/hasil-ai.dto";
+import { daftarHasilAiSchema } from "../dto/ai-result.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { daftarHasilAi, verifikasiHasilAi } from "../services/hasil-ai.service";
+import { daftarHasilAi, verifikasiHasilAi } from "../services/ai-result.service";
 
 // Rubrik AI: verifikasi manual hasil AI (admin). Body PATCH sudah divalidasi skema di rute.
 export const daftarHasilAiHandler: RequestHandler = async (req, res) => {

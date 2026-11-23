@@ -1,7 +1,7 @@
 import { RequestHandler } from "express";
-import { filterLogServerSchema } from "../dto/log-server.dto";
+import { filterLogServerSchema } from "../dto/server-log.dto";
 import { parse } from "../middleware/validate";
-import { daftarLogServer, statusServer } from "../services/log-server.service";
+import { daftarLogServer, statusServer } from "../services/server-log.service";
 
 // F23 dashboard server (admin)
 export const daftarLogServerHandler: RequestHandler = async (req, res) => {

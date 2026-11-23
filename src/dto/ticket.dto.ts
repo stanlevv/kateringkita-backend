@@ -1,6 +1,6 @@
 // Isi file: daftar kategori dan status tiket bantuan, serta skema zod untuk membuat tiket, membalas, dan query
 // daftar tiket (pembeli dan admin). zod = pustaka yang memeriksa bentuk data masuk; data yang tidak lolos dijawab 400
-// beserta pesan per kolom. Dipakai handlers/ticket.handler.ts dan admin-tiket.service. Nama kunci = kontrak JSON.
+// beserta pesan per kolom. Dipakai handlers/ticket.handler.ts dan admin-ticket.service. Nama kunci = kontrak JSON.
 import { z } from "zod";
 
 /** Kategori tiket, tampil di aplikasi sebagai Akun, Pembayaran, Pesanan, Penjual, Aplikasi, Lainnya. */

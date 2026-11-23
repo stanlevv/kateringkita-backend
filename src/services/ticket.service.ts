@@ -1,5 +1,5 @@
 // Isi file: tiket bantuan sisi pembeli (buat, daftar, buka, balas, tutup) dan potongan yang dipakai bersama sisi admin
-// (admin-tiket.service). Alurnya routes/ticket.ts → handlers/ticket.handler.ts → file ini → database.
+// (admin-ticket.service). Alurnya routes/ticket.ts → handlers/ticket.handler.ts → file ini → database.
 // Tiket bantuan = percakapan dua arah antara pembeli dan tim admin (customer service) untuk masalah akun, pembayaran,
 // atau aplikasi. Urusan isi pesanan (menu, waktu ambil) tetap langsung ke penjual lewat WhatsApp.
 import { randomInt } from "node:crypto";

@@ -20,7 +20,7 @@ import {
 } from "./catalog.service";
 import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
-import { simpanHasil } from "./hasil-ai.service";
+import { simpanHasil } from "./ai-result.service";
 import { getWibDate } from "./merchant-quota.service";
 
 // Istilah yang dipakai di file ini:

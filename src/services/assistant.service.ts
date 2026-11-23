@@ -7,7 +7,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { hasInjection, anonymize } from "../utils/safe-prompt";
 import { ai } from "./ai.service";
-import { simpanHasil } from "./hasil-ai.service";
+import { simpanHasil } from "./ai-result.service";
 import { getWibDate } from "./merchant-quota.service";
 import { getMerchantSummary } from "./merchant-report.service";
 import { getMerchantId } from "./merchant-menu.service";

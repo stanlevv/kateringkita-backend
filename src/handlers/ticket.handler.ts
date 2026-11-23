@@ -1,12 +1,12 @@
 // Isi file: handler HTTP tiket bantuan. Sisi pembeli (/me/tickets) dipasang di routes/ticket.ts dan memanggil
 // ticket.service; sisi admin (/admin/tickets, semua tingkat admin) dipasang di routes/admin.ts dan memanggil
-// admin-tiket.service. Handler memeriksa query atau isi permintaan dengan skema dto/ticket.dto.ts, lalu mengirim JSON.
+// admin-ticket.service. Handler memeriksa query atau isi permintaan dengan skema dto/ticket.dto.ts, lalu mengirim JSON.
 import { Request, RequestHandler } from "express";
 import { bodyObject } from "../dto/order.dto";
 import { replyTicketSchema, createTicketSchema, listAdminTicketsSchema, listTicketsSchema } from "../dto/ticket.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
-import { balasTiketAdmin, daftarTiketAdmin, detailTiketAdmin, tutupTiketAdmin } from "../services/admin-tiket.service";
+import { balasTiketAdmin, daftarTiketAdmin, detailTiketAdmin, tutupTiketAdmin } from "../services/admin-ticket.service";
 import { getMyTicket, replyMyTicket, createTicket, listMyTickets, closeMyTicket } from "../services/ticket.service";
 
 // id pengguna yang login (pembeli atau admin), sudah dipasang middleware requireAuth di rute.

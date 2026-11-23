@@ -1,6 +1,6 @@
 // Isi file: laporan penjualan toko untuk penjual (rekap penjualan, per jam, dan daftar transaksi). Alurnya
 // routes/merchant.ts → handlers/merchant.handler.ts → file ini → database. Rekap toko juga dipakai asisten AI penjual
-// (assistant.service), dan pengubah rentang tanggal dipakai rekap keuangan admin (admin-keuangan.service).
+// (assistant.service), dan pengubah rentang tanggal dipakai rekap keuangan admin (admin-finance.service).
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { countDays, DateRange } from "../dto/merchant-report.dto";

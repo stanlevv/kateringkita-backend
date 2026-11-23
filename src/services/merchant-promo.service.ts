@@ -8,7 +8,7 @@ import { AppError } from "../utils/errors";
 import { dalamTransaksi, kunci, withBool } from "./admin-audit.service";
 import { FIELD, kodeGanda, kodeSkema, nilai, publikDari, rapikan } from "./admin-promo.service";
 import { getMerchantId } from "./merchant-menu.service";
-import { kabariPromoToko } from "./admin-pengumuman.service";
+import { kabariPromoToko } from "./admin-announcement.service";
 
 // Aturan isian sama dengan promo platform (dicek `rapikan` di admin-promo.service): jenis `percent` (potongan persen,
 // boleh diberi batas `max_discount`), `fixed` (potongan rupiah tetap), `min_subtotal` (minimal belanja), `quota`

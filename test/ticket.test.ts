@@ -74,7 +74,7 @@ const setWaktu = async (code: string, timestamp: string) => {
     code,
   ]);
 };
-// balasan admin langsung lewat SQL (endpoint admin diuji di admin-tiket.test.ts)
+// balasan admin langsung lewat SQL (endpoint admin diuji di admin-ticket.test.ts)
 const balasanAdmin = async (code: string, body: string, timestamp: string | Date) => {
   const { id } = await baris(code);
   await db.query(

@@ -1,6 +1,6 @@
 // Isi file: urusan akun pengguna, yaitu daftar (pembeli dan penjual), masuk (login), keluar (logout), baca dan ubah
 // profil sendiri, serta ganti kata sandi. Alurnya routes/auth.ts → handlers/auth.handler.ts → file ini → database.
-// insertUser juga dipakai admin-akun.service dan skrip seed-demo untuk membuat akun.
+// insertUser juga dipakai admin-account.service dan skrip seed-demo untuk membuat akun.
 // Kata sandi tidak pernah disimpan apa adanya. Yang disimpan adalah hash bcrypt: hasil acakan satu arah yang tidak bisa
 // dibalik menjadi sandi aslinya. Saat login, sandi yang diketik di-hash ulang lalu dicocokkan dengan bcrypt.compare.
 import bcrypt from "bcryptjs";
@@ -83,7 +83,7 @@ export async function insertUser(
 ): Promise<PublicUser> {
   const email = input.email ?? null;
   // 1. Tolak nomor/email yang sudah terdaftar sebelum menjalankan bcrypt yang berat. Galatnya dibuat sama bentuknya
-  //    dengan galat MySQL ER_DUP_ENTRY, supaya penanganan duplikat yang sudah ada (errorHandler, admin-akun) tetap
+  //    dengan galat MySQL ER_DUP_ENTRY, supaya penanganan duplikat yang sudah ada (errorHandler, admin-account) tetap
   //    berlaku. Dua pendaftaran bersamaan tetap dijaga indeks unik database, yang melempar ER_DUP_ENTRY asli.
   const [existingUsers] = await conn.query<RowDataPacket[]>(
     "SELECT 1 FROM users WHERE phone = ? OR email = ? LIMIT 1",

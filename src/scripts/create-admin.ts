@@ -6,7 +6,7 @@ import { z } from "zod";
 import db from "../config/db";
 import { fullNameSchema, passwordSchema, phoneSchema } from "../dto/auth.dto";
 import { dalamTransaksi } from "../services/admin-audit.service";
-import { simpanAdmin } from "../services/admin-akun.service";
+import { simpanAdmin } from "../services/admin-account.service";
 
 const adminSchema = z.object({ fullName: fullNameSchema, phone: phoneSchema, password: passwordSchema });
 

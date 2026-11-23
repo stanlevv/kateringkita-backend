@@ -1,6 +1,6 @@
 // Isi file: ulasan menu. Pembeli mengulas menu dari pesanannya yang sudah selesai, dan penjual melihat daftar ulasan
 // tokonya. Alurnya routes/order.ts (kirim ulasan) atau routes/merchant.ts (daftar ulasan) → handler → file ini →
-// database. Perhitungan ulang rating juga dipakai moderasi admin (admin-moderasi.service) saat ulasan disembunyikan.
+// database. Perhitungan ulang rating juga dipakai moderasi admin (admin-moderation.service) saat ulasan disembunyikan.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { ReviewInput } from "../dto/order.dto";

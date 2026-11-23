@@ -42,7 +42,7 @@ import {
   resetSandiAdminHandler,
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
-import { verifikasiAiSchema } from "../dto/hasil-ai.dto";
+import { verifikasiAiSchema } from "../dto/ai-result.dto";
 import { adminUploadSchema } from "../dto/upload.dto";
 import {
   createAdminBannerHandler,
@@ -52,7 +52,7 @@ import {
 } from "../handlers/banner.handler";
 import { createPopupHandler, listPopupsHandler, updatePopupHandler } from "../handlers/popup.handler";
 import { uploadLimiter } from "../middleware/rate-limiter";
-import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/hasil-ai.handler";
+import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/ai-result.handler";
 import {
   buatAiHandler,
   daftarAiHandler,
@@ -61,7 +61,7 @@ import {
   ubahAiHandler,
   ujiAiHandler,
 } from "../handlers/ai.handler";
-import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
+import { daftarLogServerHandler, statusServerHandler } from "../handlers/server-log.handler";
 import { payoutSchema, refundSchema } from "../dto/payout.dto";
 import {
   recordPayoutHandler,

@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { simpanHasil } from "../src/services/hasil-ai.service";
+import { simpanHasil } from "../src/services/ai-result.service";
 import { login, prepareMerchants } from "./helpers/merchant";
 
 // Rubrik AI: hasil AI tersimpan tampil di panel admin web dan diverifikasi manual (setujui / tolak + catatan), diaudit.

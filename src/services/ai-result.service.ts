@@ -1,6 +1,6 @@
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
-import type { DaftarHasilAi, VerifikasiAi } from "../dto/hasil-ai.dto";
+import type { DaftarHasilAi, VerifikasiAi } from "../dto/ai-result.dto";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 
 // Rubrik AI: setiap keluaran AI yang lolos validasi skema disimpan (tabel ai_results) lalu diverifikasi manual admin di web.

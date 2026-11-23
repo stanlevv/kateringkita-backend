@@ -5,7 +5,7 @@ import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { createAdmin } from "../src/scripts/create-admin";
 import { ai } from "../src/services/ai.service";
-import { bersihkanLog } from "../src/services/log-server.service";
+import { bersihkanLog } from "../src/services/server-log.service";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { decrypt } from "../src/utils/crypto";
 import { login, prepareMerchants } from "./helpers/merchant";

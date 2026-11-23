@@ -3,7 +3,7 @@
 // requestLogger menulis satu baris log per request (tidak dipasang saat test).
 import { randomUUID } from "node:crypto";
 import { RequestHandler } from "express";
-import { catatLog, LAMBAT_MS } from "../services/log-server.service";
+import { catatLog, LAMBAT_MS } from "../services/server-log.service";
 import { AuthedRequest } from "./auth";
 
 // Id dari pemanggil hanya dipakai bila berisi huruf, angka, dan . : _ - (paling panjang 128), supaya log tidak bisa

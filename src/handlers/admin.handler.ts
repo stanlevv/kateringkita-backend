@@ -13,9 +13,9 @@ import {
   ubahKontakCs,
   ubahPromo,
 } from "../services/admin-promo.service";
-import { kirimPengumuman } from "../services/admin-pengumuman.service";
+import { kirimPengumuman } from "../services/admin-announcement.service";
 import { ringkasan } from "../services/admin-summary.service";
-import { rekapKeuangan } from "../services/admin-keuangan.service";
+import { rekapKeuangan } from "../services/admin-finance.service";
 import { adminRangeSchema } from "../dto/merchant-report.dto";
 import { parse } from "../middleware/validate";
 import {
@@ -24,8 +24,8 @@ import {
   hapusFotoMenu,
   moderasiMenu,
   moderasiUlasan,
-} from "../services/admin-moderasi.service";
-import { buatAdmin, daftarAdmin, resetSandiAdmin, setAktifAdmin, ubahLevel } from "../services/admin-akun.service";
+} from "../services/admin-moderation.service";
+import { buatAdmin, daftarAdmin, resetSandiAdmin, setAktifAdmin, ubahLevel } from "../services/admin-account.service";
 import { AppError } from "../utils/errors";
 import { getMaintenance, updateMaintenance } from "../services/maintenance.service";
 
