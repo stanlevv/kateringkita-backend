@@ -8,12 +8,12 @@ import { createAdmin } from "../src/scripts/create-admin";
 import { sendNotification } from "./helpers/midtrans";
 import { login, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F26: rekening pencairan penjual, saldo & pencatatan pencairan oleh admin super, daftar pengembalian dana Midtrans.
+// Pencairan dana: rekening pencairan penjual, saldo & pencatatan pencairan oleh admin super, daftar pengembalian dana Midtrans.
 // Test berurutan dan berbagi data: saldo test 2 dicairkan di test 3.
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let adminToken: string;
 let asOf: string;
-// AUD-34: versi rekening (account.updated_at) yang dilihat admin di daftar saldo saat mentransfer
+// Versi rekening (account.updated_at) yang dilihat admin di daftar saldo saat mentransfer
 let versiRekening: string | null = null;
 
 const get = (path: string, token: string) => request(app).get(`/api/v1${path}`).set("Authorization", `Bearer ${token}`);
@@ -132,7 +132,7 @@ test("saldo: hanya VA/online lunas & selesai; bagian penjual = subtotal − prom
   const res = await get("/admin/payouts/balances", adminToken).expect(200);
   asOf = res.body.data.as_of;
   expect(res.body.data.rows).toEqual([
-    // platform_discount (AUD-25): voucher platform yang dibayar platform di pesanan saldo ini, dicek admin sebelum transfer
+    // platform_discount: voucher platform yang dibayar platform di pesanan saldo ini, dicek admin sebelum transfer
     {
       merchant_id: setup.idA,
       business_name: "Dapur Siti",
@@ -200,7 +200,7 @@ test("catat pencairan: wajib rekening, nominal harus cocok, pesanan setelah as_o
   expect(log.after_json).toEqual({ payout_id: res.body.data.id, amount: 58000, orders: 3, reference: "TRF-0001" });
 });
 
-// AUD-34: pencatatan terikat ke rekening yang dilihat admin; rekening diganti sesudahnya → 409, tidak tercatat ke rekening baru
+// Pencatatan terikat ke rekening yang dilihat admin; rekening diganti sesudahnya → 409, tidak tercatat ke rekening baru
 test("rekening diganti setelah daftar saldo dimuat → pencatatan 409", async () => {
   await db.query(
     "UPDATE merchants SET payout_updated_at = DATE_SUB(payout_updated_at, INTERVAL 1 MINUTE) WHERE id = ?",
@@ -283,7 +283,7 @@ test("pengembalian dana: hanya dana Midtrans lunas dari pesanan batal/kedaluwars
   });
 });
 
-// AUD-24: settlement Midtrans yang dikirim ulang setelah refund ditandai tidak boleh mengembalikan pembayaran menjadi lunas
+// Settlement Midtrans yang dikirim ulang setelah refund ditandai tidak boleh mengembalikan pembayaran menjadi lunas
 test("settlement dikirim ulang setelah refund → tetap refunded, tidak muncul lagi di daftar refund", async () => {
   env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
   const code = await bayarLaluBatal("online", "cancelled");

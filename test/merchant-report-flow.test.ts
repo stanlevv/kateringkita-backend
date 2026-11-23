@@ -6,7 +6,7 @@ import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// F09: GET /merchant/reports/{summary,hourly,transactions} (LP-N1..N4, LP-E1)
+// Laporan toko dari alur pesanan sungguhan: GET /merchant/reports/{summary,hourly,transactions}
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let kode: string;
 const hariIni = getWibDate();
@@ -74,7 +74,7 @@ describe("summary", () => {
     });
   });
 
-  test("validasi rentang (LP-E1) dan peran", async () => {
+  test("validasi rentang tanggal dan peran", async () => {
     const salah = await get("summary?from=2026-01-10&to=2026-01-01").expect(400);
     expect(salah.body.error.fields.to).toEqual(["Tanggal akhir harus setelah tanggal awal."]);
     expect((await get("summary?from=2026-01-01&to=2026-06-01").expect(400)).body.error.fields.to).toEqual([

@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { createCustomer, prepareCheckout } from "./helpers/merchant";
 
-// F12: CRUD /merchant/promos + kode promo di quote & checkout
+// Promo toko: CRUD /merchant/promos + kode promo di quote & checkout
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
 const promo = (overrides: object = {}) => ({
@@ -149,7 +149,7 @@ describe("kode promo di checkout", () => {
 
   test("free_service_fee & fixed; promo platform berlaku di semua toko", async () => {
     await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
-    // C2: penjual tidak bisa membuat jenis ini lagi; promo lama jenis ini tetap berlaku di checkout
+    // Biaya layanan milik platform: penjual tidak bisa membuat jenis ini lagi; promo lama jenis ini tetap berlaku di checkout
     expect(
       (await buat({ code: "GRATISLAYANAN", type: "free_service_fee", value: 0, quota: null }).expect(400)).body.error
         .fields.type,

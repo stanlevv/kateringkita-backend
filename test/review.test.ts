@@ -5,7 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { menuRow, createCustomer, prepareCheckout, insertMenu } from "./helpers/merchant";
 
-// F13: POST /orders/:code/reviews + GET /merchant/reviews + rating menu/toko + can_review
+// Ulasan: POST /orders/:code/reviews + GET /merchant/reviews + rating menu/toko + can_review
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let kode: string;
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });

@@ -55,7 +55,8 @@ beforeEach(async () => {
 afterAll(() => {
   setR2Env(false);
 });
-// AUD-36: pengajuan baru bisa disetujui setelah URL unggah (presign) gambarnya kedaluwarsa; tes memundurkan waktunya
+// Gambar pengajuan bisa diganti lewat URL unggah (presign) selama URL itu berlaku, jadi pengajuan baru hanya bisa
+// disetujui setelah URL unggahnya kedaluwarsa; tes memundurkan waktunya
 const lewatJendela = () => db.query("UPDATE banners SET updated_at = updated_at - INTERVAL 10 MINUTE");
 
 describe("penjual mengajukan banner", () => {

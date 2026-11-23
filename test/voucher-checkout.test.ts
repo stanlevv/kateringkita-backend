@@ -197,7 +197,7 @@ describe("pesanan dua voucher", () => {
     expect((await promoRow(merchantPromoId)).used_count).toBe(0);
   });
 
-  test("C1: voucher platform ditolak untuk tunai; voucher toko tetap boleh", async () => {
+  test("voucher platform ditolak untuk tunai; voucher toko tetap boleh", async () => {
     const res = await pesan({ promo_codes: ["HEMAT3K"] }, "cod").expect(422);
     expect(res.body.error.fields.promo_codes).toEqual(["Voucher platform hanya untuk bayar non-tunai."]);
     await pesan({ promo_codes: ["TOKO5"] }, "cod").expect(201);
@@ -239,7 +239,7 @@ describe("pesanan dua voucher", () => {
     expect(await order(code)).toMatchObject({ merchant_promo_id: null, merchant_discount: 1000, status: "cancelled" });
   });
 
-  test("C2: dua voucher gratis biaya layanan tidak bisa digabung", async () => {
+  test("dua voucher gratis biaya layanan tidak bisa digabung", async () => {
     await promo({ merchant_id: setup.idA, code: "TOKOGRATIS", type: "free_service_fee" });
     await promo({ code: "PLATGRATIS", type: "free_service_fee" });
     const res = await quote({ promo_codes: ["TOKOGRATIS", "PLATGRATIS"] }).expect(422);

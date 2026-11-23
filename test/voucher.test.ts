@@ -156,7 +156,7 @@ describe("voucher platform & Voucher Saya", () => {
 });
 
 describe("pengaturan promo", () => {
-  test("promo toko lama gratis biaya layanan tetap bisa diubah selama jenisnya tidak diganti (C2)", async () => {
+  test("promo toko lama gratis biaya layanan tetap bisa diubah selama jenisnya tidak diganti", async () => {
     const [result] = await db.query<any>(
       `INSERT INTO promos (merchant_id, code, type, value, starts_at, ends_at)
        VALUES (?, 'LAMAGRATIS', 'free_service_fee', 0, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 5 DAY)`,
@@ -170,7 +170,7 @@ describe("pengaturan promo", () => {
     expect(res.body.data).toMatchObject({ type: "free_service_fee", is_public: false });
   });
 
-  test("promo toko: tanpa gratis biaya layanan (C2); is_public bisa dimatikan", async () => {
+  test("promo toko: tanpa gratis biaya layanan; is_public bisa dimatikan", async () => {
     const isi = {
       type: "fixed",
       value: 1000,

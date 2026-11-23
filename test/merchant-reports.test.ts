@@ -7,7 +7,7 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { toUtcRange } from "../src/services/merchant-report.service";
 import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/merchant";
 
-// F09: /merchant/reports/* (M-09, R-10; D1–D9)
+// Laporan toko /merchant/reports/*: angka ringkasan, batas hari WIB, kunci baris transaksi, dan validasi query
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const codes: Record<string, string> = {};
 
@@ -74,7 +74,7 @@ beforeAll(async () => {
   await atur(codes.multi, { status: "completed", completed_at: pagi });
   codes.satu = await placeOrder(setup.customerToken, setup.menu2, 3);
   await atur(codes.satu, { status: "completed", completed_at: siang });
-  // tiga status lain punya item dan completed_at, tetap tidak boleh dihitung (D1)
+  // tiga status lain punya item dan completed_at, tetap tidak boleh dihitung
   for (const status of ["cancelled", "expired", "ready"]) {
     codes[status] = await placeOrder(setup.customerToken, setup.menu);
     await atur(codes[status], { status, completed_at: siang });
@@ -202,7 +202,7 @@ describe("GET /merchant/reports/transactions", () => {
   });
 });
 
-describe("validasi query (D9) & penjaga", () => {
+describe("validasi query & penjaga", () => {
   const salah = async (query: string, fields: Record<string, string[]>, jalur = "summary") => {
     const res = await get(jalur, query).expect(400);
     expect(res.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid.", fields });

@@ -7,7 +7,7 @@ import { assistantLimiter } from "../src/middleware/rate-limiter";
 import { ai } from "../src/services/ai.service";
 import { freezeClock, placeOrder, prepareCheckout, insertMenu } from "./helpers/merchant";
 
-// F17: POST /merchant/assistant (Gemini) — konteks hanya data toko sendiri.
+// Asisten AI penjual: POST /merchant/assistant (Gemini) — konteks hanya data toko sendiri.
 // Rubrik AI: prompt memuat Role, Constraint, Output Schema; keluaran JSON divalidasi & disimpan; injeksi ditolak; data pribadi disamarkan.
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const tanya = (question: unknown, token = setup.tokenA) =>
