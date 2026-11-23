@@ -1,5 +1,5 @@
-// Handler HTTP fitur pesan dari meja (F21): kelola meja (penjual) dan pesanan tamu (publik).
-// Lapisan kedua alur routes → handlers → services: ambil parameter request, panggil table.service, kirim JSON.
+// Isi file: handler HTTP fitur pesan dari meja, untuk kelola meja (penjual) dan pesanan tamu (publik). Lapisan kedua
+// dari alur routes → handlers → services → database: ambil data permintaan, panggil table.service, kirim JSON.
 import { Request, RequestHandler } from "express";
 import { AuthedRequest } from "../middleware/auth";
 import {
@@ -12,9 +12,9 @@ import {
   updateTable,
 } from "../services/table.service";
 
-// F21 pesan dari meja. Body sudah divalidasi skema di rute.
+// Isi permintaan sudah diperiksa skemanya di rute. getUserId = id penjual yang login (dipasang requireAuth).
 const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
-// token tamu dikirim lewat header agar tidak tercatat di log URL
+// Token tamu dikirim lewat header, bukan alamat URL, supaya tidak ikut tercatat di log server.
 const getGuestToken = (req: Request) => req.get("x-guest-token") ?? "";
 
 /** `GET /merchant/tables`: daftar meja milik toko penjual yang login. */
@@ -22,12 +22,12 @@ export const listTablesHandler: RequestHandler = async (req, res) => {
   res.json({ data: await listTables(getUserId(req)) });
 };
 
-/** `POST /merchant/tables`: buat meja baru beserta token QR-nya, dibalas 201. */
+/** `POST /merchant/tables`: membuat meja baru beserta token QR-nya, dijawab 201. */
 export const createTableHandler: RequestHandler = async (req, res) => {
   res.status(201).json({ data: await createTable(getUserId(req), req.body.label) });
 };
 
-/** `PATCH /merchant/tables/:id`: ubah nama/status meja atau ganti token QR. */
+/** `PATCH /merchant/tables/:id`: mengubah nama/status meja atau mengganti token QR-nya. */
 export const updateTableHandler: RequestHandler = async (req, res) => {
   res.json({ data: await updateTable(getUserId(req), req.params.id, req.body) });
 };
@@ -37,7 +37,7 @@ export const getTableMenuHandler: RequestHandler = async (req, res) => {
   res.json({ data: await getTableMenu(String(req.params.token)) });
 };
 
-/** `POST /tables/:token/orders`: buat pesanan tamu, dibalas 201 berisi `guest_token` dan status pesanan. */
+/** `POST /tables/:token/orders`: membuat pesanan tamu, dijawab 201 berisi `guest_token` dan status pesanan. */
 export const createTableOrderHandler: RequestHandler = async (req, res) => {
   res.status(201).json({ data: await createTableOrder(String(req.params.token), req.body) });
 };
@@ -47,7 +47,7 @@ export const getGuestOrderHandler: RequestHandler = async (req, res) => {
   res.json({ data: await getGuestOrder(String(req.params.code), getGuestToken(req)) });
 };
 
-/** `POST /guest/orders/:code/pay`: buka halaman bayar Snap untuk pesanan tamu, dibalas `payment_url`. */
+/** `POST /guest/orders/:code/pay`: membuka halaman bayar Snap untuk pesanan tamu, dijawab `payment_url`. */
 export const payGuestOrderHandler: RequestHandler = async (req, res) => {
   res.json({ data: await payGuestOrder(String(req.params.code), getGuestToken(req), req.body.kembali) });
 };

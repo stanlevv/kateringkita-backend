@@ -24,7 +24,8 @@ import {
 
 // Urutan pakai: pindai QR meja → lihat menu tanpa login → buat pesanan tamu → bayar lewat Snap → pantau status
 // dengan "token tamu". Token tamu adalah kata sandi acak yang hanya disimpan peramban tamu; database hanya menyimpan
-// hash-nya (sidik jari satu arah dengan algoritma SHA256), jadi orang yang membaca database tetap tidak tahu token aslinya.
+// hash-nya (sidik jari satu arah dengan algoritma SHA256), jadi orang yang membaca database tetap tidak tahu
+// token aslinya.
 
 const MAX_TABLES = 100;
 // shortcut: batas pesanan menunggu per meja menahan stok dari pesanan iseng; naikkan bila satu meja dipakai

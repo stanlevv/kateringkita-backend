@@ -1,10 +1,10 @@
-// Skema zod untuk query daftar pesanan toko (`GET /merchant/orders`). Dipakai merchant.handler
-// sebelum memanggil merchant-order.service.
+// Isi file: skema zod (aturan bentuk data) untuk query daftar pesanan toko (`GET /merchant/orders`). Dipakai
+// merchant.handler (lapisan handlers) sebelum memanggil merchant-order.service.
 import { z } from "zod";
 import { listQueryBase } from "./order.dto";
 import { Status } from "../services/order-status.service";
 
-// F07 D12: query GET /merchant/orders
+// Semua status pesanan yang boleh dipakai sebagai saringan.
 const VALID_STATUSES: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
 const INVALID_STATUS_MSG = "Status tidak dikenal.";
 /**
@@ -12,7 +12,7 @@ const INVALID_STATUS_MSG = "Status tidak dikenal.";
  * `date` tanggal WIB `YYYY-MM-DD`, ditambah field bersama {@link listQueryBase}.
  */
 export const merchantOrdersQuerySchema = z.object({
-  // daftar dipisah koma; kosong = semua
+  // Daftar status dipisah koma, contoh "holding,confirmed"; kosong = semua status.
   status: z
     .string({ error: INVALID_STATUS_MSG })
     .optional()
