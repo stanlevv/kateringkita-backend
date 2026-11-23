@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)
 ![MySQL / TiDB](https://img.shields.io/badge/TiDB%20Cloud-MySQL%208-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-714%20Tes-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-723%20Tes-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **RESTful API tangguh dan berkinerja tinggi untuk KateringKita — platform marketplace katering kampus terpercaya.**
