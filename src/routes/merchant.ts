@@ -1,3 +1,6 @@
+// Isi file: daftar route semua fitur penjual di bawah /api/v1/merchant: profil toko, menu dan kuota, unggah foto,
+// banner, pesanan, laporan, promo, ulasan, asisten AI, meja, dan pencairan. Alurnya request masuk → middleware (login,
+// peran penjual, pemeriksa body, pembatas laju) → handler → service → database.
 import { Router } from "express";
 import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
 import { openStatusSchema, updateProfileSchema } from "../dto/merchant.dto";
@@ -41,7 +44,12 @@ import {
 import { assistantLimiter, passwordLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
-// Penjaga (requireAuth + requireRole("merchant")) dipasang sekali di app.ts; toko selalu dari token (R-10).
+// `validate(schema)` = memeriksa body dengan skema zod sebelum handler jalan (400 bila tidak sesuai). Pembatas laju
+// (rate limiter) = penolak 429 bila satu pengguna terlalu sering memanggil route yang sama dalam waktu singkat.
+/**
+ * Router penjual. Dipasang di app.ts pada `/api/v1/merchant` dengan penjaga requireAuth + requireRole("merchant"), jadi
+ * semua route di sini wajib login sebagai penjual. Toko selalu dicari dari token login, tidak pernah dari request.
+ */
 export const merchant = Router();
 
 merchant.get("/profile", getProfileHandler);
@@ -60,31 +68,33 @@ merchant.patch("/menus/:id", validate(menuPatchSchema), updateMenuHandler);
 
 merchant.delete("/menus/:id", deleteMenuHandler);
 
+// body kuota diperiksa di handler supaya galat "tepat salah satu dari delta atau quota_today" tanpa `fields`
 merchant.patch("/menus/:id/quota", updateQuotaHandler);
 
+// alamat unggah foto: paling banyak 20 permintaan per penjual per 10 menit
 merchant.post("/uploads", validate(merchantUploadSchema), uploadLimiter, uploadPhotoHandler);
-// Banner beranda (rancangan voucher 2026-11-16 §5.4): 1 banner aktif per toko, tampil setelah disetujui admin
+// Banner beranda: satu banner aktif per toko, tampil setelah disetujui admin. Body diperiksa di service banner.
 merchant.get("/banners", daftarBannerTokoHandler);
 merchant.post("/banners", buatBannerTokoHandler);
 merchant.patch("/banners/:id", ubahBannerTokoHandler);
 merchant.delete("/banners/:id", hapusBannerTokoHandler);
 
-// F07 (M-04): daftar & detail pesanan toko
+// Daftar dan detail pesanan toko.
 merchant.get("/orders", listMerchantOrdersHandler);
 
 merchant.get("/orders/:code", getMerchantOrderHandler);
 
-// F07 (M-04, M-11): tautan chat ke pembeli
+// Tautan chat WhatsApp ke pembeli.
 merchant.get("/orders/:code/whatsapp", getMerchantOrderWhatsappHandler);
 
-// F09 laporan penjualan
+// Laporan penjualan.
 merchant.get("/reports/summary", getReportSummaryHandler);
 
 merchant.get("/reports/hourly", getHourlyReportHandler);
 
 merchant.get("/reports/transactions", listReportTransactionsHandler);
 
-// F12 promo toko
+// Promo toko. Body diperiksa di service promo.
 merchant.get("/promos", listMerchantPromosHandler);
 
 merchant.post("/promos", createMerchantPromoHandler);
@@ -93,21 +103,21 @@ merchant.patch("/promos/:id", updateMerchantPromoHandler);
 
 merchant.delete("/promos/:id", deleteMerchantPromoHandler);
 
-// F13 ulasan pembeli untuk menu toko
+// Ulasan pembeli untuk menu toko.
 merchant.get("/reviews", listMerchantReviewsHandler);
 
-// F17 asisten AI toko
+// Asisten AI toko: paling banyak 10 pertanyaan per penjual per 10 menit.
 merchant.post("/assistant", validate(tanyaSchema), assistantLimiter, askAssistantHandler);
 
-// F21: meja & QR pesan dari meja
+// Meja dan kode QR untuk pesan dari meja.
 merchant.get("/tables", listTablesHandler);
 merchant.post("/tables", validate(tableSchema), createTableHandler);
 merchant.patch("/tables/:id", validate(updateTableSchema), updateTableHandler);
 
-// F26: rekening pencairan (kata sandi diminta ulang, salah 5×/menit → 429), saldo & riwayat pencairan
+// Saldo dan riwayat pencairan, serta ubah rekening pencairan (kata sandi diminta ulang; lebih dari 5 kali ditolak 400
+// dalam semenit → 429).
 merchant.get("/payouts", pencairanSayaHandler);
 merchant.put("/payout-account", validate(rekeningSchema), passwordLimiter, ubahRekeningHandler);
 
-// F07 (M-04, M-08): aksi di luar MERCHANT_ACTIONS → lanjut ke notFoundHandler (404)
-
+// Aksi penjual pada pesanan (confirm, cook, ready, complete, reject). Aksi lain diteruskan ke penangan 404.
 merchant.post("/orders/:code/:aksi", transitionMerchantOrderHandler);
