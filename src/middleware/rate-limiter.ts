@@ -96,8 +96,8 @@ export const loginLimiter: RequestHandler & { reset: () => void } = Object.assig
 const passwordByUser = createBucket(5, 60_000);
 
 // Pendaftaran berhasil per sumber (IP klien): 60 per jam. Hanya yang berhasil dihitung, karena pendaftaran yang gagal
-// validasi atau nomornya sudah terdaftar tidak sempat menjalankan hash sandi yang berat. Batasnya longgar karena satu
-// WiFi kampus atau server web bisa berbagi satu IP.
+// validasi atau nomornya sudah terdaftar tidak sempat menjalankan hash sandi (pengacakan sandi satu arah sebelum
+// disimpan, yang sengaja dibuat berat). Batasnya longgar karena satu WiFi kampus atau server web bisa berbagi satu IP.
 const registerByIp = createBucket(60, 3600_000);
 
 /**

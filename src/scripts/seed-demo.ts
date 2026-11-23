@@ -79,8 +79,9 @@ export function isLocalHost(url: string): boolean {
   }
 }
 
-// Membuat satu penjual demo (akun, toko, titik temu, menu) dalam satu transaksi. Mengembalikan false bila nomor HP-nya
-// sudah terdaftar (sudah pernah dibuat), jadi skrip aman dijalankan berulang.
+// Membuat satu penjual demo (akun, toko, titik temu, menu) dalam satu transaksi, yaitu rangkaian perubahan database
+// yang disimpan semua atau dibatalkan semua. Mengembalikan false bila nomor HP-nya sudah terdaftar (sudah pernah
+// dibuat), jadi skrip aman dijalankan berulang.
 async function createDemoMerchant(demo: DemoMerchant, password: string): Promise<boolean> {
   // Lewati bila akun dengan nomor ini sudah ada; sisanya dibuat dalam satu transaksi.
   const [existing] = await db.query<RowDataPacket[]>("SELECT id FROM users WHERE phone = ?", [demo.phone]);
