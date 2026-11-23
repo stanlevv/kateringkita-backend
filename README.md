@@ -148,7 +148,7 @@ Setiap request melewati lapisan yang sama, dari atas ke bawah:
 
 1. **`src/routes/`** menentukan path, middleware yang dipasang (login, peran, validasi), dan handler yang dipanggil.
 2. **`src/handlers/`** membaca request (body, parameter, header), memanggil service, lalu mengirim respons JSON.
-3. **`src/services/`** berisi aturan bisnis dan kueri SQL; hanya lapisan ini yang menyentuh database.
+3. **`src/services/`** berisi aturan bisnis dan hampir semua kueri SQL. Pengecualiannya cek sesi login (`src/middleware/auth.ts`), health check (`src/handlers/health.handler.ts`), dan skrip di `src/scripts/` (migrasi, seed, buat admin).
 4. **Database** (MySQL/TiDB) diakses lewat pool di `src/config/db.ts`.
 
 Contoh menelusuri checkout `POST /orders`:
