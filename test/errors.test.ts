@@ -1,9 +1,15 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, test, vi } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import { AppError } from "../src/utils/errors";
 import { errorHandler, notFoundHandler } from "../src/middleware/errorHandler";
 import app from "../src/app";
+import { migrate } from "../src/scripts/migrate";
+import { resetTestDatabase } from "./helpers/db";
+
+beforeAll(async () => {
+  await migrate(await resetTestDatabase()); // app.ts membaca app_settings (pemeliharaan)
+});
 
 function makeApp() {
   const a = express();

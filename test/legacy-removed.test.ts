@@ -1,6 +1,12 @@
 import request from "supertest";
-import { expect, test } from "vitest";
+import { beforeAll, expect, test } from "vitest";
 import app from "../src/app";
+import { migrate } from "../src/scripts/migrate";
+import { resetTestDatabase } from "./helpers/db";
+
+beforeAll(async () => {
+  await migrate(await resetTestDatabase()); // app.ts membaca app_settings (pemeliharaan)
+});
 
 test("endpoint auth lama /api/auth/login sudah dihapus → 404", async () => {
   const res = await request(app).post("/api/auth/login").send({ email: "a@b.c", password: "x" });
