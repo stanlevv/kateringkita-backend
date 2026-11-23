@@ -54,3 +54,18 @@ e3aea2662d5b13e9f100dbf978401e726cbf54f1
 
 # refactor(pembayaran): nama kode bahasa Inggris yang jelas (F28)
 a050916cf3c5461b5410592ee98e50d1b9a39d2b
+
+# refactor(test): nama file dan deskripsi test alur utama bahasa Inggris (F28)
+1e7457358b2ebb0e556fd0a03c3452634b0c581f
+
+# refactor(test): nama helper test bahasa Inggris (F28)
+a3262e155c37e959efccbfe7b0dd4b55f0f50fbd
+
+# refactor(test): deskripsi test memakai nama kode baru; ORDER_NOTIFICATION_TEMPLATES (F28)
+c9fe57b6c816564ab3b3bbbdf97520f0ee106d5c
+
+# refactor(test): nama variabel lokal test alur utama yang jelas (F28)
+01adcdb6d9eda92491e0779babe91564daa977f7
+
+# refactor(test): expressApp alih-alih testApp agar tidak terbaca sebagai test oleh vitest list (F28)
+8bde9c0e3b480c8cc9cdf256fb58d6f485929f25
