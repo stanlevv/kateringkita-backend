@@ -1,3 +1,7 @@
+// Isi file: tiket bantuan (layanan pelanggan/CS) sisi admin: daftar, detail, balas, dan tutup tiket dari pembeli.
+// Alurnya routes/admin.ts → handlers/ticket.handler.ts → file ini → database. Semua tingkat admin (super, ops, support)
+// boleh membaca, membalas, dan menutup tiket (lihat middleware/admin-access.ts). Sisi pembeli ada di ticket.service.ts.
+// Balasan dan penutupan oleh admin dicatat di log audit dan dikabarkan ke pembeli lewat notifikasi tab Info.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { ListAdminTicketsQuery } from "../dto/ticket.dto";
@@ -14,10 +18,15 @@ import {
   ticketClosed,
 } from "./ticket.service";
 
-// Tiket bantuan (CS) sisi admin; semua tingkat admin boleh baca & balas (middleware/admin-access.ts). Pembeli: ticket.service.ts.
-
-// 1 kueri halaman + 1 COUNT + 1 hitungan per status
+/**
+ * Daftar tiket untuk admin per halaman. Tab `open` diurutkan dari yang paling lama menunggu; tab lain terbaru dulu.
+ * Butuh tiga query: satu halaman, total yang cocok filter, dan jumlah tiket per status.
+ * @param filter `status`, `q` (kode tiket, judul, nama, atau nomor HP pembeli), `page`, `limit`
+ * @returns `{ data, meta: { page, limit, total, counts } }`; `counts` = jumlah seluruh tiket per status untuk angka
+ *          di tab, tidak terpengaruh filter, pencarian, maupun halaman
+ */
 export async function listAdminTickets(filter: ListAdminTicketsQuery) {
+  // 1. Susun syarat dari status dan kata kunci.
   const where: string[] = [];
   const args: unknown[] = [];
   if (filter.status) {
@@ -31,8 +40,8 @@ export async function listAdminTickets(filter: ListAdminTicketsQuery) {
     const pattern = likePattern(filter.q);
     args.push(pattern, pattern, pattern, pattern);
   }
+  // 2. Ambil satu halaman (antrean open: paling lama menunggu di atas) beserta total yang cocok filter.
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  // antrean open: yang paling lama menunggu di atas; tab lain terbaru dulu
   const direction = filter.status === "open" ? "ASC" : "DESC";
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${TICKET_SUMMARY_COLUMNS}, u.id AS u_id, u.full_name AS u_name, u.phone AS u_phone
@@ -44,7 +53,7 @@ export async function listAdminTickets(filter: ListAdminTicketsQuery) {
     `SELECT COUNT(*) AS n FROM support_tickets t JOIN users u ON u.id = t.user_id ${whereSql}`,
     args,
   );
-  // counts = angka di tab: seluruh tiket per status, tidak terpengaruh filter/pencarian/halaman (seperti unread_count notifikasi, D13)
+  // 3. Angka di tab: seluruh tiket per status, tidak terpengaruh filter (sama seperti hitungan belum dibaca notifikasi).
   const [statusRows] = await db.query<RowDataPacket[]>(
     "SELECT status, COUNT(*) AS n FROM support_tickets GROUP BY status",
   );
@@ -59,7 +68,13 @@ export async function listAdminTickets(filter: ListAdminTicketsQuery) {
   };
 }
 
-// AdminTicketDetail: nama pengirim asli (admin/pembeli), data pembeli, dan pesanan terkait
+/**
+ * Detail tiket untuk admin. Berbeda dengan sisi pembeli, admin melihat nama asli pengirim setiap pesan (pesan admin
+ * tanpa nama tampil sebagai nama tim), data kontak pembeli, dan ringkasan pesanan yang dirujuk tiket.
+ * @param code kode tiket, contoh `TK-20260101-AB12`
+ * @returns detail tiket beserta `customer` dan `order` (null bila tiket tidak merujuk pesanan)
+ * @throws 404 tiket tidak ditemukan
+ */
 export async function getAdminTicket(code: string) {
   const loaded = await loadTicket(code, null);
   const { ticket } = loaded;
@@ -78,7 +93,7 @@ export async function getAdminTicket(code: string) {
   };
 }
 
-// Notifikasi in-app ke pembeli (tab Info); aplikasi membuka detail tiket dari data.ticket_code
+// Notifikasi di aplikasi untuk pembeli pemilik tiket (tab Info); aplikasi membuka detail tiket dari data.ticket_code.
 async function notifyCustomer(conn: Conn, ticket: RowDataPacket, title: string, body: string) {
   await conn.query(
     "INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, 'info', ?, ?, ?, UTC_TIMESTAMP())",
@@ -86,11 +101,21 @@ async function notifyCustomer(conn: Conn, ticket: RowDataPacket, title: string, 
   );
 }
 
-// balasan admin: tiket menunggu pembeli
+/**
+ * Admin membalas tiket. Status menjadi `answered` (menunggu pembeli), pembeli mendapat notifikasi, dan balasan dicatat
+ * di log audit `ticket.reply` beserta id pesannya.
+ * @param adminId id admin yang membalas
+ * @param code    kode tiket
+ * @param body    isi balasan (sudah diperiksa di handler)
+ * @returns detail tiket sesudah dibalas
+ * @throws 404 tiket tidak ditemukan, 409 tiket sudah ditutup
+ */
 export async function replyAdminTicket(adminId: number, code: string, body: string) {
   await withTransaction(async (conn) => {
+    // 1. Kunci tiket; tiket yang sudah ditutup tidak bisa dibalas.
     const ticket = await lockTicket(conn, code);
     if (ticket.status === "closed") throw ticketClosed();
+    // 2. Ubah status dan simpan pesannya, lalu kabari pembeli dan catat di log audit.
     await conn.query("UPDATE support_tickets SET status = 'answered', last_message_at = UTC_TIMESTAMP() WHERE id = ?", [
       ticket.id,
     ]);
@@ -108,11 +133,20 @@ export async function replyAdminTicket(adminId: number, code: string, body: stri
   return getAdminTicket(code);
 }
 
-// idempoten: tiket yang sudah ditutup (oleh siapa pun) tidak berubah, tanpa notifikasi dan audit
+/**
+ * Admin menutup tiket. Idempoten: tiket yang sudah ditutup (oleh siapa pun) tidak berubah, tanpa notifikasi dan tanpa
+ * log. Selain itu pembeli dikabari dan penutupan dicatat di log audit `ticket.close`.
+ * @param adminId id admin yang menutup
+ * @param code    kode tiket
+ * @returns detail tiket sesudah ditutup
+ * @throws 404 tiket tidak ditemukan
+ */
 export async function closeAdminTicket(adminId: number, code: string) {
   await withTransaction(async (conn) => {
+    // 1. Kunci tiket; yang sudah ditutup dibiarkan apa adanya.
     const ticket = await lockTicket(conn, code);
     if (ticket.status === "closed") return;
+    // 2. Tandai ditutup oleh admin, kabari pembeli, lalu catat di log audit.
     await conn.query(
       "UPDATE support_tickets SET status = 'closed', closed_at = UTC_TIMESTAMP(), closed_by = 'admin' WHERE id = ?",
       [ticket.id],
