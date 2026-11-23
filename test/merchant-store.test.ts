@@ -7,7 +7,7 @@ import { createAdmin } from "../src/scripts/create-admin";
 import { loginLimiter } from "../src/middleware/rateLimiter";
 import { resetTestDatabase } from "./helpers/db";
 
-let tA: string, tB: string, tCust: string, tAdmin: string;
+let tA: string, tCust: string, tAdmin: string;
 let idA: number, idB: number;
 
 const login = async (identifier: string) =>
@@ -28,7 +28,7 @@ beforeEach(async () => {
   await request(app).post("/api/v1/auth/customer/register").send({ full_name: "Budi", email: "budi@mail.com", phone: "081234567890", password: "rahasia123" }).expect(201);
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   tA = await login("siti@mail.com");
-  tB = await login("andi@mail.com");
+  await login("andi@mail.com");
   tCust = await login("budi@mail.com");
   tAdmin = await login("081300000009");
   const [rows] = await db.query<any[]>("SELECT id FROM merchants ORDER BY id");
