@@ -1,3 +1,6 @@
+// Isi file: menu favorit dan toko favorit ("Dapur Favorit") milik pembeli: simpan, hapus, dan daftar. Alurnya
+// routes/catalog.ts → handlers/catalog.handler.ts → file ini → database. Favorit yang menu atau tokonya sedang
+// disembunyikan tidak dihapus, hanya tidak tampil, dan muncul lagi saat menu atau tokonya tampil lagi.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { hariIniWib } from "./merchant-kuota.service";
@@ -20,8 +23,16 @@ import {
 } from "./catalog.service";
 import { Pagination } from "../dto/catalog.dto";
 
-// Favorit pembeli (C-19, D13). Baris favorit menu yang tersembunyi tidak dihapus: muncul lagi bila menu/toko aktif lagi.
+// Istilah: `INSERT IGNORE` = sisipkan baris, tetapi bila baris yang sama sudah ada, lewati tanpa galat. Jadi menyimpan
+// favorit yang sudah tersimpan tetap berhasil. Paginasi dan LEFT JOIN favorit dijelaskan di catalog.service.
 
+/**
+ * Menyimpan satu menu ke favorit pembeli. Menyimpan dua kali tidak membuat baris ganda.
+ * @param userId id pembeli yang login
+ * @param rawId  id menu dari path URL, belum dicek
+ * @returns tidak ada
+ * @throws 404 NOT_FOUND bila id tidak valid atau menu tidak tampil di katalog
+ */
 export async function saveFavorite(userId: number, rawId: unknown): Promise<void> {
   const id = menuId(rawId);
   const [existingMenus] = await db.query<RowDataPacket[]>(
@@ -32,19 +43,35 @@ export async function saveFavorite(userId: number, rawId: unknown): Promise<void
   await db.query("INSERT IGNORE INTO favorites (user_id, menu_id) VALUES (?, ?)", [userId, id]);
 }
 
+/**
+ * Menghapus satu menu dari favorit pembeli. Menghapus menu yang tidak ada di favorit tidak dianggap galat.
+ * @param userId id pembeli yang login
+ * @param rawId  id menu dari path URL, belum dicek
+ * @returns tidak ada
+ * @throws 404 NOT_FOUND bila id bukan bilangan bulat positif
+ */
 export async function deleteFavorite(userId: number, rawId: unknown): Promise<void> {
   await db.query("DELETE FROM favorites WHERE user_id = ? AND menu_id = ?", [userId, menuId(rawId)]);
 }
 
-// MENU_VISIBLE tanpa MERCHANT_OPEN: toko tutup & menu habis tetap ada (D3); 1 kueri data + 1 COUNT
+/**
+ * Daftar menu favorit pembeli per halaman, terbaru disimpan dulu. Menu dari toko yang sedang tutup dan menu yang habis
+ * tetap tampil; yang tidak tampil hanya menu atau toko yang disembunyikan.
+ * @param userId     id pembeli yang login
+ * @param pagination nomor halaman dan jumlah baris per halaman
+ * @returns `{ data, meta }`: kartu menu dan `{ page, limit, total }`
+ */
 export async function listFavorites(userId: number, pagination: Pagination) {
   const nowMs = clock.now();
+  // 1. `f.user_id IS NOT NULL` menyisakan menu yang ada di favorit pembeli ini saja.
   const whereClause = `f.user_id IS NOT NULL AND ${MENU_VISIBLE}`;
+  // 2. Ambil satu halaman. Parameter: tanggal WIB hari ini (sisa porsi), id pembeli, limit, offset.
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${MENU_CARD_COLUMNS} FROM ${MENU_FROM} ${JOIN_FAVORITE} WHERE ${whereClause}
      ORDER BY f.created_at DESC, x.id DESC LIMIT ? OFFSET ?`,
     [hariIniWib(new Date(nowMs)), userId, pagination.limit, (pagination.page - 1) * pagination.limit],
   );
+  // 3. Hitung total favorit yang tampil untuk paginasi.
   const [countRows] = await db.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS total FROM ${MENU_FROM} ${JOIN_FAVORITE} WHERE ${whereClause}`,
     [userId],
@@ -55,9 +82,13 @@ export async function listFavorites(userId: number, pagination: Pagination) {
   };
 }
 
-// F05 favorit toko ("Dapur Favorit"), padanan favorit menu (C-19). Sama dengan D13: baris milik toko yang tersembunyi
-// (tidak lolos MERCHANT_VISIBLE) tidak dihapus, hanya tidak tampil; muncul lagi bila toko tampil lagi.
-
+/**
+ * Menyimpan satu toko ke toko favorit pembeli. Menyimpan dua kali tidak membuat baris ganda.
+ * @param userId id pembeli yang login
+ * @param rawId  id toko dari path URL, belum dicek
+ * @returns tidak ada
+ * @throws 404 NOT_FOUND bila id tidak valid atau toko tidak tampil (belum terverifikasi atau pemiliknya nonaktif)
+ */
 export async function saveFavoriteMerchant(userId: number, rawId: unknown): Promise<void> {
   const id = parseMerchantId(rawId);
   const [existingMerchants] = await db.query<RowDataPacket[]>(
@@ -68,6 +99,13 @@ export async function saveFavoriteMerchant(userId: number, rawId: unknown): Prom
   await db.query("INSERT IGNORE INTO merchant_favorites (user_id, merchant_id) VALUES (?, ?)", [userId, id]);
 }
 
+/**
+ * Menghapus satu toko dari toko favorit pembeli. Menghapus toko yang tidak ada di favorit tidak dianggap galat.
+ * @param userId id pembeli yang login
+ * @param rawId  id toko dari path URL, belum dicek
+ * @returns tidak ada
+ * @throws 404 NOT_FOUND bila id bukan bilangan bulat positif
+ */
 export async function deleteFavoriteMerchant(userId: number, rawId: unknown): Promise<void> {
   await db.query("DELETE FROM merchant_favorites WHERE user_id = ? AND merchant_id = ?", [
     userId,
@@ -75,19 +113,29 @@ export async function deleteFavoriteMerchant(userId: number, rawId: unknown): Pr
   ]);
 }
 
-// MERCHANT_VISIBLE tanpa jam buka: toko tutup tetap ada (D3); 1 kueri data + 1 COUNT + 1 titik temu semua toko di halaman
+/**
+ * Daftar toko favorit pembeli per halaman, terbaru disimpan dulu. Toko yang sedang tutup tetap tampil. Memakai 3 kueri:
+ * data, COUNT, dan titik temu semua toko di halaman ini sekaligus.
+ * @param userId     id pembeli yang login
+ * @param pagination nomor halaman dan jumlah baris per halaman
+ * @returns `{ data, meta }`: profil toko publik dan `{ page, limit, total }`
+ */
 export async function listFavoriteMerchants(userId: number, pagination: Pagination) {
   const nowMs = clock.now();
+  // 1. `mf.user_id IS NOT NULL` menyisakan toko yang ada di favorit pembeli ini saja.
   const whereClause = `mf.user_id IS NOT NULL AND ${MERCHANT_VISIBLE}`;
+  // 2. Ambil satu halaman toko.
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${MERCHANT_COLUMNS} FROM ${MERCHANT_FROM} ${JOIN_FAVORITE_MERCHANT} WHERE ${whereClause}
      ORDER BY mf.created_at DESC, m.id DESC LIMIT ? OFFSET ?`,
     [userId, pagination.limit, (pagination.page - 1) * pagination.limit],
   );
+  // 3. Hitung total toko favorit yang tampil untuk paginasi.
   const [countRows] = await db.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS total FROM ${MERCHANT_FROM} ${JOIN_FAVORITE_MERCHANT} WHERE ${whereClause}`,
     [userId],
   );
+  // 4. Ambil titik temu semua toko di halaman ini dalam satu kueri, lalu pasang ke profil masing-masing.
   const pickupPointsByMerchant = await getMerchantPickupPoints(rows.map((merchant) => merchant.id));
   return {
     data: rows.map((merchant) =>
