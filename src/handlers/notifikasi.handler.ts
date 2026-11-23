@@ -1,6 +1,6 @@
 import { Request, RequestHandler } from "express";
 import { daftarNotifSchema, tandaiSchema } from "../dto/notifikasi.dto";
-import { bodyObjek } from "../dto/order.dto";
+import { bodyObject } from "../dto/order.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { daftarNotifikasi, tandaiDibaca } from "../services/notifikasi.service";
@@ -12,5 +12,5 @@ export const daftarNotifikasiHandler: RequestHandler = async (req, res) => {
 };
 
 export const tandaiDibacaHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await tandaiDibaca(uid(req), parse(tandaiSchema, bodyObjek(req.body))) });
+  res.json({ data: await tandaiDibaca(uid(req), parse(tandaiSchema, bodyObject(req.body))) });
 };

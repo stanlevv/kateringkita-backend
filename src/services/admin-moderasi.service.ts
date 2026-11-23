@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
-import { pola } from "./order.service";
+import { likePattern } from "./order.service";
 import { galeri } from "./merchant-menu.service";
 import { hitungUlangRating } from "./ulasan.service";
 
@@ -58,7 +58,7 @@ export async function daftarUlasanAdmin(f: Filter) {
     where.push(
       "(LOWER(r.comment) LIKE LOWER(?) OR LOWER(x.name) LIKE LOWER(?) OR LOWER(m.business_name) LIKE LOWER(?))",
     );
-    args.push(pola(f.q), pola(f.q), pola(f.q));
+    args.push(likePattern(f.q), likePattern(f.q), likePattern(f.q));
   }
   const { rows, meta } = await halaman(KOLOM_ULASAN, DARI_ULASAN, where, args, "r.created_at DESC, r.id DESC", f);
   return { data: rows.map(petaUlasan), meta };
@@ -114,7 +114,7 @@ export async function daftarMenuAdmin(f: Filter) {
   if (s) where.push(s);
   if (f.q) {
     where.push("(LOWER(x.name) LIKE LOWER(?) OR LOWER(m.business_name) LIKE LOWER(?))");
-    args.push(pola(f.q), pola(f.q));
+    args.push(likePattern(f.q), likePattern(f.q));
   }
   const { rows, meta } = await halaman(KOLOM_MENU, DARI_MENU, where, args, "x.id DESC", f);
   return { data: rows.map(petaMenu), meta };

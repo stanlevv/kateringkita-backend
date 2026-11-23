@@ -4,7 +4,7 @@ import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { lepasStok } from "../src/services/order-stock.service";
+import { releaseStock } from "../src/services/order-stock.service";
 import { menuRow, siapCheckout, sisipMenu } from "./helpers/toko";
 
 // F06 Task 5: lepasStok untuk F07/F08 (R-01, R-03, R-12, D14)
@@ -20,7 +20,7 @@ const pesan = async (items: { menu_id: number; qty: number }[]) => {
   const [[o]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [r.body.data.code]);
   return o.id as number;
 };
-const lepas = (id: number, jadi: "terjual" | "kembali") => dalamTransaksi((c) => lepasStok(c, id, jadi));
+const lepas = (id: number, jadi: "terjual" | "kembali") => dalamTransaksi((c) => releaseStock(c, id, jadi));
 const stok = async (id: number) => {
   const m = await menuRow(id);
   return { held: m.held_today, sold: m.sold_today, total: m.sold_total };

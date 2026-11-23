@@ -27,32 +27,41 @@ Dipakai aplikasi mobile, Midtrans, database, atau pengguna:
 
 Wajib dipakai saat memberi nama baru. Mengikuti nama tabel DB dan peran PRD.
 
-| Indonesia      | Inggris          | Indonesia           | Inggris           |
-| -------------- | ---------------- | ------------------- | ----------------- |
-| pesanan        | order            | ambil / baca        | get               |
-| toko, penjual  | merchant         | daftar (benda/aksi) | list              |
-| pembeli        | customer         | buat                | create            |
-| menu           | menu             | ubah                | update            |
-| kuota, stok    | quota, stock     | hapus               | delete            |
-| ulasan         | review           | simpan              | save              |
-| laporan        | report           | tandai              | mark              |
-| unggah         | upload           | bayar               | pay               |
-| pencairan      | payout           | kunci               | lock              |
-| rekening       | bankAccount      | segarkan            | refresh           |
-| meja           | table            | setujui / tolak     | approve / reject  |
-| titik temu     | pickupPoint      | aktif / nonaktif    | active / inactive |
-| keranjang      | cart             | buka / tutup        | open / close      |
-| kadaluarsa     | expired / expiry | kirim               | send              |
-| favorit        | favorite         | cari                | search            |
-| tiket, keluhan | ticket           | hitung              | calculate / count |
-| notifikasi     | notification     | pulihkan            | restore           |
-| pemeliharaan   | maintenance      | sandi               | password          |
-| pengumuman     | announcement     | akun                | account           |
-| moderasi       | moderation       | pengaturan          | settings          |
-| keuangan       | finance          | ringkasan           | summary           |
-| asisten        | assistant        | galat               | error             |
-| rekomendasi    | recommendation   | halaman             | page              |
-| hasil AI       | aiResult         | biaya layanan       | serviceFee        |
+| Indonesia               | Inggris          | Indonesia                   | Inggris           |
+| ----------------------- | ---------------- | --------------------------- | ----------------- |
+| pesanan                 | order            | ambil / baca                | get               |
+| toko, penjual           | merchant         | daftar (benda/aksi)         | list              |
+| pembeli                 | customer         | buat                        | create            |
+| menu                    | menu             | ubah                        | update            |
+| kuota, stok             | quota, stock     | hapus                       | delete            |
+| ulasan                  | review           | simpan                      | save              |
+| laporan                 | report           | tandai                      | mark              |
+| unggah                  | upload           | bayar                       | pay               |
+| pencairan               | payout           | kunci                       | lock              |
+| rekening                | bankAccount      | segarkan                    | refresh           |
+| meja                    | table            | setujui / tolak             | approve / reject  |
+| titik temu              | pickupPoint      | aktif / nonaktif            | active / inactive |
+| keranjang               | cart             | buka / tutup                | open / close      |
+| kadaluarsa              | expired / expiry | kirim                       | send              |
+| favorit                 | favorite         | cari                        | search            |
+| tiket, keluhan          | ticket           | hitung                      | calculate / count |
+| notifikasi              | notification     | pulihkan                    | restore           |
+| pemeliharaan            | maintenance      | sandi                       | password          |
+| pengumuman              | announcement     | akun                        | account           |
+| moderasi                | moderation       | pengaturan                  | settings          |
+| keuangan                | finance          | ringkasan                   | summary           |
+| asisten                 | assistant        | galat                       | error             |
+| rekomendasi             | recommendation   | halaman                     | page              |
+| hasil AI                | aiResult         | biaya layanan               | serviceFee        |
+| porsi                   | portion          | tahan (stok)                | hold              |
+| tamu                    | guest            | lepas (stok)                | release           |
+| aksi                    | action           | muat                        | load              |
+| aktor                   | actor            | periksa                     | validate          |
+| alasan                  | reason           | terapkan                    | apply             |
+| opsi, pilihan           | option           | sisipkan                    | insert            |
+| templat                 | template         | peta (mapper)               | map               |
+| kekurangan stok         | shortage         | transisi                    | transition        |
+| kunci (Idempotency-Key) | idempotencyKey   | saya (milik pengguna login) | my                |
 
 Istilah yang belum ada di tabel: pilih padanan Inggris yang umum, lalu tambahkan ke tabel ini pada commit yang sama.
 

@@ -2,21 +2,21 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vite
 import db from "../src/config/db";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { Aksi, Aktor, Status, transisi } from "../src/services/order-status.service";
+import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { menuRow, pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F07 Task 1: mesin status & stok tepat sekali (C-15, C-16, M-04, M-08, R-03; D1–D7)
 let s: Awaited<ReturnType<typeof siapCheckout>>;
-let penjual: Aktor;
-let penjualB: Aktor;
-let pembeli: Aktor;
-let pembeliB: Aktor;
-const sistem: Aktor = { jenis: "system" };
+let penjual: Actor;
+let penjualB: Actor;
+let pembeli: Actor;
+let pembeliB: Actor;
+const sistem: Actor = { jenis: "system" };
 
 const BERUBAH = "Pesanan sudah berubah status.";
 const HABIS = "Batas waktu pesanan sudah habis.";
-const jalan = (code: string, aksi: Aksi, aktor: Aktor, reason?: string | null) =>
-  dalamTransaksi((c) => transisi(c, code, aksi, aktor, reason));
+const jalan = (code: string, aksi: OrderAction, aktor: Actor, reason?: string | null) =>
+  dalamTransaksi((c) => transitionOrder(c, code, aksi, aktor, reason));
 const pesanan = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 const log = async (code: string) =>
@@ -62,7 +62,7 @@ afterAll(() => {
 });
 
 describe("tabel D1: aksi × status asal", () => {
-  const SAH: Partial<Record<Aksi, Partial<Record<Status, Status>>>> = {
+  const SAH: Partial<Record<OrderAction, Partial<Record<Status, Status>>>> = {
     confirm: { holding: "confirmed" },
     cook: { confirmed: "cooking" },
     ready: { cooking: "ready" },
@@ -72,8 +72,8 @@ describe("tabel D1: aksi × status asal", () => {
     expire: { holding: "expired" },
   };
   const STATUS: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
-  const aktor = (a: Aksi) => (a === "cancel" || a === "complete" ? pembeli : a === "expire" ? sistem : penjual);
-  const kasus = (Object.keys(SAH) as Aksi[]).flatMap((aksi) =>
+  const aktor = (a: OrderAction) => (a === "cancel" || a === "complete" ? pembeli : a === "expire" ? sistem : penjual);
+  const kasus = (Object.keys(SAH) as OrderAction[]).flatMap((aksi) =>
     STATUS.map((dari) => [aksi, dari, SAH[aksi]?.[dari] ?? null] as const),
   );
 

@@ -1,54 +1,54 @@
 import { Router } from "express";
-import { quoteSchema, ulasanSchema, vaSchema } from "../dto/order.dto";
+import { quoteSchema, reviewSchema, vaSchema } from "../dto/order.dto";
 import {
-  bacaPesananHandler,
-  batalkanHandler,
-  bayarOnlineHandler,
-  buatPesananHandler,
-  buatQrisHandler,
-  buatVaHandler,
-  daftarPesananSayaHandler,
-  kirimUlasanHandler,
-  notifikasiMidtransHandler,
-  pesanLagiHandler,
+  getMyOrderHandler,
+  cancelMyOrderHandler,
+  payOnlineHandler,
+  createOrderHandler,
+  createQrisHandler,
+  createVaHandler,
+  listMyOrdersHandler,
+  createReviewHandler,
+  midtransNotificationHandler,
+  reorderHandler,
   quoteHandler,
-  selesaikanHandler,
-  waPesananHandler,
+  completeMyOrderHandler,
+  getMyOrderWhatsappHandler,
 } from "../handlers/order.handler";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 
 // Pesanan pembeli (F06); dipasang di /api/v1 sebelum v1
-export const pesanan = Router();
-const pembeli = [requireAuth, requireRole("customer")];
+export const order = Router();
+const customerOnly = [requireAuth, requireRole("customer")];
 
-pesanan.post("/orders/quote", ...pembeli, validate(quoteSchema), quoteHandler);
+order.post("/orders/quote", ...customerOnly, validate(quoteSchema), quoteHandler);
 
-pesanan.post("/orders", ...pembeli, buatPesananHandler);
+order.post("/orders", ...customerOnly, createOrderHandler);
 
-pesanan.get("/orders/:code", ...pembeli, bacaPesananHandler);
+order.get("/orders/:code", ...customerOnly, getMyOrderHandler);
 
-pesanan.get("/orders/:code/whatsapp", ...pembeli, waPesananHandler);
+order.get("/orders/:code/whatsapp", ...customerOnly, getMyOrderWhatsappHandler);
 
 // F07 (C-14): daftar 3 tab
-pesanan.get("/me/orders", ...pembeli, daftarPesananSayaHandler);
+order.get("/me/orders", ...customerOnly, listMyOrdersHandler);
 
 // F07 (C-15): batal, alasan opsional
-pesanan.post("/orders/:code/cancel", ...pembeli, batalkanHandler);
+order.post("/orders/:code/cancel", ...customerOnly, cancelMyOrderHandler);
 
 // F07 (C-16): pembeli menyelesaikan pesanan siap ambil
-pesanan.post("/orders/:code/complete", ...pembeli, selesaikanHandler);
+order.post("/orders/:code/complete", ...customerOnly, completeMyOrderHandler);
 
 // F13: ulasan per menu untuk pesanan selesai
-pesanan.post("/orders/:code/reviews", ...pembeli, validate(ulasanSchema), kirimUlasanHandler);
+order.post("/orders/:code/reviews", ...customerOnly, validate(reviewSchema), createReviewHandler);
 
 // F14: susun ulang pesanan lama + quote
-pesanan.post("/orders/:code/reorder", ...pembeli, pesanLagiHandler);
+order.post("/orders/:code/reorder", ...customerOnly, reorderHandler);
 
 // F10: VA Midtrans untuk pesanan VA (bank dipilih pembeli); notifikasi Midtrans tanpa token, diverifikasi signature
-pesanan.post("/orders/:code/va", ...pembeli, validate(vaSchema), buatVaHandler);
+order.post("/orders/:code/va", ...customerOnly, validate(vaSchema), createVaHandler);
 // F26: halaman bayar online Snap (QRIS, e-wallet, VA) untuk pesanan payment_method "online"
-pesanan.post("/orders/:code/online", ...pembeli, bayarOnlineHandler);
+order.post("/orders/:code/online", ...customerOnly, payOnlineHandler);
 // QRIS langsung di aplikasi (Core API) untuk pesanan "online": QR digambar aplikasi, tanpa halaman Snap
-pesanan.post("/orders/:code/qris", ...pembeli, buatQrisHandler);
-pesanan.post("/payments/midtrans", notifikasiMidtransHandler);
+order.post("/orders/:code/qris", ...customerOnly, createQrisHandler);
+order.post("/payments/midtrans", midtransNotificationHandler);

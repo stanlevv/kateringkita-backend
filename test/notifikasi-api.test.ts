@@ -4,7 +4,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { loginLimiter } from "../src/middleware/rateLimiter";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { transisi } from "../src/services/order-status.service";
+import { transitionOrder } from "../src/services/order-status.service";
 import { pembeliBaru, pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F08 Task 3: GET /me/notifications & POST /me/notifications/read (C-21, R-10; D13, D14)
@@ -90,7 +90,9 @@ describe("GET /me/notifications (D13)", () => {
 
   test("notifikasi dari transisi nyata ikut tampil", async () => {
     const code = await pesanDulu(s.tCust, s.menu);
-    await dalamTransaksi((c) => transisi(c, code, "confirm", { jenis: "merchant", userId: siti, merchantId: s.idA }));
+    await dalamTransaksi((c) =>
+      transitionOrder(c, code, "confirm", { jenis: "merchant", userId: siti, merchantId: s.idA }),
+    );
     const r = await get().expect(200);
     expect(r.body.data[0]).toMatchObject({
       title: "Pesanan dikonfirmasi",

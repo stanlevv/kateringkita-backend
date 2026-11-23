@@ -24,7 +24,7 @@ export async function segarkanKuota(
     [merchantId, hari],
   );
   if (basi.length === 0) return;
-  // ORDER BY id: kunci baris menu diambil urut id seperti checkout & lepasStok (tanpa siklus kunci)
+  // ORDER BY id: kunci baris menu diambil urut id seperti checkout & releaseStock (tanpa siklus kunci)
   await conn.query(
     `UPDATE menus SET quota_today = daily_quota, sold_today = 0, held_today = 0, stock_date = ?, updated_at = updated_at
      WHERE merchant_id = ? AND deleted_at IS NULL AND (stock_date IS NULL OR stock_date < ?) ORDER BY id`,

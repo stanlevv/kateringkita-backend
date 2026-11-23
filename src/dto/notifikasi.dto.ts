@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { daftarDasar } from "./order.dto";
+import { listQueryBase } from "./order.dto";
 
 // Tipe yang benar-benar ditulis ke tabel notifications: order_status (transisi pesanan), promo (promo toko ke pemfavorit),
 // info (pengumuman admin; balasan/penutupan tiket bantuan dengan data.ticket_code). Tambah di sini bila ada INSERT tipe baru.
@@ -9,8 +9,8 @@ export const TIPE_NOTIF = ["order_status", "promo", "info", "moderation"] as con
 export const daftarNotifSchema = z.object({
   unread: z.enum(["true", "false"], { error: "Filter tidak valid." }).optional(),
   type: z.enum(TIPE_NOTIF, { error: "Tipe notifikasi tidak dikenal." }).optional(),
-  page: daftarDasar.page,
-  limit: daftarDasar.limit,
+  page: listQueryBase.page,
+  limit: listQueryBase.limit,
 });
 export type DaftarNotif = z.infer<typeof daftarNotifSchema>;
 

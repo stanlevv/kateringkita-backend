@@ -1,6 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
-import { UlasanInput } from "../dto/order.dto";
+import { ReviewInput } from "../dto/order.dto";
 import { AppError } from "../utils/errors";
 import { Conn, dalamTransaksi } from "./admin-audit.service";
 import { idToko } from "./merchant-menu.service";
@@ -26,7 +26,7 @@ export async function hitungUlangRating(conn: Pick<Conn, "query">, menuIds: numb
   );
 }
 
-export async function kirimUlasan(userId: number, code: string, data: UlasanInput) {
+export async function kirimUlasan(userId: number, code: string, data: ReviewInput) {
   return dalamTransaksi(async (conn) => {
     const [[o]] = await conn.query<RowDataPacket[]>(
       "SELECT id, merchant_id, status FROM orders WHERE code = ? AND customer_id = ? FOR UPDATE",

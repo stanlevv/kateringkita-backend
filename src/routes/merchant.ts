@@ -9,9 +9,9 @@ import {
   ubahBannerTokoHandler,
 } from "../handlers/banner.handler";
 import { tanyaSchema } from "../dto/asisten.dto";
-import { mejaSchema, ubahMejaSchema } from "../dto/table.dto";
+import { tableSchema, updateTableSchema } from "../dto/table.dto";
 import { rekeningSchema } from "../dto/pencairan.dto";
-import { buatMejaHandler, daftarMejaHandler, ubahMejaHandler } from "../handlers/table.handler";
+import { createTableHandler, listTablesHandler, updateTableHandler } from "../handlers/table.handler";
 import { pencairanSayaHandler, ubahRekeningHandler } from "../handlers/pencairan.handler";
 import {
   aksiPesananTokoHandler,
@@ -100,14 +100,14 @@ merchant.get("/reviews", daftarUlasanTokoHandler);
 merchant.post("/assistant", validate(tanyaSchema), asistenLimiter, tanyaAsistenHandler);
 
 // F21: meja & QR pesan dari meja
-merchant.get("/tables", daftarMejaHandler);
-merchant.post("/tables", validate(mejaSchema), buatMejaHandler);
-merchant.patch("/tables/:id", validate(ubahMejaSchema), ubahMejaHandler);
+merchant.get("/tables", listTablesHandler);
+merchant.post("/tables", validate(tableSchema), createTableHandler);
+merchant.patch("/tables/:id", validate(updateTableSchema), updateTableHandler);
 
 // F26: rekening pencairan (kata sandi diminta ulang, salah 5×/menit → 429), saldo & riwayat pencairan
 merchant.get("/payouts", pencairanSayaHandler);
 merchant.put("/payout-account", validate(rekeningSchema), passwordLimiter, ubahRekeningHandler);
 
-// F07 (M-04, M-08): aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
+// F07 (M-04, M-08): aksi di luar MERCHANT_ACTIONS → lanjut ke notFoundHandler (404)
 
 merchant.post("/orders/:code/:aksi", aksiPesananTokoHandler);

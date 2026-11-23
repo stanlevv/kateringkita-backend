@@ -4,7 +4,7 @@ import request from "supertest";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { TEMPLAT_BAWAAN } from "../src/services/merchant-order.service";
+import { DEFAULT_WA_TEMPLATE } from "../src/services/merchant-order.service";
 import { pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F07 Task 5: GET /merchant/orders/:code/whatsapp memakai templat toko (M-04, M-11; D17)
@@ -52,7 +52,7 @@ test("TEMPLAT_BAWAAN sama persis dengan fe/lib/wa-template.ts", () => {
     .find((p) => existsSync(p));
   const fe = readFileSync(berkas ?? join(__dirname, "../../fe/lib/wa-template.ts"), "utf8");
   const literal = /export const TEMPLATE_BAWAAN = `([^`]*)`;/.exec(fe)![1].replace(/\r\n/g, "\n");
-  expect(TEMPLAT_BAWAAN).toBe(literal);
+  expect(DEFAULT_WA_TEMPLATE).toBe(literal);
 });
 
 test("toko lain → 404; pembeli → 403", async () => {

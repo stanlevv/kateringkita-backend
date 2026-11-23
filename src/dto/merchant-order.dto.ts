@@ -1,18 +1,18 @@
 import { z } from "zod";
-import { daftarDasar } from "./order.dto";
+import { listQueryBase } from "./order.dto";
 import { Status } from "../services/order-status.service";
 
 // F07 D12: query GET /merchant/orders
 const STATUS: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
-const SALAH_STATUS = "Status tidak dikenal.";
-export const daftarTokoSchema = z.object({
+const INVALID_STATUS = "Status tidak dikenal.";
+export const merchantOrdersQuerySchema = z.object({
   // daftar dipisah koma; kosong = semua
   status: z
-    .string({ error: SALAH_STATUS })
+    .string({ error: INVALID_STATUS })
     .optional()
     .transform((s) => (s ? s.split(",").map((x) => x.trim()) : []) as Status[])
-    .refine((a) => a.every((x) => STATUS.includes(x)), SALAH_STATUS),
+    .refine((a) => a.every((x) => STATUS.includes(x)), INVALID_STATUS),
   date: z.iso.date({ error: "Tanggal tidak valid." }).optional(),
-  ...daftarDasar,
+  ...listQueryBase,
 });
-export type DaftarToko = z.infer<typeof daftarTokoSchema>;
+export type MerchantOrdersQuery = z.infer<typeof merchantOrdersQuerySchema>;

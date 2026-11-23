@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { DaftarTiketAdmin } from "../dto/tiket.dto";
 import { catat, Conn, dalamTransaksi } from "./admin-audit.service";
-import { pola } from "./order.service";
+import { likePattern } from "./order.service";
 import {
   KOLOM_RINGKAS,
   NAMA_TIM,
@@ -28,7 +28,7 @@ export async function daftarTiketAdmin(f: DaftarTiketAdmin) {
     where.push(
       "(LOWER(t.code) LIKE LOWER(?) OR LOWER(t.subject) LIKE LOWER(?) OR LOWER(u.full_name) LIKE LOWER(?) OR u.phone LIKE ?)",
     );
-    const p = pola(f.q);
+    const p = likePattern(f.q);
     args.push(p, p, p, p);
   }
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";

@@ -3,8 +3,8 @@ import db from "../src/config/db";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
 import { AppError } from "../src/utils/errors";
-import { transisi } from "../src/services/order-status.service";
-import { kadaluarsakan, mulaiJobKadaluarsa, SISTEM } from "../src/services/order-expiry.service";
+import { transitionOrder } from "../src/services/order-status.service";
+import { expireHeldOrders, startExpiryJob, SYSTEM_ACTOR } from "../src/services/order-expiry.service";
 import { bekukanJam, menuRow, pesanDulu, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
 
 // F08 Task 2: job kadaluarsa holding (R-03, X-04, C-21; D2–D7)
@@ -17,7 +17,7 @@ const pesanan = async (code: string) =>
 const n = async (sql: string, args: unknown[] = []) => Number(((await db.query<any[]>(sql, args))[0] as any[])[0].n);
 const lewat = (code: string, menit = 1) =>
   db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL ? MINUTE WHERE code = ?", [menit, code]);
-const asli = (code: string) => dalamTransaksi((c) => transisi(c, code, "expire", SISTEM));
+const asli = (code: string) => dalamTransaksi((c) => transitionOrder(c, code, "expire", SYSTEM_ACTOR));
 const notifKedaluwarsa = () =>
   n("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND title = 'Pesanan kedaluwarsa'", [budi]);
 
@@ -49,7 +49,7 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     expect((await menuRow(s.menu)).held_today).toBe(6);
     await lewat(a);
     await lewat(b);
-    expect(await kadaluarsakan()).toBe(2);
+    expect(await expireHeldOrders()).toBe(2);
     for (const code of [a, b]) {
       expect(await pesanan(code)).toMatchObject({
         status: "expired",
@@ -61,7 +61,7 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     expect((await menuRow(s.menu)).held_today).toBe(2);
     expect(await notifKedaluwarsa()).toBe(2);
 
-    expect(await kadaluarsakan()).toBe(0);
+    expect(await expireHeldOrders()).toBe(0);
     expect((await menuRow(s.menu)).held_today).toBe(2);
     expect(await notifKedaluwarsa()).toBe(2);
   });
@@ -75,11 +75,11 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     await lewat(codes[0], 1);
     await lewat(codes[1], 3);
     await lewat(codes[2], 2);
-    expect(await kadaluarsakan(1)).toBe(1);
+    expect(await expireHeldOrders(1)).toBe(1);
     expect((await pesanan(codes[1])).status).toBe("expired");
     expect((await pesanan(codes[0])).status).toBe("holding");
     expect((await pesanan(codes[2])).status).toBe("holding");
-    expect(await kadaluarsakan(2)).toBe(2);
+    expect(await expireHeldOrders(2)).toBe(2);
     expect((await pesanan(codes[0])).status).toBe("expired");
   });
 
@@ -95,7 +95,7 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
     const expire = (code: string) => (code === codes[0] ? Promise.reject(new Error("boom")) : asli(code));
-    expect(await kadaluarsakan(100, expire)).toBe(2);
+    expect(await expireHeldOrders(100, expire)).toBe(2);
     expect((await pesanan(codes[0])).status).toBe("holding");
     expect(err).toHaveBeenCalledTimes(1);
     const teks = String(err.mock.calls[0].join(" "));
@@ -109,8 +109,8 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     const code = await pesanDulu(s.tCust, s.menu);
     await lewat(code);
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await kadaluarsakan(100, () => Promise.reject(new AppError(409, "CONFLICT", "x")))).toBe(0);
-    expect(await kadaluarsakan(100, () => Promise.reject(new AppError(404, "NOT_FOUND", "x")))).toBe(0);
+    expect(await expireHeldOrders(100, () => Promise.reject(new AppError(409, "CONFLICT", "x")))).toBe(0);
+    expect(await expireHeldOrders(100, () => Promise.reject(new AppError(404, "NOT_FOUND", "x")))).toBe(0);
     expect(err).not.toHaveBeenCalled();
   });
 
@@ -123,7 +123,7 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     for (const c of codes) await lewat(c);
     const err = vi.spyOn(console, "error");
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const [x, y] = await Promise.all([kadaluarsakan(), kadaluarsakan()]);
+    const [x, y] = await Promise.all([expireHeldOrders(), expireHeldOrders()]);
     expect(x + y).toBe(3);
     expect((await menuRow(s.menu)).held_today).toBe(0);
     expect(await notifKedaluwarsa()).toBe(3);
@@ -140,7 +140,7 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     const code = await pesanDulu(s.tCust, menuB);
     await lewat(code);
     vi.spyOn(console, "log").mockImplementation(() => {});
-    expect(await kadaluarsakan()).toBe(1);
+    expect(await expireHeldOrders()).toBe(1);
     expect((await pesanan(code)).status).toBe("expired");
   });
 });
@@ -153,7 +153,7 @@ describe("mulaiJobKadaluarsa (D2)", () => {
   test("segera saat start, lalu tiap 30 dtk; berhenti setelah stop()", async () => {
     vi.useFakeTimers();
     const sapu = vi.fn().mockResolvedValue(0);
-    const stop = mulaiJobKadaluarsa(30_000, sapu);
+    const stop = startExpiryJob(30_000, sapu);
     await vi.advanceTimersByTimeAsync(0);
     expect(sapu).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(30_000);
@@ -166,7 +166,7 @@ describe("mulaiJobKadaluarsa (D2)", () => {
   test("sapuan yang belum selesai tidak ditumpuk", async () => {
     vi.useFakeTimers();
     const sapu = vi.fn(() => new Promise(() => {}));
-    const stop = mulaiJobKadaluarsa(30_000, sapu);
+    const stop = startExpiryJob(30_000, sapu);
     await vi.advanceTimersByTimeAsync(90_000);
     expect(sapu).toHaveBeenCalledTimes(1);
     stop();
@@ -176,7 +176,7 @@ describe("mulaiJobKadaluarsa (D2)", () => {
     vi.useFakeTimers();
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const sapu = vi.fn().mockRejectedValueOnce(new Error("db mati")).mockResolvedValue(0);
-    const stop = mulaiJobKadaluarsa(30_000, sapu);
+    const stop = startExpiryJob(30_000, sapu);
     await vi.advanceTimersByTimeAsync(0);
     expect(err).toHaveBeenCalledWith("[kadaluarsa] sapuan gagal:", "db mati");
     await vi.advanceTimersByTimeAsync(30_000);

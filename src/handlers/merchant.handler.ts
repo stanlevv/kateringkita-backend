@@ -1,6 +1,6 @@
 import { RequestHandler } from "express";
 import { kuotaSchema, menuQuerySchema } from "../dto/merchant-menu.dto";
-import { daftarTokoSchema } from "../dto/merchant-order.dto";
+import { merchantOrdersQuerySchema } from "../dto/merchant-order.dto";
 import { rentangSchema, tanggalSchema } from "../dto/merchant-laporan.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { fieldsDari, parse } from "../middleware/validate";
@@ -14,12 +14,12 @@ import {
   ubahMenu,
 } from "../services/merchant-menu.service";
 import {
-  AKSI_TOKO,
-  AksiToko,
-  aksiPesananToko,
-  ambilPesananToko,
-  daftarPesananToko,
-  waPesananToko,
+  MERCHANT_ACTIONS,
+  MerchantAction,
+  transitionMerchantOrder,
+  getMerchantOrder,
+  listMerchantOrders,
+  getMerchantOrderWhatsapp,
 } from "../services/merchant-order.service";
 import { getProfile, setOpen, updateProfile } from "../services/merchant.service";
 import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-laporan.service";
@@ -86,22 +86,22 @@ export const uploadFotoHandler: RequestHandler = async (req, res) => {
 };
 
 export const daftarPesananTokoHandler: RequestHandler = async (req, res) => {
-  res.json(await daftarPesananToko(uid(req), parse(daftarTokoSchema, req.query)));
+  res.json(await listMerchantOrders(uid(req), parse(merchantOrdersQuerySchema, req.query)));
 };
 
 export const ambilPesananTokoHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await ambilPesananToko(uid(req), String(req.params.code)) });
+  res.json({ data: await getMerchantOrder(uid(req), String(req.params.code)) });
 };
 
 export const waPesananTokoHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await waPesananToko(uid(req), String(req.params.code)) });
+  res.json({ data: await getMerchantOrderWhatsapp(uid(req), String(req.params.code)) });
 };
 
-// aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
+// aksi di luar MERCHANT_ACTIONS → lanjut ke notFoundHandler (404)
 export const aksiPesananTokoHandler: RequestHandler = async (req, res, next) => {
-  const aksi = String(req.params.aksi) as AksiToko;
-  if (!AKSI_TOKO.includes(aksi)) return next();
-  res.json({ data: await aksiPesananToko(uid(req), String(req.params.code), aksi, req.body) });
+  const aksi = String(req.params.aksi) as MerchantAction;
+  if (!MERCHANT_ACTIONS.includes(aksi)) return next();
+  res.json({ data: await transitionMerchantOrder(uid(req), String(req.params.code), aksi, req.body) });
 };
 
 // F09 laporan (LP-N1..N4)

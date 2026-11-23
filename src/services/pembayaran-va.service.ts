@@ -4,8 +4,8 @@ import { env } from "../config/env";
 import { AppError } from "../utils/errors";
 import { BankVa, buatQrisMidtrans, buatSnap, buatVaMidtrans, notifikasiSah, statusMidtrans } from "../utils/midtrans";
 import { dalamTransaksi } from "./admin-audit.service";
-import { bacaPesanan } from "./order.service";
-import { transisi } from "./order-status.service";
+import { getMyOrder } from "./order.service";
+import { transitionOrder } from "./order-status.service";
 
 // Pembayaran Midtrans: VA (F10), halaman Snap untuk pesanan meja (F21) dan pre-order (F26), notifikasi untuk semuanya.
 const konflik = (pesan: string) => new AppError(409, "CONFLICT", pesan);
@@ -54,7 +54,7 @@ export async function bayarOnline(userId: number, code: string, kembali?: string
   if (!o) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
   if (o.payment_method !== "online") throw konflik("Pesanan ini tidak memakai bayar online.");
   await bukaSnap(o, code, kembali);
-  return bacaPesanan(userId, code);
+  return getMyOrder(userId, code);
 }
 
 // QRIS langsung di aplikasi untuk pesanan "online": satu QRIS per pesanan (idempoten), Midtrans dipanggil di luar transaksi.
@@ -85,7 +85,7 @@ export async function buatQris(userId: number, code: string) {
     }
     await db.query("UPDATE orders SET payment_status = 'pending' WHERE id = ? AND payment_status = 'unpaid'", [o.id]);
   }
-  return bacaPesanan(userId, code);
+  return getMyOrder(userId, code);
 }
 
 // F10: VA untuk pesanan VA milik pembeli yang masih holding. Midtrans dipanggil di luar transaksi agar kunci tidak ditahan
@@ -119,7 +119,7 @@ export async function buatVa(userId: number, code: string, bank: BankVa) {
     }
     await db.query("UPDATE orders SET payment_status = 'pending' WHERE id = ? AND payment_status = 'unpaid'", [o.id]);
   }
-  return bacaPesanan(userId, code);
+  return getMyOrder(userId, code);
 }
 
 const STATUS: Record<string, "paid" | "expired" | "failed"> = {
@@ -161,7 +161,7 @@ export async function terimaNotifikasiMidtrans(n: Record<string, unknown>): Prom
     if (baru === "paid") {
       // urutan kunci sama dengan transisi lain (users → orders → menus), payments terakhir
       // lunas setelah hold habis/batal → 409 ditelan, payments tetap lunas → muncul di daftar refund admin (F26)
-      await transisi(conn, code, "pay", { jenis: "system" }).catch((e: unknown) => {
+      await transitionOrder(conn, code, "pay", { jenis: "system" }).catch((e: unknown) => {
         if (!(e instanceof AppError) || e.status !== 409) throw e;
         console.error(`VA ${code} lunas tetapi pesanan tidak bisa dikonfirmasi: ${e.message}`);
       });

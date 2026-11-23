@@ -1,13 +1,18 @@
 import { Router } from "express";
-import { bayarMejaSchema, pesananMejaSchema } from "../dto/table.dto";
-import { bayarMejaHandler, menuMejaHandler, pesanMejaHandler, statusMejaHandler } from "../handlers/table.handler";
+import { payGuestOrderSchema, tableOrderSchema } from "../dto/table.dto";
+import {
+  payGuestOrderHandler,
+  getTableMenuHandler,
+  createTableOrderHandler,
+  getGuestOrderHandler,
+} from "../handlers/table.handler";
 import { mejaLimiter } from "../middleware/rateLimiter";
 import { validate } from "../middleware/validate";
 
 // F21 pesan dari meja (publik, tanpa token login). Pesanan tamu dibaca/dibayar dengan header X-Guest-Token.
-export const meja = Router();
+export const table = Router();
 
-meja.get("/tables/:token", menuMejaHandler);
-meja.post("/tables/:token/orders", mejaLimiter, validate(pesananMejaSchema), pesanMejaHandler);
-meja.get("/guest/orders/:code", statusMejaHandler);
-meja.post("/guest/orders/:code/pay", validate(bayarMejaSchema), bayarMejaHandler);
+table.get("/tables/:token", getTableMenuHandler);
+table.post("/tables/:token/orders", mejaLimiter, validate(tableOrderSchema), createTableOrderHandler);
+table.get("/guest/orders/:code", getGuestOrderHandler);
+table.post("/guest/orders/:code/pay", validate(payGuestOrderSchema), payGuestOrderHandler);

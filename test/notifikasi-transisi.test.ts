@@ -4,21 +4,21 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { hariIniWib } from "../src/services/merchant-kuota.service";
 import { dalamTransaksi } from "../src/services/admin-audit.service";
-import { Aksi, Aktor, Status, transisi } from "../src/services/order-status.service";
+import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { pesanDulu, siapCheckout } from "./helpers/toko";
 
 // F08 Task 1: notifikasi status pesanan di dalam transaksi transisi (C-21, R-10; D8, D10–D12)
 let s: Awaited<ReturnType<typeof siapCheckout>>;
-let penjual: Aktor;
-let penjualB: Aktor;
-let pembeli: Aktor;
+let penjual: Actor;
+let penjualB: Actor;
+let pembeli: Actor;
 let budi: number;
 let siti: number;
-const sistem: Aktor = { jenis: "system" };
+const sistem: Actor = { jenis: "system" };
 const TOKO = "Dapur Siti";
 
-const jalan = (code: string, aksi: Aksi, aktor: Aktor, reason?: string | null) =>
-  dalamTransaksi((c) => transisi(c, code, aksi, aktor, reason));
+const jalan = (code: string, aksi: OrderAction, aktor: Actor, reason?: string | null) =>
+  dalamTransaksi((c) => transitionOrder(c, code, aksi, aktor, reason));
 const notif = async (userId = budi) =>
   (await db.query<any[]>("SELECT * FROM notifications WHERE user_id = ? ORDER BY id", [userId]))[0] as any[];
 const siap = async (status: Status = "holding") => {
@@ -54,7 +54,7 @@ afterAll(() => {
 describe("notifikasi untuk pembeli (D8, D12)", () => {
   test("confirm → cook → ready → complete: tepat 3 notifikasi, complete tanpa notifikasi", async () => {
     const code = await siap();
-    for (const a of ["confirm", "cook", "ready", "complete"] as Aksi[]) await jalan(code, a, penjual);
+    for (const a of ["confirm", "cook", "ready", "complete"] as OrderAction[]) await jalan(code, a, penjual);
     const n = await notif();
     expect(n.map((x) => x.title)).toEqual(["Pesanan dikonfirmasi", "Pesanan sedang dimasak", "Pesanan siap diambil"]);
     expect(n[0].body).toBe(`${TOKO} sudah mengonfirmasi pesanan ${code}.`);

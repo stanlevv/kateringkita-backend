@@ -1,5 +1,5 @@
 import { Request, RequestHandler } from "express";
-import { bodyObjek } from "../dto/order.dto";
+import { bodyObject } from "../dto/order.dto";
 import { balasTiketSchema, buatTiketSchema, daftarTiketAdminSchema, daftarTiketSchema } from "../dto/tiket.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
@@ -9,10 +9,10 @@ import { bacaTiketSaya, balasTiketSaya, buatTiket, daftarTiketSaya, tutupTiketSa
 // Tiket bantuan (CS). Body bukan objek (kosong, teks) dianggap {} agar galat tetap per field.
 const uid = (req: Request) => (req as AuthedRequest).auth.userId;
 const kode = (req: Request) => String(req.params.code);
-const isiBalasan = (req: Request) => parse(balasTiketSchema, bodyObjek(req.body)).body;
+const isiBalasan = (req: Request) => parse(balasTiketSchema, bodyObject(req.body)).body;
 
 export const buatTiketHandler: RequestHandler = async (req, res) => {
-  res.status(201).json({ data: await buatTiket(uid(req), parse(buatTiketSchema, bodyObjek(req.body))) });
+  res.status(201).json({ data: await buatTiket(uid(req), parse(buatTiketSchema, bodyObject(req.body))) });
 };
 
 export const daftarTiketSayaHandler: RequestHandler = async (req, res) => {
