@@ -27,22 +27,47 @@ const post = (u: string, t: string, body?: object) => {
   return body === undefined ? r : r.send(body);
 };
 const ISI = { category: "pembayaran", subject: "VA sudah dibayar", message: "Status belum lunas padahal sudah bayar." };
-const buat = async (t = s.tCust, o: object = {}) => (await post("/me/tickets", t, { ...ISI, ...o }).expect(201)).body.data;
+const buat = async (t = s.tCust, o: object = {}) =>
+  (await post("/me/tickets", t, { ...ISI, ...o }).expect(201)).body.data;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const KUNCI_DETAIL = [
-  "category", "closed_at", "closed_by", "code", "created_at", "last_message_at", "last_sender_role", "messages", "order_code", "status", "subject",
+  "category",
+  "closed_at",
+  "closed_by",
+  "code",
+  "created_at",
+  "last_message_at",
+  "last_sender_role",
+  "messages",
+  "order_code",
+  "status",
+  "subject",
 ];
 const KUNCI_RINGKAS = [
-  "category", "code", "created_at", "last_message_at", "last_message_preview", "last_sender_role", "order_code", "status", "subject", "unread",
+  "category",
+  "code",
+  "created_at",
+  "last_message_at",
+  "last_message_preview",
+  "last_sender_role",
+  "order_code",
+  "status",
+  "subject",
+  "unread",
 ];
 const TIDAK_ADA = { code: "NOT_FOUND", message: "Tiket tidak ditemukan." };
 const DITUTUP = { code: "TICKET_CLOSED", message: "Tiket sudah ditutup. Buat tiket baru bila masih perlu bantuan." };
 
-const baris = async (code: string) => ((await db.query<any[]>("SELECT * FROM support_tickets WHERE code = ?", [code]))[0] as any[])[0];
-const jumlahTiket = async () => Number(((await db.query<any[]>("SELECT COUNT(*) AS n FROM support_tickets"))[0] as any[])[0].n);
+const baris = async (code: string) =>
+  ((await db.query<any[]>("SELECT * FROM support_tickets WHERE code = ?", [code]))[0] as any[])[0];
+const jumlahTiket = async () =>
+  Number(((await db.query<any[]>("SELECT COUNT(*) AS n FROM support_tickets"))[0] as any[])[0].n);
 // waktu (UTC) tiket dan semua pesannya diatur agar urutan & penanda belum dibaca pasti
 const setWaktu = async (code: string, ts: string) => {
-  await db.query("UPDATE support_ticket_messages m JOIN support_tickets t ON t.id = m.ticket_id SET m.created_at = ? WHERE t.code = ?", [ts, code]);
+  await db.query(
+    "UPDATE support_ticket_messages m JOIN support_tickets t ON t.id = m.ticket_id SET m.created_at = ? WHERE t.code = ?",
+    [ts, code],
+  );
   await db.query("UPDATE support_tickets SET created_at = ?, last_message_at = ? WHERE code = ?", [ts, ts, code]);
 };
 // balasan admin langsung lewat SQL (endpoint admin diuji di admin-tiket.test.ts)
@@ -80,8 +105,10 @@ describe("migrasi 012_tiket_bantuan", () => {
        WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME IN ('support_tickets', 'support_ticket_messages') ORDER BY t, ref`,
     );
     expect(rows.map((r: any) => `${r.t}>${r.ref}:${r.aturan}`)).toEqual([
-      "support_ticket_messages>support_tickets:CASCADE", "support_ticket_messages>users:SET NULL",
-      "support_tickets>orders:SET NULL", "support_tickets>users:CASCADE",
+      "support_ticket_messages>support_tickets:CASCADE",
+      "support_ticket_messages>users:SET NULL",
+      "support_tickets>orders:SET NULL",
+      "support_tickets>users:CASCADE",
     ]);
     const conn = await mysql.createConnection({ uri: process.env.DATABASE_URL!, multipleStatements: true });
     try {
@@ -96,23 +123,44 @@ describe("migrasi 012_tiket_bantuan", () => {
 describe("POST /me/tickets", () => {
   test("201 TicketDetail: kode TK-<tanggal WIB>-XXXX, teks dirapikan, pesanan milik sendiri", async () => {
     const r = await post("/me/tickets", s.tCust, {
-      category: "pembayaran", subject: "  VA sudah dibayar  ", message: "  Status belum lunas padahal sudah bayar.  ", order_code: kodeBudi,
+      category: "pembayaran",
+      subject: "  VA sudah dibayar  ",
+      message: "  Status belum lunas padahal sudah bayar.  ",
+      order_code: kodeBudi,
     }).expect(201);
     const d = r.body.data;
     expect(Object.keys(d).sort()).toEqual(KUNCI_DETAIL);
     expect(d.code).toMatch(new RegExp(`^TK-${hariIniWib().replace(/-/g, "")}-[2-9A-HJ-NP-Z]{4}$`));
     expect(d).toMatchObject({
-      category: "pembayaran", subject: "VA sudah dibayar", status: "open", order_code: kodeBudi, last_sender_role: "customer",
-      closed_at: null, closed_by: null,
+      category: "pembayaran",
+      subject: "VA sudah dibayar",
+      status: "open",
+      order_code: kodeBudi,
+      last_sender_role: "customer",
+      closed_at: null,
+      closed_by: null,
     });
     expect(d.created_at).toMatch(ISO);
     expect(d.last_message_at).toMatch(ISO);
     expect(d.messages).toEqual([
-      { id: expect.any(Number), sender_role: "customer", sender_name: null, body: "Status belum lunas padahal sudah bayar.", created_at: d.last_message_at },
+      {
+        id: expect.any(Number),
+        sender_role: "customer",
+        sender_name: null,
+        body: "Status belum lunas padahal sudah bayar.",
+        created_at: d.last_message_at,
+      },
     ]);
     const t = await baris(d.code);
     const [[o]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [kodeBudi]);
-    expect(t).toMatchObject({ user_id: budi, order_id: o.id, status: "open", customer_last_read_at: null, closed_at: null, closed_by: null });
+    expect(t).toMatchObject({
+      user_id: budi,
+      order_id: o.id,
+      status: "open",
+      customer_last_read_at: null,
+      closed_at: null,
+      closed_by: null,
+    });
   });
 
   test("order_code kosong/tidak diisi → order_code null", async () => {
@@ -122,10 +170,18 @@ describe("POST /me/tickets", () => {
   });
 
   test("validasi: pesan per field, batas panjang setelah trim", async () => {
-    const SEMUA = { category: ["Pilih kategori."], subject: ["Judul 3–120 karakter."], message: ["Pesan 5–2000 karakter."] };
-    expect((await post("/me/tickets", s.tCust).expect(400)).body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: SEMUA });
+    const SEMUA = {
+      category: ["Pilih kategori."],
+      subject: ["Judul 3–120 karakter."],
+      message: ["Pesan 5–2000 karakter."],
+    };
+    expect((await post("/me/tickets", s.tCust).expect(400)).body.error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      fields: SEMUA,
+    });
     expect((await post("/me/tickets", s.tCust, {}).expect(400)).body.error.fields).toEqual(SEMUA);
-    const salah = async (o: object) => (await post("/me/tickets", s.tCust, { ...ISI, ...o }).expect(400)).body.error.fields;
+    const salah = async (o: object) =>
+      (await post("/me/tickets", s.tCust, { ...ISI, ...o }).expect(400)).body.error.fields;
     expect(await salah({ category: "lain" })).toEqual({ category: SEMUA.category });
     expect(await salah({ category: "Akun" })).toEqual({ category: SEMUA.category });
     expect(await salah({ subject: "  ab  " })).toEqual({ subject: SEMUA.subject });
@@ -147,7 +203,10 @@ describe("POST /me/tickets", () => {
   test("order_code milik pembeli lain / tidak ada → 400 fields.order_code, tidak ada tiket", async () => {
     for (const order_code of [kodeLain, "KK-20000101-ZZZZ"]) {
       const r = await post("/me/tickets", s.tCust, { ...ISI, order_code }).expect(400);
-      expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: { order_code: ["Pesanan tidak ditemukan."] } });
+      expect(r.body.error).toMatchObject({
+        code: "VALIDATION_ERROR",
+        fields: { order_code: ["Pesanan tidak ditemukan."] },
+      });
     }
     expect(await jumlahTiket()).toBe(0);
     expect((await buat(tLain, { order_code: kodeLain })).order_code).toBe(kodeLain);
@@ -158,7 +217,8 @@ describe("POST /me/tickets", () => {
     await db.query("UPDATE support_tickets SET status = 'answered' WHERE code = ?", [a.code]);
     const r = await post("/me/tickets", s.tCust, ISI).expect(409);
     expect(r.body.error).toEqual({
-      code: "TOO_MANY_OPEN_TICKETS", message: "Masih ada 3 tiket yang belum selesai. Tunggu balasan atau tutup salah satunya.",
+      code: "TOO_MANY_OPEN_TICKETS",
+      message: "Masih ada 3 tiket yang belum selesai. Tunggu balasan atau tutup salah satunya.",
     });
     await buat(tLain);
     await post(`/me/tickets/${a.code}/close`, s.tCust).expect(200);
@@ -168,7 +228,11 @@ describe("POST /me/tickets", () => {
   });
 
   test("kode bentrok → coba kode acak lain", async () => {
-    const spy = vi.spyOn(kodeTiket, "acak").mockReturnValueOnce("AAAA").mockReturnValueOnce("AAAA").mockReturnValueOnce("BBBB");
+    const spy = vi
+      .spyOn(kodeTiket, "acak")
+      .mockReturnValueOnce("AAAA")
+      .mockReturnValueOnce("AAAA")
+      .mockReturnValueOnce("BBBB");
     try {
       const a = await buat();
       const b = await buat();
@@ -201,10 +265,14 @@ describe("GET /me/tickets", () => {
     await setWaktu(t2.code, "2026-01-02 00:00:00");
     const panjang = `Halo kak, ${"dana sudah masuk ".repeat(10)}`;
     // t1: dibaca 01-02, admin membalas 01-03 → belum dibaca; t3: admin membalas 01-01, dibaca sesudahnya → sudah
-    await db.query("UPDATE support_tickets SET customer_last_read_at = '2026-01-02 00:00:00' WHERE code = ?", [t1.code]);
+    await db.query("UPDATE support_tickets SET customer_last_read_at = '2026-01-02 00:00:00' WHERE code = ?", [
+      t1.code,
+    ]);
     await balasanAdmin(t1.code, panjang, "2026-01-03 00:00:00");
     await balasanAdmin(t3.code, "Sudah kami cek.", "2026-01-01 00:00:00");
-    await db.query("UPDATE support_tickets SET customer_last_read_at = '2026-01-01 00:00:01' WHERE code = ?", [t3.code]);
+    await db.query("UPDATE support_tickets SET customer_last_read_at = '2026-01-01 00:00:01' WHERE code = ?", [
+      t3.code,
+    ]);
     await balasanAdmin(lain.code, "Untuk pembeli lain.", "2026-01-05 00:00:00");
 
     const r = await get("/me/tickets", s.tCust).expect(200);
@@ -212,14 +280,30 @@ describe("GET /me/tickets", () => {
     expect(r.body.data.map((t: any) => t.code)).toEqual([t1.code, t2.code, t3.code]);
     for (const t of r.body.data) expect(Object.keys(t).sort()).toEqual(KUNCI_RINGKAS);
     expect(r.body.data[0]).toEqual({
-      code: t1.code, category: "pembayaran", subject: "VA sudah dibayar", status: "answered", order_code: kodeBudi,
-      created_at: "2025-12-31T00:00:00.000Z", last_message_at: "2026-01-03T00:00:00.000Z",
-      last_message_preview: panjang.slice(0, 100), last_sender_role: "admin", unread: true,
+      code: t1.code,
+      category: "pembayaran",
+      subject: "VA sudah dibayar",
+      status: "answered",
+      order_code: kodeBudi,
+      created_at: "2025-12-31T00:00:00.000Z",
+      last_message_at: "2026-01-03T00:00:00.000Z",
+      last_message_preview: panjang.slice(0, 100),
+      last_sender_role: "admin",
+      unread: true,
     });
     expect(r.body.data[1]).toMatchObject({
-      status: "open", order_code: null, last_message_preview: ISI.message, last_sender_role: "customer", unread: false,
+      status: "open",
+      order_code: null,
+      last_message_preview: ISI.message,
+      last_sender_role: "customer",
+      unread: false,
     });
-    expect(r.body.data[2]).toMatchObject({ status: "answered", last_message_preview: "Sudah kami cek.", last_sender_role: "admin", unread: false });
+    expect(r.body.data[2]).toMatchObject({
+      status: "answered",
+      last_message_preview: "Sudah kami cek.",
+      last_sender_role: "admin",
+      unread: false,
+    });
     expect(JSON.stringify(r.body)).not.toContain("Untuk pembeli lain.");
 
     const h2 = await get("/me/tickets?limit=2&page=2", s.tCust).expect(200);
@@ -227,7 +311,10 @@ describe("GET /me/tickets", () => {
     expect(h2.body.data.map((t: any) => t.code)).toEqual([t3.code]);
     // limit ≤ 50; nilai tak valid → bawaan
     expect((await get("/me/tickets?limit=500", s.tCust).expect(200)).body.meta.limit).toBe(50);
-    expect((await get("/me/tickets?limit=abc&page=0", s.tCust).expect(200)).body.meta).toMatchObject({ page: 1, limit: 20 });
+    expect((await get("/me/tickets?limit=abc&page=0", s.tCust).expect(200)).body.meta).toMatchObject({
+      page: 1,
+      limit: 20,
+    });
 
     const l = await get("/me/tickets", tLain).expect(200);
     expect(l.body.data.map((t: any) => t.code)).toEqual([lain.code]);
@@ -249,10 +336,27 @@ describe("GET /me/tickets/:code", () => {
 
     const r = await get(`/me/tickets/${t.code}`, s.tCust).expect(200);
     expect(Object.keys(r.body.data).sort()).toEqual(KUNCI_DETAIL);
-    expect(r.body.data).toMatchObject({ code: t.code, status: "answered", last_sender_role: "admin", last_message_at: "2026-01-01T01:00:00.000Z" });
+    expect(r.body.data).toMatchObject({
+      code: t.code,
+      status: "answered",
+      last_sender_role: "admin",
+      last_message_at: "2026-01-01T01:00:00.000Z",
+    });
     expect(r.body.data.messages).toEqual([
-      { id: expect.any(Number), sender_role: "customer", sender_name: null, body: ISI.message, created_at: "2026-01-01T00:00:00.000Z" },
-      { id: expect.any(Number), sender_role: "admin", sender_name: "Tim KateringKita", body: "Halo, sudah kami cek.", created_at: "2026-01-01T01:00:00.000Z" },
+      {
+        id: expect.any(Number),
+        sender_role: "customer",
+        sender_name: null,
+        body: ISI.message,
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: expect.any(Number),
+        sender_role: "admin",
+        sender_name: "Tim KateringKita",
+        body: "Halo, sudah kami cek.",
+        created_at: "2026-01-01T01:00:00.000Z",
+      },
     ]);
     expect(JSON.stringify(r.body)).not.toContain("Admin Rahasia");
     expect((await baris(t.code)).customer_last_read_at).not.toBeNull();
@@ -269,7 +373,9 @@ describe("GET /me/tickets/:code", () => {
     const lain = await buat(tLain);
     for (const code of [lain.code, "TK-20000101-ZZZZ"]) {
       expect((await get(`/me/tickets/${code}`, s.tCust).expect(404)).body.error).toMatchObject(TIDAK_ADA);
-      expect((await post(`/me/tickets/${code}/messages`, s.tCust, { body: "Halo" }).expect(404)).body.error).toMatchObject(TIDAK_ADA);
+      expect(
+        (await post(`/me/tickets/${code}/messages`, s.tCust, { body: "Halo" }).expect(404)).body.error,
+      ).toMatchObject(TIDAK_ADA);
       expect((await post(`/me/tickets/${code}/close`, s.tCust).expect(404)).body.error).toMatchObject(TIDAK_ADA);
     }
     expect(await baris(lain.code)).toMatchObject({ status: "open", customer_last_read_at: null, closed_at: null });
@@ -288,7 +394,9 @@ describe("balas & tutup (pembeli)", () => {
     expect(Object.keys(d).sort()).toEqual(KUNCI_DETAIL);
     expect(d).toMatchObject({ status: "open", last_sender_role: "customer" });
     expect(d.messages.map((m: any) => [m.sender_role, m.body])).toEqual([
-      ["customer", ISI.message], ["admin", "Mohon kirim bukti bayar."], ["customer", "Sudah saya kirim."],
+      ["customer", ISI.message],
+      ["admin", "Mohon kirim bukti bayar."],
+      ["customer", "Sudah saya kirim."],
     ]);
     expect(d.last_message_at).toBe(d.messages[2].created_at);
     expect(Date.parse(d.last_message_at)).toBeGreaterThan(Date.parse("2026-01-01T01:00:00Z"));
@@ -313,7 +421,11 @@ describe("balas & tutup (pembeli)", () => {
 
     await db.query("UPDATE support_tickets SET closed_at = '2026-01-01 00:00:00' WHERE code = ?", [t.code]);
     const ulang = await post(`/me/tickets/${t.code}/close`, s.tCust).expect(200);
-    expect(ulang.body.data).toMatchObject({ status: "closed", closed_by: "customer", closed_at: "2026-01-01T00:00:00.000Z" });
+    expect(ulang.body.data).toMatchObject({
+      status: "closed",
+      closed_by: "customer",
+      closed_at: "2026-01-01T00:00:00.000Z",
+    });
 
     const e = await post(`/me/tickets/${t.code}/messages`, s.tCust, { body: "Masih ada masalah." }).expect(409);
     expect(e.body.error).toEqual(DITUTUP);
@@ -322,7 +434,10 @@ describe("balas & tutup (pembeli)", () => {
 
   test("tiket yang sudah ditutup admin: tutup oleh pembeli 200, closed_by tetap admin", async () => {
     const t = await buat();
-    await db.query("UPDATE support_tickets SET status = 'closed', closed_by = 'admin', closed_at = '2026-01-01 00:00:00' WHERE code = ?", [t.code]);
+    await db.query(
+      "UPDATE support_tickets SET status = 'closed', closed_by = 'admin', closed_at = '2026-01-01 00:00:00' WHERE code = ?",
+      [t.code],
+    );
     const r = await post(`/me/tickets/${t.code}/close`, s.tCust).expect(200);
     expect(r.body.data).toMatchObject({ status: "closed", closed_by: "admin", closed_at: "2026-01-01T00:00:00.000Z" });
   });

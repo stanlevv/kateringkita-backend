@@ -21,10 +21,22 @@ Balas HANYA JSON tanpa teks lain: {"jawaban":"jawaban utama 1-4 kalimat","poin":
 
 // Jawaban AI tidak dipercaya: jawaban wajib ada; poin & asumsi opsional, dipotong; selain itu ditolak.
 const jawabanAsisten = z.object({
-  jawaban: z.string().trim().min(1).transform((s) => s.slice(0, 1500)),
-  poin: z.array(z.unknown()).catch([])
-    .transform((a) => a.flatMap((x) => (typeof x === "string" && x.trim() ? [x.trim().slice(0, 300)] : [])).slice(0, 5)),
-  asumsi: z.string().trim().transform((s) => s.slice(0, 500)).catch(""),
+  jawaban: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((s) => s.slice(0, 1500)),
+  poin: z
+    .array(z.unknown())
+    .catch([])
+    .transform((a) =>
+      a.flatMap((x) => (typeof x === "string" && x.trim() ? [x.trim().slice(0, 300)] : [])).slice(0, 5),
+    ),
+  asumsi: z
+    .string()
+    .trim()
+    .transform((s) => s.slice(0, 500))
+    .catch(""),
 });
 export type JawabanAsisten = z.infer<typeof jawabanAsisten>;
 
@@ -40,13 +52,15 @@ export function bacaJawabanAsisten(teks: string): JawabanAsisten | null {
   }
 }
 
-const hariSebelum = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) - n * 86400e3).toISOString().slice(0, 10);
+const hariSebelum = (d: string, n: number) =>
+  new Date(Date.parse(`${d}T00:00:00Z`) - n * 86400e3).toISOString().slice(0, 10);
 
 // Nama yang mungkin disebut penjual: dirinya sendiri + pelanggan tokonya (200 pesanan terakhir)
 async function namaTerkait(merchantId: number, userId: number): Promise<string[]> {
   const [[u]] = await db.query<RowDataPacket[]>("SELECT full_name FROM users WHERE id = ?", [userId]);
   const [p] = await db.query<RowDataPacket[]>(
-    "SELECT DISTINCT customer_name FROM (SELECT customer_name FROM orders WHERE merchant_id = ? ORDER BY id DESC LIMIT 200) t", [merchantId],
+    "SELECT DISTINCT customer_name FROM (SELECT customer_name FROM orders WHERE merchant_id = ? ORDER BY id DESC LIMIT 200) t",
+    [merchantId],
   );
   return [u?.full_name, ...p.map((r) => r.customer_name)].filter((n): n is string => typeof n === "string");
 }
@@ -54,12 +68,17 @@ async function namaTerkait(merchantId: number, userId: number): Promise<string[]
 export async function tanyaAsisten(userId: number, question: string) {
   const merchantId = await idToko(userId);
   if (adaInjeksi(question)) {
-    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { question: ["Pertanyaan berisi perintah yang tidak diizinkan."] });
+    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
+      question: ["Pertanyaan berisi perintah yang tidak diizinkan."],
+    });
   }
   const aman = samarkan(question, { nama: await namaTerkait(merchantId, userId) });
   const hariIni = hariIniWib();
   const rentang = { from: hariSebelum(hariIni, 29), to: hariIni };
-  const [[toko]] = await db.query<RowDataPacket[]>("SELECT business_name, daily_revenue_target FROM merchants WHERE id = ?", [merchantId]);
+  const [[toko]] = await db.query<RowDataPacket[]>(
+    "SELECT business_name, daily_revenue_target FROM merchants WHERE id = ?",
+    [merchantId],
+  );
   const [menus] = await db.query<RowDataPacket[]>(
     `SELECT x.name, x.price, x.hpp, x.daily_quota, x.is_active,
        (SELECT COALESCE(SUM(i.qty), 0) FROM order_items i JOIN orders o ON o.id = i.order_id
@@ -72,10 +91,18 @@ export async function tanyaAsisten(userId: number, question: string) {
     target_omzet_harian: Number(toko.daily_revenue_target),
     penjualan_30_hari: await ringkasanToko(merchantId, rentang),
     menu: menus.map((m) => ({
-      nama: m.name, harga: m.price, hpp: m.hpp, kuota_harian: m.daily_quota, aktif: Boolean(m.is_active), terjual_30_hari: Number(m.terjual_30_hari),
+      nama: m.name,
+      harga: m.price,
+      hpp: m.hpp,
+      kuota_harian: m.daily_quota,
+      aktif: Boolean(m.is_active),
+      terjual_30_hari: Number(m.terjual_30_hari),
     })),
   };
-  const teks = await ai.tanya(SISTEM, `DATA_TOKO:\n${JSON.stringify(data)}\n\nPERTANYAAN PENJUAL:\n${aman}`, { fitur: "asisten", userId });
+  const teks = await ai.tanya(SISTEM, `DATA_TOKO:\n${JSON.stringify(data)}\n\nPERTANYAAN PENJUAL:\n${aman}`, {
+    fitur: "asisten",
+    userId,
+  });
   const j = bacaJawabanAsisten(teks);
   if (!j) throw new AppError(502, "UPSTREAM_ERROR", "Jawaban AI tidak sesuai format. Coba lagi.");
   const resultId = await simpanHasil({ fitur: "asisten", userId, merchantId, input: aman, output: j });

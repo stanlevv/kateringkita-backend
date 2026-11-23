@@ -12,11 +12,19 @@ const aksi = (code: string, a: string, body?: unknown, token = s.tA) => {
   const r = request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set("Authorization", `Bearer ${token}`);
   return body === undefined ? r : r.send(body as object);
 };
-const batal = (code: string) => request(app).post(`/api/v1/orders/${code}/cancel`).set("Authorization", `Bearer ${s.tCust}`);
-const status = async (code: string) => ((await db.query<any[]>("SELECT status FROM orders WHERE code = ?", [code]))[0] as any[])[0].status;
-const log = async (code: string) => ((await db.query<any[]>(
-  "SELECT l.from_status, l.to_status FROM order_status_logs l JOIN orders o ON o.id = l.order_id WHERE o.code = ? ORDER BY l.id", [code],
-))[0] as any[]).map((r) => `${r.from_status}→${r.to_status}`);
+const batal = (code: string) =>
+  request(app).post(`/api/v1/orders/${code}/cancel`).set("Authorization", `Bearer ${s.tCust}`);
+const status = async (code: string) =>
+  ((await db.query<any[]>("SELECT status FROM orders WHERE code = ?", [code]))[0] as any[])[0].status;
+const log = async (code: string) =>
+  (
+    (
+      await db.query<any[]>(
+        "SELECT l.from_status, l.to_status FROM order_status_logs l JOIN orders o ON o.id = l.order_id WHERE o.code = ? ORDER BY l.id",
+        [code],
+      )
+    )[0] as any[]
+  ).map((r) => `${r.from_status}→${r.to_status}`);
 const stok = async () => {
   const m = await menuRow(s.menu);
   return { held: m.held_today, sold: m.sold_today };
@@ -36,16 +44,28 @@ afterAll(() => {
 describe("alur & transisi", () => {
   test("confirm → cook → ready → complete: 200, *_at terisi, paid, 5 log, stok terjual", async () => {
     const code = await pesanDulu(s.tCust, s.menu, 2);
-    for (const [a, st, kol] of [["confirm", "confirmed", "confirmed_at"], ["cook", "cooking", "cooking_at"],
-      ["ready", "ready", "ready_at"], ["complete", "completed", "completed_at"]] as const) {
+    for (const [a, st, kol] of [
+      ["confirm", "confirmed", "confirmed_at"],
+      ["cook", "cooking", "cooking_at"],
+      ["ready", "ready", "ready_at"],
+      ["complete", "completed", "completed_at"],
+    ] as const) {
       const r = await aksi(code, a).expect(200);
       expect(r.body.data).toMatchObject({ code, status: st, customer_name: "Budi" });
       expect(r.body.data[kol]).not.toBeNull();
     }
     expect((await aksi(code, "cook").expect(409)).body.error.message).toBe("Pesanan sudah berubah status.");
-    expect((await request(app).get(`/api/v1/merchant/orders/${code}`).set("Authorization", `Bearer ${s.tA}`)).body.data.payment_status)
-      .toBe("paid");
-    expect(await log(code)).toEqual(["null→holding", "holding→confirmed", "confirmed→cooking", "cooking→ready", "ready→completed"]);
+    expect(
+      (await request(app).get(`/api/v1/merchant/orders/${code}`).set("Authorization", `Bearer ${s.tA}`)).body.data
+        .payment_status,
+    ).toBe("paid");
+    expect(await log(code)).toEqual([
+      "null→holding",
+      "holding→confirmed",
+      "confirmed→cooking",
+      "cooking→ready",
+      "ready→completed",
+    ]);
     expect(await stok()).toEqual({ held: 0, sold: 2 });
   });
 
@@ -53,7 +73,10 @@ describe("alur & transisi", () => {
     const code = await pesanDulu(s.tCust, s.menu);
     await aksi(code, "cook").expect(409);
     await aksi(code, "confirm").expect(200);
-    expect((await aksi(code, "confirm").expect(409)).body.error).toMatchObject({ code: "CONFLICT", message: "Pesanan sudah berubah status." });
+    expect((await aksi(code, "confirm").expect(409)).body.error).toMatchObject({
+      code: "CONFLICT",
+      message: "Pesanan sudah berubah status.",
+    });
     await aksi(code, "cancel").expect(404);
     await aksi(code, "expire").expect(404);
   });
@@ -73,8 +96,9 @@ describe("reject (D8)", () => {
       const r = await aksi(code, "reject", body).expect(400);
       expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: { reason: ["Pilih alasan penolakan."] } });
     }
-    expect((await aksi(code, "reject", { reason: "a".repeat(256) }).expect(400)).body.error.fields)
-      .toEqual({ reason: ["Alasan maksimal 255 karakter."] });
+    expect((await aksi(code, "reject", { reason: "a".repeat(256) }).expect(400)).body.error.fields).toEqual({
+      reason: ["Alasan maksimal 255 karakter."],
+    });
     expect(await status(code)).toBe("holding");
   });
 
@@ -101,7 +125,9 @@ describe("kepemilikan", () => {
   test("toko B → 404 semua aksi, status tetap; pembeli → 403", async () => {
     const code = await pesanDulu(s.tCust, s.menu);
     for (const a of ["confirm", "cook", "ready", "complete", "reject"]) {
-      expect((await aksi(code, a, { reason: "x" }, s.tB).expect(404)).body.error.message).toBe("Pesanan tidak ditemukan.");
+      expect((await aksi(code, a, { reason: "x" }, s.tB).expect(404)).body.error.message).toBe(
+        "Pesanan tidak ditemukan.",
+      );
     }
     await aksi(code, "confirm", undefined, s.tCust).expect(403);
     expect(await status(code)).toBe("holding");

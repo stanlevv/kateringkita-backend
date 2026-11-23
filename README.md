@@ -20,53 +20,54 @@
 ## 📖 Gambaran Umum
 
 **KateringKita Backend** melayani ekosistem lengkap marketplace katering dalam satu arsitektur terpadu:
+
 1. **Web Dashboard Merchant & Admin** ([kateringkita-frontend](https://github.com/stanlevv/kateringkita-frontend)) — manajemen katalog, kuota atomik, pemrosesan pesanan real-time, verifikasi toko, dan laporan penjualan.
 2. **Aplikasi Mobile Pembeli** — pemesanan instan mahasiswa, penahanan porsi otomatis 5 menit, pelacakan pesanan, dan integrasi WhatsApp.
-3. **Internal Background Cron / Worker** — pembatalan otomatis pesanan kedaluwarsa (*holding expired*) dan pelepasan porsi tertahan secara aman dan konsisten.
+3. **Internal Background Cron / Worker** — pembatalan otomatis pesanan kedaluwarsa (_holding expired_) dan pelepasan porsi tertahan secara aman dan konsisten.
 
-| Lingkungan | Alamat / Endpoint |
-|---|---|
-| **Production API Base** | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1` |
-| **Health Check** | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health` → `{"data":{"status":"ok","db":"ok"}}` |
-| **Merchant Dashboard** | `https://ketringkita.edufin.app` |
+| Lingkungan              | Alamat / Endpoint                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------- |
+| **Production API Base** | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1`                                               |
+| **Health Check**        | `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/health` → `{"data":{"status":"ok","db":"ok"}}` |
+| **Merchant Dashboard**  | `https://ketringkita.edufin.app`                                                                  |
 
 ---
 
 ## 🚀 Status Implementasi Fitur
 
-| ID | Fitur | Status |
-|---|---|---|
-| F00 | Fondasi: konfigurasi, migrasi, format galat, CORS | Selesai |
-| F01 | Daftar, masuk, keluar, sesi (JWT + daftar sesi di DB) | Selesai |
-| F02 | Profil pengguna, ganti kata sandi, foto profil | Selesai |
-| F03 | Toko: profil, buka/tutup, jam operasional, titik ambil, templat WhatsApp | Selesai |
-| F04 | Menu dan kuota porsi harian | Selesai |
-| F05 | Katalog publik dan favorit | Selesai |
-| F06 | Checkout dengan penahanan porsi 5 menit | Selesai |
-| F07 | Proses pesanan oleh penjual dan pembeli | Selesai |
-| F08 | Kedaluwarsa otomatis pesanan tertahan + notifikasi | Selesai |
-| F18 | Admin: verifikasi penjual, data master, promo platform, log | Selesai |
-| F09 | Laporan penjualan (ringkasan, per jam, transaksi) | Selesai |
-| F10 | Pembayaran Virtual Account Midtrans (QRIS toko manual dihapus di F26) | Selesai |
-| F11 | Lupa sandi lewat OTP email | Selesai |
-| F12 | Promo toko + kode promo di checkout | Selesai |
-| F13 | Ulasan pembeli dan rating menu/toko | Selesai |
-| F14 | Pesan lagi | Selesai |
-| F17 | Asisten AI toko (Gemini) | Selesai |
-| F19 | Moderasi admin: ulasan, menu (suspend toko dari F18) | Selesai |
-| F20 | Rekap keuangan admin | Selesai |
-| F21 | Pesan dari meja: QR per meja, menu tanpa login, bayar online (Midtrans Snap) | Selesai |
-| F22 | AI gateway: penyedia AI gratis (Gemini, Groq, OpenRouter, NVIDIA NIM) dikelola admin, fallback otomatis | Selesai |
-| F23 | Log server: error 5xx & request lambat (> 2 dtk) tercatat, dashboard admin, simpan 30 hari | Selesai |
-| F24 | Rekomendasi AI pembeli (RAG dari menu & stok terkini, divalidasi ulang backend, cadangan tanpa AI) | Selesai |
-| F25 | Pemakaian AI: token, panggilan, gagal, latensi per penyedia/fitur/hari (simpan 90 hari) | Selesai |
-| Rubrik AI | Prompt Role + Constraint + Output Schema, keluaran JSON divalidasi zod dan disimpan (`ai_results`), verifikasi manual admin, filter prompt injection, anonimisasi data pribadi | Selesai |
-| F26 | Semua non-tunai lewat Midtrans (VA + bayar online Snap untuk pre-order), rekening & pencairan dana toko, daftar refund admin | Selesai |
-| — | Broadcast pengumuman, notifikasi promo, kontak CS | Selesai |
-| — | Tiket bantuan (CS) dua arah pembeli ↔ tim admin, notifikasi balasan | Selesai |
-| — | Voucher: klaim voucher, Voucher Saya, voucher tersembunyi, maksimal satu voucher toko + satu voucher platform per pesanan | Selesai |
-| — | Banner beranda (diajukan penjual, disetujui admin) dan pop-up promo aplikasi mobile yang diatur admin | Selesai |
-| — | Perbaikan hasil audit keamanan November 2026 (lihat bagian Keamanan di bawah) | Sebagian |
+| ID        | Fitur                                                                                                                                                                          | Status   |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| F00       | Fondasi: konfigurasi, migrasi, format galat, CORS                                                                                                                              | Selesai  |
+| F01       | Daftar, masuk, keluar, sesi (JWT + daftar sesi di DB)                                                                                                                          | Selesai  |
+| F02       | Profil pengguna, ganti kata sandi, foto profil                                                                                                                                 | Selesai  |
+| F03       | Toko: profil, buka/tutup, jam operasional, titik ambil, templat WhatsApp                                                                                                       | Selesai  |
+| F04       | Menu dan kuota porsi harian                                                                                                                                                    | Selesai  |
+| F05       | Katalog publik dan favorit                                                                                                                                                     | Selesai  |
+| F06       | Checkout dengan penahanan porsi 5 menit                                                                                                                                        | Selesai  |
+| F07       | Proses pesanan oleh penjual dan pembeli                                                                                                                                        | Selesai  |
+| F08       | Kedaluwarsa otomatis pesanan tertahan + notifikasi                                                                                                                             | Selesai  |
+| F18       | Admin: verifikasi penjual, data master, promo platform, log                                                                                                                    | Selesai  |
+| F09       | Laporan penjualan (ringkasan, per jam, transaksi)                                                                                                                              | Selesai  |
+| F10       | Pembayaran Virtual Account Midtrans (QRIS toko manual dihapus di F26)                                                                                                          | Selesai  |
+| F11       | Lupa sandi lewat OTP email                                                                                                                                                     | Selesai  |
+| F12       | Promo toko + kode promo di checkout                                                                                                                                            | Selesai  |
+| F13       | Ulasan pembeli dan rating menu/toko                                                                                                                                            | Selesai  |
+| F14       | Pesan lagi                                                                                                                                                                     | Selesai  |
+| F17       | Asisten AI toko (Gemini)                                                                                                                                                       | Selesai  |
+| F19       | Moderasi admin: ulasan, menu (suspend toko dari F18)                                                                                                                           | Selesai  |
+| F20       | Rekap keuangan admin                                                                                                                                                           | Selesai  |
+| F21       | Pesan dari meja: QR per meja, menu tanpa login, bayar online (Midtrans Snap)                                                                                                   | Selesai  |
+| F22       | AI gateway: penyedia AI gratis (Gemini, Groq, OpenRouter, NVIDIA NIM) dikelola admin, fallback otomatis                                                                        | Selesai  |
+| F23       | Log server: error 5xx & request lambat (> 2 dtk) tercatat, dashboard admin, simpan 30 hari                                                                                     | Selesai  |
+| F24       | Rekomendasi AI pembeli (RAG dari menu & stok terkini, divalidasi ulang backend, cadangan tanpa AI)                                                                             | Selesai  |
+| F25       | Pemakaian AI: token, panggilan, gagal, latensi per penyedia/fitur/hari (simpan 90 hari)                                                                                        | Selesai  |
+| Rubrik AI | Prompt Role + Constraint + Output Schema, keluaran JSON divalidasi zod dan disimpan (`ai_results`), verifikasi manual admin, filter prompt injection, anonimisasi data pribadi | Selesai  |
+| F26       | Semua non-tunai lewat Midtrans (VA + bayar online Snap untuk pre-order), rekening & pencairan dana toko, daftar refund admin                                                   | Selesai  |
+| —         | Broadcast pengumuman, notifikasi promo, kontak CS                                                                                                                              | Selesai  |
+| —         | Tiket bantuan (CS) dua arah pembeli ↔ tim admin, notifikasi balasan                                                                                                            | Selesai  |
+| —         | Voucher: klaim voucher, Voucher Saya, voucher tersembunyi, maksimal satu voucher toko + satu voucher platform per pesanan                                                      | Selesai  |
+| —         | Banner beranda (diajukan penjual, disetujui admin) dan pop-up promo aplikasi mobile yang diatur admin                                                                          | Selesai  |
+| —         | Perbaikan hasil audit keamanan November 2026 (lihat bagian Keamanan di bawah)                                                                                                  | Sebagian |
 
 Uji otomatis dijalankan terhadap database MySQL lokal (`npm test`).
 
@@ -110,7 +111,7 @@ Semua aturan bisnis ada di backend: aplikasi pembeli dan dashboard tidak pernah 
 - **Bahasa & Runtime:** TypeScript 5.8 & Node.js ≥ 22.12 (Production di Heroku dengan Node 24).
 - **Web Framework:** Express 5.2.
 - **Basis Data:** MySQL lewat driver `mysql2/promise` dengan pooling tangguh, diuji pada **TiDB Cloud** (MySQL 8 compatible, SSL aktif).
-- **Validasi Data:** Zod 4 (*runtime schema validation*).
+- **Validasi Data:** Zod 4 (_runtime schema validation_).
 - **Keamanan:** JWT (`jsonwebtoken`), hash kata sandi `bcryptjs`, in-memory rate limiting, CORS terisolasi.
 - **Penyimpanan Media:** Integrasi Cloudflare R2 dengan URL bertanda tangan (AWS Signature V4, zero external heavy SDK).
 - **Pengujian:** Vitest 5 + Supertest dengan pengujian end-to-end terintegrasi database nyata.
@@ -171,21 +172,21 @@ Alur satu request: `routes/` → `handlers/` → `services/` → database. Nama 
 
 Pada November 2026 tim mengaudit kode sendiri dengan [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill). Setiap perbaikan diawali tes yang membuktikan celahnya (gagal di kode lama), lalu kode diperbaiki sampai tes itu lolos.
 
-| Perbaikan | Isi |
-|---|---|
+| Perbaikan        | Isi                                                                                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Webhook Midtrans | Status, nominal, dan `transaction_id` diambil dari Get Status Midtrans, bukan dari body notifikasi; pembayaran `refunded` tidak bisa kembali lunas dan tidak masuk antrian refund lagi |
-| Data rekening | Detail penjual untuk admin ops/support tidak membawa rekening pencairan (hanya admin super lewat `/admin/payouts`) |
-| Notifikasi promo | Voucher tersembunyi dan promo dari toko yang tidak tampil (mis. di-suspend) tidak disiarkan |
-| Limiter OTP | Batas per email memakai pola rute, sehingga variasi huruf besar-kecil atau garis miring akhir pada path tidak membuat jatah baru |
-| Sesi | Login yang berpacu dengan ganti/reset sandi tidak mendapat sesi |
-| Voucher platform | Saldo pencairan per toko menampilkan porsi voucher platform agar admin bisa memeriksa sebelum mentransfer |
-| Pencairan dana | Pencatatan pencairan terikat ke versi rekening yang dilihat admin saat mentransfer; rekening yang diganti sesudahnya ditolak `409` |
-| Batas porsi | Maksimal 20 porsi menunggu per pembeli dan 30 per meja QR, agar satu akun atau satu meja tidak memborong sisa stok toko |
-| Banner | Pengajuan banner penjual baru bisa disetujui setelah URL unggah gambarnya kedaluwarsa, sehingga gambar tidak bisa ditukar setelah ditinjau |
-| Pendaftaran | Maksimal 60 pendaftaran berhasil per sumber per jam; nomor atau email yang sudah terdaftar ditolak sebelum hash kata sandi dihitung |
-| Notifikasi promo | Satu notifikasi per promo per penerima per 24 jam, walau promo dimatikan-dinyalakan berulang |
-| Log server | URL rusak dijawab 400 tanpa dicatat sebagai galat server; pembersihan log lama diulang sampai habis |
-| Limiter | Token meja dicek formatnya sebelum masuk limiter, dan isi tiap limiter dibatasi agar memori tidak tumbuh tanpa batas |
+| Data rekening    | Detail penjual untuk admin ops/support tidak membawa rekening pencairan (hanya admin super lewat `/admin/payouts`)                                                                     |
+| Notifikasi promo | Voucher tersembunyi dan promo dari toko yang tidak tampil (mis. di-suspend) tidak disiarkan                                                                                            |
+| Limiter OTP      | Batas per email memakai pola rute, sehingga variasi huruf besar-kecil atau garis miring akhir pada path tidak membuat jatah baru                                                       |
+| Sesi             | Login yang berpacu dengan ganti/reset sandi tidak mendapat sesi                                                                                                                        |
+| Voucher platform | Saldo pencairan per toko menampilkan porsi voucher platform agar admin bisa memeriksa sebelum mentransfer                                                                              |
+| Pencairan dana   | Pencatatan pencairan terikat ke versi rekening yang dilihat admin saat mentransfer; rekening yang diganti sesudahnya ditolak `409`                                                     |
+| Batas porsi      | Maksimal 20 porsi menunggu per pembeli dan 30 per meja QR, agar satu akun atau satu meja tidak memborong sisa stok toko                                                                |
+| Banner           | Pengajuan banner penjual baru bisa disetujui setelah URL unggah gambarnya kedaluwarsa, sehingga gambar tidak bisa ditukar setelah ditinjau                                             |
+| Pendaftaran      | Maksimal 60 pendaftaran berhasil per sumber per jam; nomor atau email yang sudah terdaftar ditolak sebelum hash kata sandi dihitung                                                    |
+| Notifikasi promo | Satu notifikasi per promo per penerima per 24 jam, walau promo dimatikan-dinyalakan berulang                                                                                           |
+| Log server       | URL rusak dijawab 400 tanpa dicatat sebagai galat server; pembersihan log lama diulang sampai habis                                                                                    |
+| Limiter          | Token meja dicek formatnya sebelum masuk limiter, dan isi tiap limiter dibatasi agar memori tidak tumbuh tanpa batas                                                                   |
 
 Temuan yang belum diperbaiki dicatat dan dilacak di luar repo publik ini.
 
@@ -195,42 +196,42 @@ Temuan yang belum diperbaiki dicatat dan dilacak di luar repo publik ini.
 
 Semua rute ada di bawah `/api/v1`. Respons sukses `{ "data": ... }` (daftar ditambah `meta: { page, limit, total }`); respons galat `{ "error": { "code", "message", "fields"? } }` dengan pesan berbahasa Indonesia.
 
-| Kelompok | Rute | Akses |
-|---|---|---|
-| Kesehatan | `GET /health` | publik |
-| Data referensi | `GET /meta/merchant-types`, `/meta/categories`, `/meta/pickup-points`, `/meta/settings` | publik |
-| Akun | `POST /auth/customer/register`, `/auth/merchant/register`, `/auth/login`, `/auth/logout` | publik / masuk |
-| Lupa sandi | `POST /auth/password/forgot`, `/auth/password/verify`, `/auth/password/reset` | publik |
-| Profil | `GET /me`, `PATCH /me`, `PUT /me/password`, `POST /me/avatar` | masuk |
-| Katalog | `GET /menus`, `/menus/:id`, `/menus/:id/reviews`, `/merchants/:slug` | publik |
-| Favorit | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId` | pembeli |
-| Toko favorit | `GET /me/favorite-merchants`, `PUT` dan `DELETE /me/favorite-merchants/:merchantId` (kartu = profil `GET /merchants/:slug`) | pembeli |
-| Pesanan pembeli | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder` | pembeli |
-| Pembayaran Midtrans | `POST /orders/:code/va`, `POST /orders/:code/online`, `POST /orders/:code/qris` (kontrak: [`docs/pembayaran.md`](docs/pembayaran.md)) | pembeli |
-| Meja (penjual) | `GET` dan `POST /merchant/tables`, `PATCH /merchant/tables/:id` | penjual |
-| Pesan dari meja | `GET /tables/:token`, `POST /tables/:token/orders`, `GET /guest/orders/:code`, `POST /guest/orders/:code/pay` (header `X-Guest-Token`) | publik |
-| Notifikasi Midtrans | `POST /payments/midtrans` (diverifikasi signature) | publik |
-| Notifikasi | `GET /me/notifications?unread=true&type=order_status\|promo\|info&page=&limit=`, `POST /me/notifications/read` | masuk |
-| Tiket bantuan | `GET` dan `POST /me/tickets`, `GET /me/tickets/:code` (sekaligus tandai dibaca), `POST /me/tickets/:code/messages`, `/close` | pembeli |
-| Toko | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status` | penjual |
-| Menu | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota` | penjual |
-| Pesanan toko | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}` | penjual |
-| Laporan toko | `GET /merchant/reports/summary`, `/hourly`, `/transactions` | penjual |
-| Promo & ulasan toko | `GET` dan `POST /merchant/promos`, `PATCH` dan `DELETE /merchant/promos/:id`, `GET /merchant/reviews` | penjual |
-| Rekening & pencairan | `GET /merchant/payouts`, `PUT /merchant/payout-account` | penjual |
-| Asisten AI | `POST /merchant/assistant` | penjual |
-| Rekomendasi AI | `POST /assistant/recommendations` (kontrak: [`docs/rekomendasi-ai.md`](docs/rekomendasi-ai.md)) | pembeli |
-| Unggah foto | `POST /merchant/uploads` | penjual |
-| Admin | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin |
-| Voucher | `GET /vouchers/platform`, `POST /me/vouchers/:id/claim`, `GET /me/vouchers`, voucher toko di `GET /merchants/:slug`; checkout `promo_codes[]` (kontrak: [`docs/voucher.md`](docs/voucher.md)) | publik / pembeli |
-| Banner beranda | `GET /banners`, `/merchant/banners` (ajukan), `/admin/banners` (tinjau & banner platform), `POST /admin/uploads` (kontrak: [`docs/voucher.md`](docs/voucher.md)) | publik / penjual / admin |
-| Pop-up promo | `GET /popup`, `/admin/popups` (kontrak: [`docs/voucher.md`](docs/voucher.md)) | publik / admin |
-| Verifikasi hasil AI | `GET /admin/hasil-ai?status=&fitur=&page=&limit=`, `PATCH /admin/hasil-ai/:id` `{ status: disetujui|ditolak, catatan }` (super & ops; support hanya melihat) | admin |
-| AI gateway | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test`, `GET /admin/ai-usage?days=1..90` | admin |
-| Server | `GET /admin/server-status`, `GET /admin/server-logs?level=&q=&page=&limit=` | admin |
-| Pencairan & refund | `GET /admin/payouts/balances`, `GET` dan `POST /admin/payouts`, `GET /admin/refunds`, `POST /admin/refunds/:code` | admin super |
-| Admin (lanjutan) | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact` | admin |
-| Tiket bantuan (admin) | `GET /admin/tickets?status=open\|answered\|closed&q=&page=&limit=`, `GET /admin/tickets/:code`, `POST /admin/tickets/:code/{messages,close}` | admin (semua tingkat) |
+| Kelompok              | Rute                                                                                                                                                                                                                                                         | Akses                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| Kesehatan             | `GET /health`                                                                                                                                                                                                                                                | publik                                                   |
+| Data referensi        | `GET /meta/merchant-types`, `/meta/categories`, `/meta/pickup-points`, `/meta/settings`                                                                                                                                                                      | publik                                                   |
+| Akun                  | `POST /auth/customer/register`, `/auth/merchant/register`, `/auth/login`, `/auth/logout`                                                                                                                                                                     | publik / masuk                                           |
+| Lupa sandi            | `POST /auth/password/forgot`, `/auth/password/verify`, `/auth/password/reset`                                                                                                                                                                                | publik                                                   |
+| Profil                | `GET /me`, `PATCH /me`, `PUT /me/password`, `POST /me/avatar`                                                                                                                                                                                                | masuk                                                    |
+| Katalog               | `GET /menus`, `/menus/:id`, `/menus/:id/reviews`, `/merchants/:slug`                                                                                                                                                                                         | publik                                                   |
+| Favorit               | `GET /me/favorites`, `PUT` dan `DELETE /me/favorites/:menuId`                                                                                                                                                                                                | pembeli                                                  |
+| Toko favorit          | `GET /me/favorite-merchants`, `PUT` dan `DELETE /me/favorite-merchants/:merchantId` (kartu = profil `GET /merchants/:slug`)                                                                                                                                  | pembeli                                                  |
+| Pesanan pembeli       | `POST /orders/quote`, `POST /orders`, `GET /me/orders`, `GET /orders/:code`, `GET /orders/:code/whatsapp`, `POST /orders/:code/cancel`, `/complete`, `/reviews`, `/reorder`                                                                                  | pembeli                                                  |
+| Pembayaran Midtrans   | `POST /orders/:code/va`, `POST /orders/:code/online`, `POST /orders/:code/qris` (kontrak: [`docs/pembayaran.md`](docs/pembayaran.md))                                                                                                                        | pembeli                                                  |
+| Meja (penjual)        | `GET` dan `POST /merchant/tables`, `PATCH /merchant/tables/:id`                                                                                                                                                                                              | penjual                                                  |
+| Pesan dari meja       | `GET /tables/:token`, `POST /tables/:token/orders`, `GET /guest/orders/:code`, `POST /guest/orders/:code/pay` (header `X-Guest-Token`)                                                                                                                       | publik                                                   |
+| Notifikasi Midtrans   | `POST /payments/midtrans` (diverifikasi signature)                                                                                                                                                                                                           | publik                                                   |
+| Notifikasi            | `GET /me/notifications?unread=true&type=order_status\|promo\|info&page=&limit=`, `POST /me/notifications/read`                                                                                                                                               | masuk                                                    |
+| Tiket bantuan         | `GET` dan `POST /me/tickets`, `GET /me/tickets/:code` (sekaligus tandai dibaca), `POST /me/tickets/:code/messages`, `/close`                                                                                                                                 | pembeli                                                  |
+| Toko                  | `GET` dan `PATCH /merchant/profile`, `PATCH /merchant/status`                                                                                                                                                                                                | penjual                                                  |
+| Menu                  | `GET` dan `POST /merchant/menus`, `GET`, `PATCH`, dan `DELETE /merchant/menus/:id`, `PATCH /merchant/menus/:id/quota`                                                                                                                                        | penjual                                                  |
+| Pesanan toko          | `GET /merchant/orders`, `/merchant/orders/:code`, `/merchant/orders/:code/whatsapp`, `POST /merchant/orders/:code/{confirm,cook,ready,complete,reject}`                                                                                                      | penjual                                                  |
+| Laporan toko          | `GET /merchant/reports/summary`, `/hourly`, `/transactions`                                                                                                                                                                                                  | penjual                                                  |
+| Promo & ulasan toko   | `GET` dan `POST /merchant/promos`, `PATCH` dan `DELETE /merchant/promos/:id`, `GET /merchant/reviews`                                                                                                                                                        | penjual                                                  |
+| Rekening & pencairan  | `GET /merchant/payouts`, `PUT /merchant/payout-account`                                                                                                                                                                                                      | penjual                                                  |
+| Asisten AI            | `POST /merchant/assistant`                                                                                                                                                                                                                                   | penjual                                                  |
+| Rekomendasi AI        | `POST /assistant/recommendations` (kontrak: [`docs/rekomendasi-ai.md`](docs/rekomendasi-ai.md))                                                                                                                                                              | pembeli                                                  |
+| Unggah foto           | `POST /merchant/uploads`                                                                                                                                                                                                                                     | penjual                                                  |
+| Admin                 | `GET /admin/summary`, `/admin/verification-queue`, `/admin/merchants`, `/admin/merchants/:id`, `/admin/master/:kind` (+ `POST`, `PATCH`), `/admin/promos` (+ `POST`, `PATCH`), `/admin/settings`, `PUT /admin/settings/service-fee`, `GET /admin/audit-logs` | admin                                                    |
+| Voucher               | `GET /vouchers/platform`, `POST /me/vouchers/:id/claim`, `GET /me/vouchers`, voucher toko di `GET /merchants/:slug`; checkout `promo_codes[]` (kontrak: [`docs/voucher.md`](docs/voucher.md))                                                                | publik / pembeli                                         |
+| Banner beranda        | `GET /banners`, `/merchant/banners` (ajukan), `/admin/banners` (tinjau & banner platform), `POST /admin/uploads` (kontrak: [`docs/voucher.md`](docs/voucher.md))                                                                                             | publik / penjual / admin                                 |
+| Pop-up promo          | `GET /popup`, `/admin/popups` (kontrak: [`docs/voucher.md`](docs/voucher.md))                                                                                                                                                                                | publik / admin                                           |
+| Verifikasi hasil AI   | `GET /admin/hasil-ai?status=&fitur=&page=&limit=`, `PATCH /admin/hasil-ai/:id` `{ status: disetujui                                                                                                                                                          | ditolak, catatan }` (super & ops; support hanya melihat) | admin |
+| AI gateway            | `GET` dan `POST /admin/ai-providers`, `PATCH` dan `DELETE /admin/ai-providers/:id`, `POST /admin/ai-providers/:id/test`, `GET /admin/ai-usage?days=1..90`                                                                                                    | admin                                                    |
+| Server                | `GET /admin/server-status`, `GET /admin/server-logs?level=&q=&page=&limit=`                                                                                                                                                                                  | admin                                                    |
+| Pencairan & refund    | `GET /admin/payouts/balances`, `GET` dan `POST /admin/payouts`, `GET /admin/refunds`, `POST /admin/refunds/:code`                                                                                                                                            | admin super                                              |
+| Admin (lanjutan)      | `GET /admin/reviews`, `POST /admin/reviews/:id/{hide,unhide}`, `GET /admin/menus`, `POST /admin/menus/:id/{takedown,restore}`, `GET /admin/finance`, `POST /admin/broadcasts`, `PUT /admin/settings/cs-contact`                                              | admin                                                    |
+| Tiket bantuan (admin) | `GET /admin/tickets?status=open\|answered\|closed&q=&page=&limit=`, `GET /admin/tickets/:code`, `POST /admin/tickets/:code/{messages,close}`                                                                                                                 | admin (semua tingkat)                                    |
 
 Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `docs/API.md` pada monorepo tim.
 
@@ -242,33 +243,35 @@ Kontrak lengkap (bentuk setiap respons, pesan galat, batasan) ada di dokumen `do
 
 Salin `.env.example` menjadi `.env`. Server menolak menyala bila nilai wajib kosong atau salah format.
 
-| Variabel | Wajib | Keterangan |
-|---|---|---|
-| `DATABASE_URL` | ya | `mysql://user:sandi@host:port/nama_db`. Untuk TiDB Cloud, SSL aktif otomatis |
-| `JWT_SECRET` | ya | Minimal 32 karakter acak |
-| `CORS_ORIGIN` | ya di production | Daftar origin web, dipisah koma |
-| `PORT` | tidak | Bawaan 5000 (Heroku mengisinya sendiri) |
-| `NODE_ENV` | tidak | `development`, `test`, atau `production` |
-| `TZ` | disarankan | `Asia/Jakarta` |
-| `JWT_TTL_WEB`, `JWT_TTL_MOBILE` | tidak | Masa berlaku token, bawaan `1d` dan `30d` |
-| `INTERNAL_API_SECRET` | tidak | Rahasia bersama dengan server web agar pembatas laju menghitung per alamat pengunjung |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak | Isi kelimanya untuk mengaktifkan unggah foto (cara mengisi: bagian Deploy). Bila ada yang kosong, endpoint unggah menjawab `503` |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | tidak | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | tidak | Cadangan terakhir AI gateway (penyedia utama diatur admin di dashboard); model bawaan `gemini-2.5-flash`. Tanpa penyedia sama sekali: asisten menjawab `503`. Mengganti `JWT_SECRET` membuat API key AI tersimpan harus diisi ulang |
-| `MIDTRANS_SERVER_KEY` | tidak | Server key Midtrans untuk VA dan bayar online Snap (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA/online menjawab `409`, hanya tunai yang jalan |
-| `MIDTRANS_SIGNATURE_KEY` | tidak | Signature Secret Key Midtrans (Settings → Access Keys → General Credentials) untuk memverifikasi notifikasi pembayaran. Sejak 28 Okt 2026 notifikasi ditandatangani kunci ini, bukan Server Key; tanpa ini notifikasi ditolak `403` dan pesanan tidak pernah lunas bila Server Key sudah dibuat ulang. Kosong: pakai `MIDTRANS_SERVER_KEY` |
-| `MIDTRANS_IS_PRODUCTION` | tidak | `true` untuk transaksi sungguhan. Bawaan `false` (sandbox), jadi key production yang salah pasang hanya gagal, tidak menarik uang |
-| `TEST_DATABASE_URL` | untuk uji | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji |
+| Variabel                                                                                  | Wajib            | Keterangan                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                                                                            | ya               | `mysql://user:sandi@host:port/nama_db`. Untuk TiDB Cloud, SSL aktif otomatis                                                                                                                                                                                                                                                               |
+| `JWT_SECRET`                                                                              | ya               | Minimal 32 karakter acak                                                                                                                                                                                                                                                                                                                   |
+| `CORS_ORIGIN`                                                                             | ya di production | Daftar origin web, dipisah koma                                                                                                                                                                                                                                                                                                            |
+| `PORT`                                                                                    | tidak            | Bawaan 5000 (Heroku mengisinya sendiri)                                                                                                                                                                                                                                                                                                    |
+| `NODE_ENV`                                                                                | tidak            | `development`, `test`, atau `production`                                                                                                                                                                                                                                                                                                   |
+| `TZ`                                                                                      | disarankan       | `Asia/Jakarta`                                                                                                                                                                                                                                                                                                                             |
+| `JWT_TTL_WEB`, `JWT_TTL_MOBILE`                                                           | tidak            | Masa berlaku token, bawaan `1d` dan `30d`                                                                                                                                                                                                                                                                                                  |
+| `INTERNAL_API_SECRET`                                                                     | tidak            | Rahasia bersama dengan server web agar pembatas laju menghitung per alamat pengunjung                                                                                                                                                                                                                                                      |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | tidak            | Isi kelimanya untuk mengaktifkan unggah foto (cara mengisi: bagian Deploy). Bila ada yang kosong, endpoint unggah menjawab `503`                                                                                                                                                                                                           |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`                           | tidak            | Isi kelimanya untuk mengirim OTP lupa sandi lewat email. Kosong: kode ditulis ke log (development), `503` di production                                                                                                                                                                                                                    |
+| `GEMINI_API_KEY`, `GEMINI_MODEL`                                                          | tidak            | Cadangan terakhir AI gateway (penyedia utama diatur admin di dashboard); model bawaan `gemini-2.5-flash`. Tanpa penyedia sama sekali: asisten menjawab `503`. Mengganti `JWT_SECRET` membuat API key AI tersimpan harus diisi ulang                                                                                                        |
+| `MIDTRANS_SERVER_KEY`                                                                     | tidak            | Server key Midtrans untuk VA dan bayar online Snap (Settings → Access Keys → Server Key, bukan Client Key). Kosong: checkout VA/online menjawab `409`, hanya tunai yang jalan                                                                                                                                                              |
+| `MIDTRANS_SIGNATURE_KEY`                                                                  | tidak            | Signature Secret Key Midtrans (Settings → Access Keys → General Credentials) untuk memverifikasi notifikasi pembayaran. Sejak 28 Okt 2026 notifikasi ditandatangani kunci ini, bukan Server Key; tanpa ini notifikasi ditolak `403` dan pesanan tidak pernah lunas bila Server Key sudah dibuat ulang. Kosong: pakai `MIDTRANS_SERVER_KEY` |
+| `MIDTRANS_IS_PRODUCTION`                                                                  | tidak            | `true` untuk transaksi sungguhan. Bawaan `false` (sandbox), jadi key production yang salah pasang hanya gagal, tidak menarik uang                                                                                                                                                                                                          |
+| `TEST_DATABASE_URL`                                                                       | untuk uji        | Nama database harus berakhiran `_test`, karena isinya dihapus setiap uji                                                                                                                                                                                                                                                                   |
 
 ---
 
 ## 💻 Panduan Instalasi Lokal
 
 ### Prasyarat
+
 - Node.js ≥ 22.12
 - MySQL 8.x (atau TiDB Cloud Serverless)
 
 ### Langkah Pemasangan
+
 ```bash
 # 1. Clone repositori
 git clone https://github.com/stanlevv/kateringkita-backend.git
@@ -296,16 +299,16 @@ npm run dev
 
 ## 🧪 Skrip & Pengujian
 
-| Perintah | Fungsi |
-|---|---|
-| `npm run dev` | Server dengan muat ulang otomatis (`tsx watch`) |
-| `npm run build` lalu `npm start` | Kompilasi ke `dist/` lalu jalankan seperti di production |
-| `npm run migrate` | Menjalankan migrasi yang belum tercatat di tabel `schema_migrations` |
-| `npm run migrate:prod` | Sama, dari hasil kompilasi (`dist/`) |
-| `npm run admin:create` | Membuat akun admin pertama. Sandi diambil dari `ADMIN_INITIAL_PASSWORD`, isi hanya saat menjalankan |
-| `npm run seed:demo` | Mengisi toko dan menu contoh. Hanya untuk database lokal; sandi dari `DEMO_PASSWORD` |
-| `npm test` | Seluruh uji (butuh MySQL; memakai `TEST_DATABASE_URL`) |
-| `npm run typecheck` | Pemeriksaan tipe TypeScript |
+| Perintah                         | Fungsi                                                                                              |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `npm run dev`                    | Server dengan muat ulang otomatis (`tsx watch`)                                                     |
+| `npm run build` lalu `npm start` | Kompilasi ke `dist/` lalu jalankan seperti di production                                            |
+| `npm run migrate`                | Menjalankan migrasi yang belum tercatat di tabel `schema_migrations`                                |
+| `npm run migrate:prod`           | Sama, dari hasil kompilasi (`dist/`)                                                                |
+| `npm run admin:create`           | Membuat akun admin pertama. Sandi diambil dari `ADMIN_INITIAL_PASSWORD`, isi hanya saat menjalankan |
+| `npm run seed:demo`              | Mengisi toko dan menu contoh. Hanya untuk database lokal; sandi dari `DEMO_PASSWORD`                |
+| `npm test`                       | Seluruh uji (butuh MySQL; memakai `TEST_DATABASE_URL`)                                              |
+| `npm run typecheck`              | Pemeriksaan tipe TypeScript                                                                         |
 
 ---
 
@@ -316,20 +319,27 @@ npm run dev
 - **Migrasi berjalan otomatis saat deploy** lewat fase `release`. Bila migrasi gagal, Heroku membatalkan rilis dan versi lama tetap jalan; periksa dengan `heroku releases` dan `heroku logs --ps release`.
 - **Unggah foto (Cloudflare R2):** backend hanya membuat URL PUT bertanda tangan (`POST /merchant/uploads`, berlaku 300 detik);
   browser mengunggah berkas langsung ke bucket. Siapkan bucket sekali:
-  1. **Kunci S3:** R2 → Manage API tokens → Create API token, izin *Object Read & Write* untuk bucket ini. Salin **Access Key ID**
+  1. **Kunci S3:** R2 → Manage API tokens → Create API token, izin _Object Read & Write_ untuk bucket ini. Salin **Access Key ID**
      (32 karakter) ke `R2_ACCESS_KEY_ID` dan **Secret Access Key** (64 karakter heks) ke `R2_SECRET_ACCESS_KEY`.
      Nilai token `cfat_…` bukan kunci S3. `R2_ACCOUNT_ID` = ID akun Cloudflare pemilik bucket, `R2_BUCKET` = nama bucket.
   2. **Akses publik:** bucket → Settings → aktifkan Public Development URL (`https://pub-….r2.dev`) atau sambungkan domain sendiri
      (disarankan untuk production; r2.dev dibatasi lajunya). Alamat itu diisi ke `R2_PUBLIC_URL`.
   3. **CORS bucket:** bucket → Settings → CORS policy. Tanpa ini browser menolak PUT dan web menampilkan "Foto gagal diunggah".
      ```json
-     [{ "AllowedOrigins": ["https://ketringkita.edufin.app", "https://ketringkita-frontend.vercel.app"],
-        "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+     [
+       {
+         "AllowedOrigins": ["https://ketringkita.edufin.app", "https://ketringkita-frontend.vercel.app"],
+         "AllowedMethods": ["PUT"],
+         "AllowedHeaders": ["content-type"],
+         "MaxAgeSeconds": 3600
+       }
+     ]
      ```
      Tambahkan `http://localhost:3000` bila menguji dari lokal.
 
   Bila sebagian `R2_*` kosong, log release menulis `R2 terisi sebagian (...)` dan unggah menjawab `503`. Mengubah Config Vars
   me-restart app, tidak perlu push.
+
 - **Midtrans:** isi `MIDTRANS_SERVER_KEY` dan `MIDTRANS_SIGNATURE_KEY` di Heroku, lalu di dashboard Midtrans (Settings → Payment → Notification URL) isi `https://ketring-45f82aef1ca0.herokuapp.com/api/v1/payments/midtrans`.
 
 ---

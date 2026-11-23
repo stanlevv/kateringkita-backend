@@ -11,12 +11,18 @@ export const PESAN_STATUS: Partial<Record<Status, (p: Isi) => { title: string; b
   cooking: (p) => ({ title: "Pesanan sedang dimasak", body: `${p.toko} sedang memasak pesanan ${p.kode}.` }),
   ready: (p) => ({ title: "Pesanan siap diambil", body: `Pesanan ${p.kode} sudah siap. Silakan ambil di titik temu.` }),
   cancelled: (p) => ({ title: "Pesanan ditolak", body: `${p.toko} menolak pesanan ${p.kode}. Alasan: ${p.alasan}` }),
-  expired: (p) => ({ title: "Pesanan kedaluwarsa", body: `Pesanan ${p.kode} di ${p.toko} dibatalkan otomatis karena tidak dikonfirmasi tepat waktu.` }),
+  expired: (p) => ({
+    title: "Pesanan kedaluwarsa",
+    body: `Pesanan ${p.kode} di ${p.toko} dibatalkan otomatis karena tidak dikonfirmasi tepat waktu.`,
+  }),
 };
 
 // Dipanggil di dalam transaksi transisi (D10), setelah users pembeli dikunci (D11)
 export async function buatNotifikasiPesanan(
-  conn: Pick<PoolConnection, "query">, o: { customer_id: number | null; merchant_id: number; code: string }, ke: Status, alasan: string | null,
+  conn: Pick<PoolConnection, "query">,
+  o: { customer_id: number | null; merchant_id: number; code: string },
+  ke: Status,
+  alasan: string | null,
 ): Promise<void> {
   const pesan = PESAN_STATUS[ke];
   // F21: pesanan meja tanpa akun; tamu memantau status lewat halaman pesanannya
@@ -30,7 +36,13 @@ export async function buatNotifikasiPesanan(
 }
 
 const belum = async (userId: number) =>
-  Number(((await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL", [userId]))[0][0]).n);
+  Number(
+    (
+      await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL", [
+        userId,
+      ])
+    )[0][0].n,
+  );
 
 // D13: total mengikuti filter (unread, type); unread_count selalu seluruh yang belum dibaca, tidak terpengaruh filter/halaman
 // shortcut: notifikasi tidak pernah dihapus; tambah hapus yang sudah dibaca > 90 hari ke job harian bila tabel > 1 juta baris

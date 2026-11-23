@@ -4,8 +4,23 @@ import { daftarTokoSchema } from "../dto/merchant-order.dto";
 import { rentangSchema, tanggalSchema } from "../dto/merchant-laporan.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { fieldsDari, parse } from "../middleware/validate";
-import { ambilMenu, buatMenu, daftarMenu, hapusMenu, idToko, ubahKuota, ubahMenu } from "../services/merchant-menu.service";
-import { AKSI_TOKO, AksiToko, aksiPesananToko, ambilPesananToko, daftarPesananToko, waPesananToko } from "../services/merchant-order.service";
+import {
+  ambilMenu,
+  buatMenu,
+  daftarMenu,
+  hapusMenu,
+  idToko,
+  ubahKuota,
+  ubahMenu,
+} from "../services/merchant-menu.service";
+import {
+  AKSI_TOKO,
+  AksiToko,
+  aksiPesananToko,
+  ambilPesananToko,
+  daftarPesananToko,
+  waPesananToko,
+} from "../services/merchant-order.service";
 import { getProfile, setOpen, updateProfile } from "../services/merchant.service";
 import { laporanPerJam, laporanTransaksi, ringkasanLaporan } from "../services/merchant-laporan.service";
 import { buatPromoToko, daftarPromoToko, hapusPromoToko, ubahPromoToko } from "../services/merchant-promo.service";
@@ -55,7 +70,12 @@ export const ubahKuotaHandler: RequestHandler = async (req, res) => {
   if (!r.success) {
     // galat lintas-field (path kosong) tidak punya field; galat per field tetap di fields
     const fields = fieldsDari(r.error.issues.filter((i) => i.path.length > 0));
-    throw new AppError(400, "VALIDATION_ERROR", "Data kuota tidak valid.", Object.keys(fields).length ? fields : undefined);
+    throw new AppError(
+      400,
+      "VALIDATION_ERROR",
+      "Data kuota tidak valid.",
+      Object.keys(fields).length ? fields : undefined,
+    );
   }
   res.json({ data: await ubahKuota(uid(req), req.params.id, r.data) });
 };

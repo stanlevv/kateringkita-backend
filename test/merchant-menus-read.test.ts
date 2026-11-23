@@ -10,18 +10,48 @@ let aktif: number, nonaktif: number, terhapus: number, milikB: number;
 
 const get = (u: string, t = tA) => request(app).get(`/api/v1/merchant${u}`).set("Authorization", `Bearer ${t}`);
 const KUNCI = [
-  "available", "category", "daily_quota", "description", "gallery", "held_today", "hpp", "id", "image_url", "is_active", "is_preorder", "margin",
-  "min_order_qty", "name", "options", "preorder_days", "prep_minutes", "price", "quota_today", "rating_avg", "rating_count",
-  "sold_today", "unit_label",
+  "available",
+  "category",
+  "daily_quota",
+  "description",
+  "gallery",
+  "held_today",
+  "hpp",
+  "id",
+  "image_url",
+  "is_active",
+  "is_preorder",
+  "margin",
+  "min_order_qty",
+  "name",
+  "options",
+  "preorder_days",
+  "prep_minutes",
+  "price",
+  "quota_today",
+  "rating_avg",
+  "rating_count",
+  "sold_today",
+  "unit_label",
 ];
 
 beforeEach(async () => {
   ({ tA, tB, idA, idB } = await siapkanToko());
-  aktif = await sisipMenu(idA, { name: "Nasi Ayam", quota_today: 20, sold_today: 3, held_today: 2, rating_avg: 4.5, rating_count: 2 });
+  aktif = await sisipMenu(idA, {
+    name: "Nasi Ayam",
+    quota_today: 20,
+    sold_today: 3,
+    held_today: 2,
+    rating_avg: 4.5,
+    rating_count: 2,
+  });
   nonaktif = await sisipMenu(idA, { name: "Es Teh", category_id: 5, is_active: false });
   terhapus = await sisipMenu(idA, { name: "Lama", deleted_at: "2026-01-01 00:00:00" });
   milikB = await sisipMenu(idB, { name: "Punya B" });
-  await db.query("INSERT INTO menu_options (menu_id, name, extra_price, is_active) VALUES (?, 'Keju', 3000, TRUE), (?, 'Basi', 0, FALSE)", [aktif, aktif]);
+  await db.query(
+    "INSERT INTO menu_options (menu_id, name, extra_price, is_active) VALUES (?, 'Keju', 3000, TRUE), (?, 'Basi', 0, FALSE)",
+    [aktif, aktif],
+  );
 });
 
 test("DELETE /api/menus/1 dengan token penjual → 404 (router lama dihapus)", async () => {
@@ -34,8 +64,19 @@ test("GET /merchant/menus: milik sendiri saja, urut id DESC, bentuk D3", async (
   const m = r.body.data[1];
   expect(Object.keys(m).sort()).toEqual(KUNCI);
   expect(m).toMatchObject({
-    name: "Nasi Ayam", category: { id: 1, name: "Nasi Box", slug: "nasi-box" }, price: 15000, hpp: 9000, margin: 6000,
-    quota_today: 20, sold_today: 3, held_today: 2, available: 15, is_active: true, is_preorder: false, rating_avg: 4.5, rating_count: 2,
+    name: "Nasi Ayam",
+    category: { id: 1, name: "Nasi Box", slug: "nasi-box" },
+    price: 15000,
+    hpp: 9000,
+    margin: 6000,
+    quota_today: 20,
+    sold_today: 3,
+    held_today: 2,
+    available: 15,
+    is_active: true,
+    is_preorder: false,
+    rating_avg: 4.5,
+    rating_count: 2,
   });
   expect(m.options).toEqual([{ id: expect.any(Number), name: "Keju", extra_price: 3000 }]);
   expect(r.body.data[0]).toMatchObject({ is_active: false, options: [] });
@@ -70,12 +111,22 @@ test("GET /merchant/menus/:id: milik sendiri 200; lainnya 404 seragam", async ()
 });
 
 test("R-12: stock_date lama direset saat dibaca tanpa menggeser updated_at; toko lain tidak", async () => {
-  const lama = { stock_date: "2000-01-01", daily_quota: 20, quota_today: 5, sold_today: 3, held_today: 1, updated_at: "2026-01-01 00:00:00" };
+  const lama = {
+    stock_date: "2000-01-01",
+    daily_quota: 20,
+    quota_today: 5,
+    sold_today: 3,
+    held_today: 1,
+    updated_at: "2026-01-01 00:00:00",
+  };
   const id = await sisipMenu(idA, lama);
   const idLainB = await sisipMenu(idB, lama);
   const r = await get(`/menus/${id}`).expect(200);
   expect(r.body.data).toMatchObject({ quota_today: 20, sold_today: 0, held_today: 0, available: 20 });
-  const [[d]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s, updated_at FROM menus WHERE id = ?", [id]);
+  const [[d]] = await db.query<any[]>(
+    "SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s, updated_at FROM menus WHERE id = ?",
+    [id],
+  );
   expect(d.s).toBe(hariIniWib());
   expect(d.updated_at.toISOString()).toBe("2026-01-01T00:00:00.000Z");
   expect(await menuRow(idLainB)).toMatchObject({ quota_today: 5, sold_today: 3, held_today: 1 });

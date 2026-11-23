@@ -9,7 +9,10 @@ import { menuRow, pembeliBaru, siapCheckout } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 
 const pesan = (token: string, key: string, item: Record<string, unknown> = {}) =>
-  request(app).post("/api/v1/orders").set("Authorization", `Bearer ${token}`).set("Idempotency-Key", key)
+  request(app)
+    .post("/api/v1/orders")
+    .set("Authorization", `Bearer ${token}`)
+    .set("Idempotency-Key", key)
     .send({ items: [{ menu_id: s.menu, qty: 1, ...item }], pickup_point_id: 1, payment_method: "cod" });
 const n = async (sql: string, args: unknown[] = []) => Number(((await db.query<any[]>(sql, args))[0] as any[])[0].n);
 const kuota = (q: number) => db.query("UPDATE menus SET daily_quota = ?, quota_today = ? WHERE id = ?", [q, q, s.menu]);
@@ -46,7 +49,10 @@ describe("tanpa oversell (R-02)", () => {
     const rs = await Promise.all(Array.from({ length: 5 }, () => pesan(s.tCust, randomUUID())));
     expect(status(rs)).toEqual([201, 201, 201, 409, 409]);
     for (const r of rs.filter((x) => x.status === 409)) {
-      expect(r.body.error).toMatchObject({ code: "CONFLICT", message: "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu." });
+      expect(r.body.error).toMatchObject({
+        code: "CONFLICT",
+        message: "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu.",
+      });
     }
     expect(await n("SELECT COUNT(*) n FROM orders")).toBe(3);
     expect((await menuRow(s.menu)).held_today).toBe(3);
@@ -78,14 +84,19 @@ describe("idempotensi (D6)", () => {
   });
 
   test("isi beda → 409; urutan option_ids berbeda dianggap sama", async () => {
-    const [o] = await db.query<any>("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Telur', 4000)", [s.menu]);
+    const [o] = await db.query<any>("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Telur', 4000)", [
+      s.menu,
+    ]);
     const [x, y] = [s.keju, o.insertId as number].sort((p, q) => p - q);
     const k = randomUUID();
     const a = await pesan(s.tCust, k, { option_ids: [y, x] }).expect(201);
     const b = await pesan(s.tCust, k, { option_ids: [x, y] }).expect(201);
     expect(b.body.data.code).toBe(a.body.data.code);
     const r = await pesan(s.tCust, k, { qty: 2, option_ids: [x, y] }).expect(409);
-    expect(r.body.error).toEqual({ code: "CONFLICT", message: "Pesanan ini sudah dikirim dengan isi berbeda. Muat ulang lalu coba lagi." });
+    expect(r.body.error).toEqual({
+      code: "CONFLICT",
+      message: "Pesanan ini sudah dikirim dengan isi berbeda. Muat ulang lalu coba lagi.",
+    });
   });
 
   test("gagal lalu ulang dengan kunci sama → boleh", async () => {

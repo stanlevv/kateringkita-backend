@@ -16,7 +16,11 @@ async function panggil(url: string, body?: unknown): Promise<Record<string, any>
   if (!key) throw new AppError(503, "SERVICE_UNAVAILABLE", "Pembayaran online belum diaktifkan.");
   const res = await fetch(url, {
     method: body ? "POST" : "GET",
-    headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}` },
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}`,
+    },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);
@@ -58,7 +62,9 @@ export async function buatQrisMidtrans(code: string, amount: number, menit: numb
   if (r.status_code === "406") {
     throw new AppError(409, "CONFLICT", "Pembayaran pesanan ini sudah dimulai di halaman Midtrans. Lanjutkan di sana.");
   }
-  const qrUrl = (r.actions as { name?: string; url?: string }[] | undefined)?.find((a) => a.name === "generate-qr-code")?.url;
+  const qrUrl = (r.actions as { name?: string; url?: string }[] | undefined)?.find(
+    (a) => a.name === "generate-qr-code",
+  )?.url;
   if (!["200", "201"].includes(r.status_code) || !r.transaction_id || !r.qr_string || !qrUrl) {
     console.error(`Midtrans QRIS ${code} gagal: ${r.status_code} ${r.status_message}`);
     throw new AppError(502, "BAD_GATEWAY", "Gagal membuat QRIS. Coba lagi.");
@@ -88,7 +94,9 @@ export async function buatSnap(code: string, amount: number, menit: number, kemb
 export function notifikasiSah(n: Record<string, unknown>): boolean {
   const key = env.MIDTRANS_SIGNATURE_KEY ?? env.MIDTRANS_SERVER_KEY;
   if (!key || typeof n.signature_key !== "string") return false;
-  const harap = Buffer.from(createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${key}`).digest("hex"));
+  const harap = Buffer.from(
+    createHash("sha512").update(`${n.order_id}${n.status_code}${n.gross_amount}${key}`).digest("hex"),
+  );
   const kirim = Buffer.from(n.signature_key);
   return harap.length === kirim.length && timingSafeEqual(harap, kirim);
 }

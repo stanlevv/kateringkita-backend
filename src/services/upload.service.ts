@@ -24,10 +24,17 @@ const NAMA_OBJEK = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 // D10: null, sama dengan tersimpan, atau tepat <R2_PUBLIC_URL>/<prefix><uuid>.<ext>; selain itu 400 di `field`.
 // shortcut: keberadaan objek di R2 tidak dicek (butuh jaringan), cek HEAD bila foto rusak jadi masalah nyata
-export function cekUrlGambar(url: string | null | undefined, tersimpan: string | null, prefix: string, field: string): void {
+export function cekUrlGambar(
+  url: string | null | undefined,
+  tersimpan: string | null,
+  prefix: string,
+  field: string,
+): void {
   if (url === undefined || url === null || url === tersimpan) return;
   const cfg = r2Config();
   const dasar = cfg ? `${cfg.publicUrl}/${prefix}` : null;
   if (dasar && url.startsWith(dasar) && NAMA_OBJEK.test(url.slice(dasar.length))) return;
-  throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { [field]: ["Foto tidak valid. Unggah ulang foto."] });
+  throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
+    [field]: ["Foto tidak valid. Unggah ulang foto."],
+  });
 }

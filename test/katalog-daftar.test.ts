@@ -9,7 +9,20 @@ let ayam: number, esTeh: number;
 
 const get = (u: string) => request(app).get(`/api/v1${u}`);
 const ids = async (q = "") => (await get(`/menus${q}`).expect(200)).body.data.map((m: any) => m.id);
-const KUNCI = ["available", "badge", "category", "id", "image_url", "is_favorite", "merchant", "name", "price", "rating_avg", "rating_count", "unit_label"];
+const KUNCI = [
+  "available",
+  "badge",
+  "category",
+  "id",
+  "image_url",
+  "is_favorite",
+  "merchant",
+  "name",
+  "price",
+  "rating_avg",
+  "rating_count",
+  "unit_label",
+];
 
 beforeEach(async () => {
   bekukanJam();
@@ -29,10 +42,18 @@ test("GET /menus tanpa token: kartu D6, tanpa angka internal (R-11, BE-02)", asy
   const k = r.body.data[0];
   expect(Object.keys(k).sort()).toEqual(KUNCI);
   expect(k).toEqual({
-    id: ayam, name: "Nasi Ayam", image_url: null, price: 15000, unit_label: "porsi",
+    id: ayam,
+    name: "Nasi Ayam",
+    image_url: null,
+    price: 15000,
+    unit_label: "porsi",
     category: { id: 1, name: "Nasi Box", slug: "nasi-box" },
     merchant: { id: idA, slug: slugA, business_name: "Dapur Siti", is_open: true },
-    available: 15, badge: "available", rating_avg: 0, rating_count: 0, is_favorite: false,
+    available: 15,
+    badge: "available",
+    rating_avg: 0,
+    rating_count: 0,
+    is_favorite: false,
   });
   const s = JSON.stringify(r.body);
   for (const kunci of BOCOR) expect(s).not.toContain(kunci);
@@ -68,7 +89,10 @@ test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko t
   const habis = await sisipMenu(idA, { name: "Habis", quota_today: 5, sold_today: 5, sold_total: 999 });
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   const r = (await get(`/menus?merchant=${slugA}`).expect(200)).body;
-  expect(r.data.map((m: any) => [m.id, m.merchant.is_open])).toEqual([[ayam, false], [habis, false]]);
+  expect(r.data.map((m: any) => [m.id, m.merchant.is_open])).toEqual([
+    [ayam, false],
+    [habis, false],
+  ]);
   expect(r.meta.total).toBe(2);
   await tampilkan(idA, { buka: false });
   expect(await ids(`?merchant=${slugA}`)).toEqual([ayam, habis]);
@@ -78,7 +102,13 @@ test("D2 ruling: filter merchant=<slug> tidak memakai syarat buka (profil toko t
 });
 
 test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async () => {
-  const habis = await sisipMenu(idA, { name: "Habis", daily_quota: 10, quota_today: 10, sold_today: 10, sold_total: 999 });
+  const habis = await sisipMenu(idA, {
+    name: "Habis",
+    daily_quota: 10,
+    quota_today: 10,
+    sold_today: 10,
+    sold_total: 999,
+  });
   const sedikit = await sisipMenu(idA, { name: "Sedikit", quota_today: 7 });
   const po = await sisipMenu(idA, { name: "PO", is_preorder: true, preorder_days: 2 });
   // TiDB tidak menegakkan CHECK: tiru data rusak (ditahan melebihi sisa) dengan mematikan CHECK di MySQL uji
@@ -87,7 +117,13 @@ test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async ()
   );
   if (chk) await db.query(`ALTER TABLE menus ALTER CHECK \`${chk.n}\` NOT ENFORCED`);
   const rusak = await sisipMenu(idA, { name: "Rusak", quota_today: 5, sold_today: 3, held_today: 4 });
-  const basi = await sisipMenu(idA, { name: "Basi", stock_date: "2000-01-01", daily_quota: 20, quota_today: 5, sold_today: 5 });
+  const basi = await sisipMenu(idA, {
+    name: "Basi",
+    stock_date: "2000-01-01",
+    daily_quota: 20,
+    quota_today: 5,
+    sold_today: 5,
+  });
   const data = (await get("/menus").expect(200)).body.data;
   const by = (id: number) => data.find((m: any) => m.id === id);
   expect(by(habis)).toMatchObject({ available: 0, badge: "sold_out" });
@@ -95,8 +131,16 @@ test("D4/D5: badge, habis paling akhir, reset harian tanpa menulis DB", async ()
   expect(by(po)).toMatchObject({ badge: "preorder" });
   expect(by(rusak)).toMatchObject({ available: 0, badge: "sold_out" });
   expect(by(basi)).toMatchObject({ available: 20, badge: "available" });
-  expect(data.slice(-2).map((m: any) => m.id).sort()).toEqual([habis, rusak].sort());
-  const [[row]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s, quota_today, sold_today FROM menus WHERE id = ?", [basi]);
+  expect(
+    data
+      .slice(-2)
+      .map((m: any) => m.id)
+      .sort(),
+  ).toEqual([habis, rusak].sort());
+  const [[row]] = await db.query<any[]>(
+    "SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s, quota_today, sold_today FROM menus WHERE id = ?",
+    [basi],
+  );
   expect(row).toEqual({ s: "2000-01-01", quota_today: 5, sold_today: 5 });
 });
 
@@ -123,8 +167,22 @@ test("D8: q nama menu/toko dengan escape, kategori, toko, titik temu", async () 
 });
 
 test("D9: urutan", async () => {
-  const murah = await sisipMenu(idA, { name: "Murah", price: 2000, hpp: 1000, rating_avg: 4.5, rating_count: 9, sold_total: 3 });
-  const mahal = await sisipMenu(idA, { name: "Mahal", price: 90000, hpp: 1000, rating_avg: 4.5, rating_count: 2, sold_total: 4 });
+  const murah = await sisipMenu(idA, {
+    name: "Murah",
+    price: 2000,
+    hpp: 1000,
+    rating_avg: 4.5,
+    rating_count: 9,
+    sold_total: 3,
+  });
+  const mahal = await sisipMenu(idA, {
+    name: "Mahal",
+    price: 90000,
+    hpp: 1000,
+    rating_avg: 4.5,
+    rating_count: 2,
+    sold_total: 4,
+  });
   expect(await ids()).toEqual([ayam, mahal, murah, esTeh]);
   expect(await ids("?sort=popular")).toEqual([ayam, mahal, murah, esTeh]);
   expect(await ids("?sort=price_asc")).toEqual([murah, esTeh, ayam, mahal]);

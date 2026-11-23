@@ -10,19 +10,46 @@ let s: Awaited<ReturnType<typeof siapCheckout>>;
 let slugA: string, tAdmin: string;
 const ids: Record<string, number> = {};
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-type P = { merchant_id?: number | null; is_public?: boolean; is_active?: boolean; type?: string; value?: number; min_subtotal?: number;
-  quota?: number | null; used_count?: number; per_user_limit?: number; mulai?: number; akhir?: number };
+type P = {
+  merchant_id?: number | null;
+  is_public?: boolean;
+  is_active?: boolean;
+  type?: string;
+  value?: number;
+  min_subtotal?: number;
+  quota?: number | null;
+  used_count?: number;
+  per_user_limit?: number;
+  mulai?: number;
+  akhir?: number;
+};
 const promo = async (code: string, p: P = {}) => {
   const [r] = await db.query<any>(
     `INSERT INTO promos (merchant_id, code, type, value, min_subtotal, quota, used_count, per_user_limit, is_public, is_active, starts_at, ends_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP() + INTERVAL ? HOUR, UTC_TIMESTAMP() + INTERVAL ? HOUR)`,
-    [p.merchant_id ?? null, code, p.type ?? "fixed", p.value ?? 1000, p.min_subtotal ?? 0, p.quota ?? null, p.used_count ?? 0,
-      p.per_user_limit ?? 1, p.is_public ?? true, p.is_active ?? true, p.mulai ?? -24, p.akhir ?? 24],
+    [
+      p.merchant_id ?? null,
+      code,
+      p.type ?? "fixed",
+      p.value ?? 1000,
+      p.min_subtotal ?? 0,
+      p.quota ?? null,
+      p.used_count ?? 0,
+      p.per_user_limit ?? 1,
+      p.is_public ?? true,
+      p.is_active ?? true,
+      p.mulai ?? -24,
+      p.akhir ?? 24,
+    ],
   );
   ids[code] = r.insertId;
   return r.insertId as number;
 };
-const klaim = (code: string, t = s.tCust) => request(app).post(`/api/v1/me/vouchers/${ids[code] ?? code}/claim`).set(H(t)).send();
+const klaim = (code: string, t = s.tCust) =>
+  request(app)
+    .post(`/api/v1/me/vouchers/${ids[code] ?? code}/claim`)
+    .set(H(t))
+    .send();
 const saya = (q = "") => request(app).get(`/api/v1/me/vouchers${q}`).set(H(s.tCust));
 
 beforeAll(async () => {
@@ -48,9 +75,19 @@ describe("voucher di halaman toko", () => {
     const v = (await request(app).get(`/api/v1/merchants/${slugA}`).expect(200)).body.data.vouchers;
     expect(v.map((x: any) => x.code)).toEqual(["HABIS", "PUBLIKA"]); // berakhir paling cepat dulu
     expect(v[1]).toEqual({
-      id: ids.PUBLIKA, code: "PUBLIKA", description: null, type: "percent", value: 10, max_discount: null, min_subtotal: 20000,
-      starts_at: expect.any(String), ends_at: expect.any(String), slot: "toko",
-      merchant: { id: s.idA, slug: slugA, business_name: "Dapur Siti" }, sold_out: false, claimed: false,
+      id: ids.PUBLIKA,
+      code: "PUBLIKA",
+      description: null,
+      type: "percent",
+      value: 10,
+      max_discount: null,
+      min_subtotal: 20000,
+      starts_at: expect.any(String),
+      ends_at: expect.any(String),
+      slot: "toko",
+      merchant: { id: s.idA, slug: slugA, business_name: "Dapur Siti" },
+      sold_out: false,
+      claimed: false,
     });
     expect(v[0].sold_out).toBe(true);
   });
@@ -98,7 +135,12 @@ describe("voucher platform & Voucher Saya", () => {
       PLATFORM1: [false, "Voucher platform hanya untuk bayar non-tunai."],
     });
     const ok = (await saya(`?merchant_id=${s.idA}&subtotal=30000&payment_method=va`).expect(200)).body.data;
-    expect(ok.filter((x: any) => x.usable).map((x: any) => x.code).sort()).toEqual(["PLATFORM1", "PUBLIKA"]);
+    expect(
+      ok
+        .filter((x: any) => x.usable)
+        .map((x: any) => x.code)
+        .sort(),
+    ).toEqual(["PLATFORM1", "PUBLIKA"]);
     expect((await saya("?subtotal=abc").expect(400)).body.error.fields.subtotal).toBeDefined();
   });
 
@@ -113,31 +155,74 @@ describe("pengaturan promo", () => {
   test("promo toko lama gratis biaya layanan tetap bisa diubah selama jenisnya tidak diganti (C2)", async () => {
     const [r] = await db.query<any>(
       `INSERT INTO promos (merchant_id, code, type, value, starts_at, ends_at)
-       VALUES (?, 'LAMAGRATIS', 'free_service_fee', 0, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 5 DAY)`, [s.idA],
+       VALUES (?, 'LAMAGRATIS', 'free_service_fee', 0, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 5 DAY)`,
+      [s.idA],
     );
-    const p = await request(app).patch(`/api/v1/merchant/promos/${r.insertId}`).set(H(s.tA))
-      .send({ type: "free_service_fee", is_public: false, ends_at: "2099-01-01T00:00:00Z" }).expect(200);
+    const p = await request(app)
+      .patch(`/api/v1/merchant/promos/${r.insertId}`)
+      .set(H(s.tA))
+      .send({ type: "free_service_fee", is_public: false, ends_at: "2099-01-01T00:00:00Z" })
+      .expect(200);
     expect(p.body.data).toMatchObject({ type: "free_service_fee", is_public: false });
   });
 
   test("promo toko: tanpa gratis biaya layanan (C2); is_public bisa dimatikan", async () => {
-    const isi = { type: "fixed", value: 1000, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
-    const r = await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "GRATISTOKO", type: "free_service_fee" }).expect(400);
+    const isi = {
+      type: "fixed",
+      value: 1000,
+      min_subtotal: 0,
+      per_user_limit: 1,
+      starts_at: "2020-01-01T00:00:00Z",
+      ends_at: "2099-01-01T00:00:00Z",
+    };
+    const r = await request(app)
+      .post("/api/v1/merchant/promos")
+      .set(H(s.tA))
+      .send({ ...isi, code: "GRATISTOKO", type: "free_service_fee" })
+      .expect(400);
     expect(r.body.error.fields.type).toEqual(["Promo toko hanya potongan persen atau nominal."]);
-    const ok = await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "TOKOBARU" }).expect(201);
+    const ok = await request(app)
+      .post("/api/v1/merchant/promos")
+      .set(H(s.tA))
+      .send({ ...isi, code: "TOKOBARU" })
+      .expect(201);
     expect(ok.body.data.is_public).toBe(true);
-    await request(app).patch(`/api/v1/merchant/promos/${ok.body.data.id}`).set(H(s.tA)).send({ type: "free_service_fee" }).expect(400);
-    const p = await request(app).patch(`/api/v1/merchant/promos/${ok.body.data.id}`).set(H(s.tA)).send({ is_public: false }).expect(200);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${ok.body.data.id}`)
+      .set(H(s.tA))
+      .send({ type: "free_service_fee" })
+      .expect(400);
+    const p = await request(app)
+      .patch(`/api/v1/merchant/promos/${ok.body.data.id}`)
+      .set(H(s.tA))
+      .send({ is_public: false })
+      .expect(200);
     expect(p.body.data.is_public).toBe(false);
     const v = (await request(app).get(`/api/v1/merchants/${slugA}`).expect(200)).body.data.vouchers;
     expect(v.map((x: any) => x.code)).not.toContain("TOKOBARU");
   });
 
   test("promo platform admin: is_public bisa diatur, gratis biaya layanan tetap boleh", async () => {
-    const isi = { code: "ADMINGRATIS", type: "free_service_fee", value: 0, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
-    const r = await request(app).post("/api/v1/admin/promos").set(H(tAdmin)).send({ ...isi, is_public: false }).expect(201);
+    const isi = {
+      code: "ADMINGRATIS",
+      type: "free_service_fee",
+      value: 0,
+      min_subtotal: 0,
+      per_user_limit: 1,
+      starts_at: "2020-01-01T00:00:00Z",
+      ends_at: "2099-01-01T00:00:00Z",
+    };
+    const r = await request(app)
+      .post("/api/v1/admin/promos")
+      .set(H(tAdmin))
+      .send({ ...isi, is_public: false })
+      .expect(201);
     expect(r.body.data.is_public).toBe(false);
-    const p = await request(app).patch(`/api/v1/admin/promos/${r.body.data.id}`).set(H(tAdmin)).send({ is_public: true }).expect(200);
+    const p = await request(app)
+      .patch(`/api/v1/admin/promos/${r.body.data.id}`)
+      .set(H(tAdmin))
+      .send({ is_public: true })
+      .expect(200);
     expect(p.body.data.is_public).toBe(true);
   });
 });

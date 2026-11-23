@@ -22,16 +22,27 @@ export async function ambilPemeliharaan(): Promise<Pemeliharaan> {
 
 export async function ubahPemeliharaan(adminId: number, { aktif, pesan }: { aktif: boolean; pesan: string }) {
   const nilai = await dalamTransaksi(async (conn) => {
-    await conn.query("INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES ('maintenance_mode', '0'), ('maintenance_message', '')");
+    await conn.query(
+      "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES ('maintenance_mode', '0'), ('maintenance_message', '')",
+    );
     const [rows] = await conn.query<RowDataPacket[]>(
       "SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('maintenance_mode', 'maintenance_message') FOR UPDATE",
     );
     const s = Object.fromEntries(rows.map((r) => [r.setting_key, r.setting_value]));
     const lama = { aktif: s.maintenance_mode === "1", pesan: s.maintenance_message || null };
     const baru = { aktif, pesan: pesan || null };
-    await conn.query("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'maintenance_mode'", [aktif ? "1" : "0"]);
+    await conn.query("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'maintenance_mode'", [
+      aktif ? "1" : "0",
+    ]);
     await conn.query("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'maintenance_message'", [pesan]);
-    await catat(conn, { adminId, action: "settings.maintenance", targetType: "settings", targetId: "maintenance", before: lama, after: baru });
+    await catat(conn, {
+      adminId,
+      action: "settings.maintenance",
+      targetType: "settings",
+      targetId: "maintenance",
+      before: lama,
+      after: baru,
+    });
     return baru;
   });
   cache = null;

@@ -9,9 +9,15 @@ import { menuRow, siapCheckout, sisipMenu, tampilkan } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 
 const quote = (body: unknown, token = s.tCust) =>
-  request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${token}`).send(body as object);
-const satu = (o: Record<string, unknown> = {}, item: Record<string, unknown> = {}) =>
-  ({ items: [{ menu_id: s.menu, qty: 1, ...item }], pickup_point_id: 1, ...o });
+  request(app)
+    .post("/api/v1/orders/quote")
+    .set("Authorization", `Bearer ${token}`)
+    .send(body as object);
+const satu = (o: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
+  items: [{ menu_id: s.menu, qty: 1, ...item }],
+  pickup_point_id: 1,
+  ...o,
+});
 const tolak400 = async (body: unknown, field: string, pesan: string) => {
   const r = await quote(body).expect(400);
   expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid." });
@@ -32,14 +38,31 @@ beforeEach(async () => {
 test("harga dihitung server: opsi + biaya layanan, field harga client diabaikan, tanpa angka internal", async () => {
   await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
   const r = await quote({
-    items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju], unit_price: 1, total: 1 }], pickup_point_id: 1, total: 1, subtotal: 1,
+    items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju], unit_price: 1, total: 1 }],
+    pickup_point_id: 1,
+    total: 1,
+    subtotal: 1,
   }).expect(200);
   expect(r.body.data).toEqual({
-    items: [{
-      menu_id: s.menu, menu_name: "Nasi Ayam", qty: 2, unit_price: 18000,
-      options: [{ id: s.keju, name: "Keju", extra_price: 3000 }], line_total: 36000, available: 20,
-    }],
-    subtotal: 36000, discount: 0, merchant_discount: 0, platform_discount: 0, service_fee: 2000, total: 38000, vouchers_applied: [], warnings: [],
+    items: [
+      {
+        menu_id: s.menu,
+        menu_name: "Nasi Ayam",
+        qty: 2,
+        unit_price: 18000,
+        options: [{ id: s.keju, name: "Keju", extra_price: 3000 }],
+        line_total: 36000,
+        available: 20,
+      },
+    ],
+    subtotal: 36000,
+    discount: 0,
+    merchant_discount: 0,
+    platform_discount: 0,
+    service_fee: 2000,
+    total: 38000,
+    vouchers_applied: [],
+    warnings: [],
   });
   const json = JSON.stringify(r.body);
   for (const k of ['"hpp"', '"sold_today"', '"held_today"', '"quota_today"']) expect(json).not.toContain(k);
@@ -54,7 +77,11 @@ test("biaya layanan bukan angka → 0", async () => {
 test("menu sama dua baris (opsi berbeda) → dua item, stok dijumlah", async () => {
   await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [s.menu]);
   const r = await quote({
-    items: [{ menu_id: s.menu, qty: 1, option_ids: [s.keju] }, { menu_id: s.menu, qty: 1 }], pickup_point_id: 1,
+    items: [
+      { menu_id: s.menu, qty: 1, option_ids: [s.keju] },
+      { menu_id: s.menu, qty: 1 },
+    ],
+    pickup_point_id: 1,
   }).expect(200);
   expect(r.body.data.items.map((i: any) => i.unit_price)).toEqual([18000, 15000]);
   expect(r.body.data.subtotal).toBe(33000);
@@ -88,7 +115,11 @@ describe("validasi body (zod)", () => {
     await tolak400(satu({ pickup_point_id: null }), "pickup_point_id", "Pilih titik temu.");
     await tolak400(satu({ note: "x".repeat(256) }), "note", "Catatan maksimal 255 karakter.");
     await tolak400(satu({ customer_name: "x".repeat(151) }), "customer_name", "Nama 1–150 karakter.");
-    await tolak400(satu({ customer_phone: "0812" }), "customer_phone", "Nomor HP harus diawali 08 dan berisi 10–13 angka.");
+    await tolak400(
+      satu({ customer_phone: "0812" }),
+      "customer_phone",
+      "Nomor HP harus diawali 08 dan berisi 10–13 angka.",
+    );
     await tolak400(satu({ pickup_at: "besok" }), "pickup_at", "Waktu ambil tidak valid.");
   });
 });
@@ -98,7 +129,11 @@ test("body bukan objek / kosong → pesan Indonesia", async () => {
   for (const body of [undefined, "[1,2]"]) {
     const req = request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${s.tCust}`);
     const r = await (body === undefined ? req : req.set("Content-Type", "application/json").send(body)).expect(400);
-    expect(r.body.error).toEqual({ code: "VALIDATION_ERROR", message: "Data tidak valid.", fields: { "": ["Data pesanan tidak valid."] } });
+    expect(r.body.error).toEqual({
+      code: "VALIDATION_ERROR",
+      message: "Data tidak valid.",
+      fields: { "": ["Data pesanan tidak valid."] },
+    });
   }
 });
 
@@ -113,14 +148,24 @@ describe("urutan validasi D3", () => {
   test("menu nonaktif / terhapus / tidak ada → items.0.menu_id", async () => {
     const mati = await sisipMenu(s.idA, { is_active: false });
     const hapus = await sisipMenu(s.idA, { deleted_at: new Date() });
-    for (const id of [mati, hapus, 99999]) await tolak400(satu({}, { menu_id: id }), "items.0.menu_id", "Menu tidak tersedia.");
+    for (const id of [mati, hapus, 99999])
+      await tolak400(satu({}, { menu_id: id }), "items.0.menu_id", "Menu tidak tersedia.");
   });
 
   test("menu dari dua toko → items", async () => {
     await tampilkan(s.idB);
     const mB = await sisipMenu(s.idB);
-    await tolak400({ items: [{ menu_id: s.menu, qty: 1 }, { menu_id: mB, qty: 1 }], pickup_point_id: 1 },
-      "items", "Semua menu harus dari satu toko.");
+    await tolak400(
+      {
+        items: [
+          { menu_id: s.menu, qty: 1 },
+          { menu_id: mB, qty: 1 },
+        ],
+        pickup_point_id: 1,
+      },
+      "items",
+      "Semua menu harus dari satu toko.",
+    );
   });
 
   test("R-14: toko pending / suspended / pemilik nonaktif → MERCHANT_UNAVAILABLE", async () => {
@@ -129,7 +174,9 @@ describe("urutan validasi D3", () => {
       await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
     }
     await tampilkan(s.idA);
-    await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [s.idA]);
+    await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [
+      s.idA,
+    ]);
     await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
   });
 
@@ -154,7 +201,9 @@ describe("urutan validasi D3", () => {
   });
 
   test("opsi nonaktif / milik menu lain → items.0.option_ids", async () => {
-    const [o] = await db.query<any>("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Gula', 0)", [s.menu2]);
+    const [o] = await db.query<any>("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, 'Gula', 0)", [
+      s.menu2,
+    ]);
     for (const id of [s.basi, o.insertId]) {
       await tolak400(satu({}, { option_ids: [id] }), "items.0.option_ids", "Pilihan tidak tersedia.");
     }

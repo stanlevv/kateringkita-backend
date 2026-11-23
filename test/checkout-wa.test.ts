@@ -10,13 +10,24 @@ import { pembeliBaru, siapCheckout } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 
 const pesan = async (o: Record<string, unknown> = {}) => {
-  const r = await request(app).post("/api/v1/orders").set("Authorization", `Bearer ${s.tCust}`).set("Idempotency-Key", randomUUID())
+  const r = await request(app)
+    .post("/api/v1/orders")
+    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Idempotency-Key", randomUUID())
     .send({
-      items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju] }, { menu_id: s.menu2, qty: 1 }], pickup_point_id: 1, payment_method: "cod", ...o,
-    }).expect(201);
+      items: [
+        { menu_id: s.menu, qty: 2, option_ids: [s.keju] },
+        { menu_id: s.menu2, qty: 1 },
+      ],
+      pickup_point_id: 1,
+      payment_method: "cod",
+      ...o,
+    })
+    .expect(201);
   return r.body.data.code as string;
 };
-const wa = (code: string, token = s.tCust) => request(app).get(`/api/v1/orders/${code}/whatsapp`).set("Authorization", `Bearer ${token}`);
+const wa = (code: string, token = s.tCust) =>
+  request(app).get(`/api/v1/orders/${code}/whatsapp`).set("Authorization", `Bearer ${token}`);
 const teks = (url: string) => decodeURIComponent(url.split("text=")[1]);
 
 beforeEach(async () => {
@@ -32,8 +43,8 @@ test("pesan tetap bersuara pembeli, tautan wa.me 62…", async () => {
   expect(d.url.startsWith("https://wa.me/6281298765432?text=")).toBe(true);
   expect(teks(d.url)).toBe(d.message);
   expect(d.message).toBe(
-    `Halo Dapur Siti, saya Budi memesan lewat KateringKita.\n\nKode: ${code}\nMenu: 2x Nasi Ayam, 1x Es Teh\nTotal: Rp 41.000\n`
-    + "Cara bayar: Tunai\nAmbil di: Gedung Vokasi UB (Lt. 2)\nWaktu ambil: Secepatnya\nCatatan: Pedas",
+    `Halo Dapur Siti, saya Budi memesan lewat KateringKita.\n\nKode: ${code}\nMenu: 2x Nasi Ayam, 1x Es Teh\nTotal: Rp 41.000\n` +
+      "Cara bayar: Tunai\nAmbil di: Gedung Vokasi UB (Lt. 2)\nWaktu ambil: Secepatnya\nCatatan: Pedas",
   );
 });
 
@@ -68,7 +79,9 @@ test("ambil bukan hari ini → tanggal ikut ditulis", async () => {
   const lusa = new Date(Date.parse(`${hariIniWib()}T10:00:00+07:00`) + 2 * 86400e3);
   const code = await pesan({ pickup_at: lusa.toISOString() });
   const { message } = (await wa(code).expect(200)).body.data;
-  const tgl = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" }).format(lusa);
+  const tgl = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" }).format(
+    lusa,
+  );
   expect(message).toContain(`Waktu ambil: ${tgl} 10.00 WIB`);
 });
 

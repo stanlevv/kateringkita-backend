@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { daftarJenisUsahaHandler, daftarKategoriHandler, daftarTitikTemuHandler, pengaturanHandler } from "../handlers/meta.handler";
+import {
+  daftarJenisUsahaHandler,
+  daftarKategoriHandler,
+  daftarTitikTemuHandler,
+  pengaturanHandler,
+} from "../handlers/meta.handler";
 
 export const meta = Router();
 

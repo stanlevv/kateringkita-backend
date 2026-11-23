@@ -13,8 +13,19 @@ const lagi = (code = kode, t = s.tCust) => request(app).post(`/api/v1/orders/${c
 
 beforeAll(async () => {
   s = await siapCheckout();
-  const r = await request(app).post("/api/v1/orders").set(H(s.tCust)).set("Idempotency-Key", randomUUID())
-    .send({ items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju] }, { menu_id: s.menu2, qty: 1 }], pickup_point_id: 1, payment_method: "cod", note: "Pedas" })
+  const r = await request(app)
+    .post("/api/v1/orders")
+    .set(H(s.tCust))
+    .set("Idempotency-Key", randomUUID())
+    .send({
+      items: [
+        { menu_id: s.menu, qty: 2, option_ids: [s.keju] },
+        { menu_id: s.menu2, qty: 1 },
+      ],
+      pickup_point_id: 1,
+      payment_method: "cod",
+      note: "Pedas",
+    })
     .expect(201);
   kode = r.body.data.code;
   await request(app).post(`/api/v1/orders/${kode}/cancel`).set(H(s.tCust)).expect(200);
@@ -28,13 +39,26 @@ describe("pesan lagi", () => {
     await db.query("UPDATE menus SET price = 16000 WHERE id = ?", [s.menu]);
     const r = await lagi().expect(200);
     expect(r.body.data.request).toEqual({
-      items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju] }, { menu_id: s.menu2, qty: 1, option_ids: [] }],
-      pickup_point_id: 1, note: "Pedas", promo_code: null, promo_codes: [], customer_name: null, customer_phone: null, pickup_at: null,
+      items: [
+        { menu_id: s.menu, qty: 2, option_ids: [s.keju] },
+        { menu_id: s.menu2, qty: 1, option_ids: [] },
+      ],
+      pickup_point_id: 1,
+      note: "Pedas",
+      promo_code: null,
+      promo_codes: [],
+      customer_name: null,
+      customer_phone: null,
+      pickup_at: null,
     });
     // (16000 + 3000) × 2 + 5000
     expect(r.body.data.quote).toMatchObject({ subtotal: 43000, total: 43000, warnings: [] });
-    const baru = await request(app).post("/api/v1/orders").set(H(s.tCust)).set("Idempotency-Key", randomUUID())
-      .send({ ...r.body.data.request, payment_method: "cod" }).expect(201);
+    const baru = await request(app)
+      .post("/api/v1/orders")
+      .set(H(s.tCust))
+      .set("Idempotency-Key", randomUUID())
+      .send({ ...r.body.data.request, payment_method: "cod" })
+      .expect(201);
     expect(baru.body.data.code).not.toBe(kode);
   });
 

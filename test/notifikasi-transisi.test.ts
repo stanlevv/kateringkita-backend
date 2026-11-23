@@ -19,19 +19,22 @@ const TOKO = "Dapur Siti";
 
 const jalan = (code: string, aksi: Aksi, aktor: Aktor, reason?: string | null) =>
   dalamTransaksi((c) => transisi(c, code, aksi, aktor, reason));
-const notif = async (userId = budi) => (await db.query<any[]>("SELECT * FROM notifications WHERE user_id = ? ORDER BY id", [userId]))[0] as any[];
+const notif = async (userId = budi) =>
+  (await db.query<any[]>("SELECT * FROM notifications WHERE user_id = ? ORDER BY id", [userId]))[0] as any[];
 const siap = async (status: Status = "holding") => {
   const code = await pesanDulu(s.tCust, s.menu, 2);
   await db.query("UPDATE orders SET status = ? WHERE code = ?", [status, code]);
   return code;
 };
-const lewat = (code: string) => db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [code]);
+const lewat = (code: string) =>
+  db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [code]);
 const aksiToko = (code: string, aksi: string, body: object = {}) =>
   request(app).post(`/api/v1/merchant/orders/${code}/${aksi}`).set("Authorization", `Bearer ${s.tA}`).send(body);
 
 beforeAll(async () => {
   s = await siapCheckout();
-  const id = async (email: string) => Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
+  const id = async (email: string) =>
+    Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
   budi = await id("budi@mail.com");
   siti = await id("siti@mail.com");
   penjual = { jenis: "merchant", userId: siti, merchantId: s.idA };
@@ -57,14 +60,21 @@ describe("notifikasi untuk pembeli (D8, D12)", () => {
     expect(n[0].body).toBe(`${TOKO} sudah mengonfirmasi pesanan ${code}.`);
     expect(n[1].body).toBe(`${TOKO} sedang memasak pesanan ${code}.`);
     expect(n[2].body).toBe(`Pesanan ${code} sudah siap. Silakan ambil di titik temu.`);
-    expect(n[0]).toMatchObject({ type: "order_status", data: { order_code: code, status: "confirmed" }, read_at: null });
+    expect(n[0]).toMatchObject({
+      type: "order_status",
+      data: { order_code: code, status: "confirmed" },
+      read_at: null,
+    });
     expect(n[0].created_at).toBeInstanceOf(Date);
   });
 
   test("reject: judul & alasan; alasan 255 + nama toko 150 → body dipotong 255", async () => {
     const code = await siap();
     await jalan(code, "reject", penjual, "Stok habis");
-    expect((await notif())[0]).toMatchObject({ title: "Pesanan ditolak", body: `${TOKO} menolak pesanan ${code}. Alasan: Stok habis` });
+    expect((await notif())[0]).toMatchObject({
+      title: "Pesanan ditolak",
+      body: `${TOKO} menolak pesanan ${code}. Alasan: Stok habis`,
+    });
 
     await db.query("UPDATE merchants SET business_name = ? WHERE id = ?", ["T".repeat(150), s.idA]);
     const code2 = await siap();
@@ -85,7 +95,11 @@ describe("notifikasi untuk pembeli (D8, D12)", () => {
 
   test("aksi pembeli sendiri (cancel HTTP, complete) tanpa notifikasi", async () => {
     const code = await siap();
-    await request(app).post(`/api/v1/orders/${code}/cancel`).set("Authorization", `Bearer ${s.tCust}`).send({}).expect(200);
+    await request(app)
+      .post(`/api/v1/orders/${code}/cancel`)
+      .set("Authorization", `Bearer ${s.tCust}`)
+      .send({})
+      .expect(200);
     const code2 = await siap("ready");
     await jalan(code2, "complete", pembeli);
     expect(await notif()).toEqual([]);
@@ -120,7 +134,10 @@ describe("balapan tanpa deadlock (D11)", () => {
       const code = await siap();
       const [r, c] = await Promise.all([
         aksiToko(code, "reject", { reason: "Habis" }),
-        request(app).post("/api/v1/orders").set("Authorization", `Bearer ${s.tCust}`).set("Idempotency-Key", crypto.randomUUID())
+        request(app)
+          .post("/api/v1/orders")
+          .set("Authorization", `Bearer ${s.tCust}`)
+          .set("Idempotency-Key", crypto.randomUUID())
           .send({ items: [{ menu_id: s.menu2, qty: 1 }], pickup_point_id: 1, payment_method: "cod" }),
       ]);
       expect([200, 409]).toContain(r.status);

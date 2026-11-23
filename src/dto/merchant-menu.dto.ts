@@ -12,19 +12,26 @@ export const menuQuerySchema = z.object({
 export type MenuQuery = z.infer<typeof menuQuerySchema>;
 
 // Pesan sama persis dengan menuFormSchema di fe/lib/schemas.ts (D9)
-const wajib = (pesan: string, maks: number) => z.string({ error: pesan }).trim().min(1, pesan).max(maks, `Maksimal ${maks} karakter.`);
+const wajib = (pesan: string, maks: number) =>
+  z.string({ error: pesan }).trim().min(1, pesan).max(maks, `Maksimal ${maks} karakter.`);
 const angka = (label: string, min: number, maks: number) =>
-  z.number({ error: `${label} wajib diisi.` }).int(`${label} harus bilangan bulat.`)
+  z
+    .number({ error: `${label} wajib diisi.` })
+    .int(`${label} harus bilangan bulat.`)
     .min(min, `${label} minimal ${min.toLocaleString("id-ID")}.`)
     .max(maks, `${label} maksimal ${maks.toLocaleString("id-ID")}.`);
 
-const opsi = z.array(z.object({ name: wajib("Nama opsi wajib diisi.", 60), extra_price: angka("Tambahan harga", 0, 1_000_000) }), { error: "Opsi tidak valid." })
+const opsi = z
+  .array(z.object({ name: wajib("Nama opsi wajib diisi.", 60), extra_price: angka("Tambahan harga", 0, 1_000_000) }), {
+    error: "Opsi tidak valid.",
+  })
   .max(20, "Maksimal 20 opsi.")
   .superRefine((list, ctx) => {
     const lihat = new Set<string>();
     list.forEach((o, i) => {
       const k = o.name.toLowerCase();
-      if (lihat.has(k)) ctx.addIssue({ code: "custom", path: [i, "name"], message: "Nama opsi sama dengan opsi lain." });
+      if (lihat.has(k))
+        ctx.addIssue({ code: "custom", path: [i, "name"], message: "Nama opsi sama dengan opsi lain." });
       lihat.add(k);
     });
   });
@@ -32,11 +39,18 @@ const opsi = z.array(z.object({ name: wajib("Nama opsi wajib diisi.", 60), extra
 // Aturan antar-field (harga > HPP, hari pre-order) dicek di service dengan nilai tersimpan
 const fields = {
   name: wajib("Nama menu wajib diisi.", 80),
-  category_id: z.number({ error: "Kategori wajib dipilih." }).int("Kategori wajib dipilih.").min(1, "Kategori wajib dipilih."),
+  category_id: z
+    .number({ error: "Kategori wajib dipilih." })
+    .int("Kategori wajib dipilih.")
+    .min(1, "Kategori wajib dipilih."),
   description: z.string({ error: "Deskripsi harus berupa teks." }).trim().max(500, "Maksimal 500 karakter.").nullable(),
   image_url: urlFoto,
   // foto tambahan selain foto utama; aturan pemilik dicek service
-  gallery: z.array(z.string({ error: "Foto tidak valid. Unggah ulang foto." }).max(500, "Foto tidak valid. Unggah ulang foto."), { error: "Foto tambahan tidak valid." })
+  gallery: z
+    .array(
+      z.string({ error: "Foto tidak valid. Unggah ulang foto." }).max(500, "Foto tidak valid. Unggah ulang foto."),
+      { error: "Foto tambahan tidak valid." },
+    )
     .max(4, "Maksimal 4 foto tambahan.")
     .refine((l) => new Set(l).size === l.length, "Foto tambahan tidak boleh sama."),
   unit_label: wajib("Satuan wajib diisi.", 30),
@@ -51,18 +65,32 @@ const fields = {
 };
 
 // POST: field asing (merchant_id, sold_today, …) dibuang zod
-export const menuSchema = z.object({ ...fields, description: fields.description.optional(), gallery: fields.gallery.default([]), options: opsi.default([]) });
+export const menuSchema = z.object({
+  ...fields,
+  description: fields.description.optional(),
+  gallery: fields.gallery.default([]),
+  options: opsi.default([]),
+});
 // PATCH: semua opsional + is_active (D2)
-export const menuPatchSchema = z.object(fields).partial().extend({ is_active: z.boolean({ error: "Status menu tidak valid." }).optional() });
+export const menuPatchSchema = z
+  .object(fields)
+  .partial()
+  .extend({ is_active: z.boolean({ error: "Status menu tidak valid." }).optional() });
 
 export type MenuInput = z.infer<typeof menuPatchSchema>;
 
 // D6: tepat salah satu dari delta / quota_today; galat lintas-field tanpa `fields`
-export const kuotaSchema = z.object({
-  delta: z.number({ error: "Perubahan kuota tidak valid." }).int("Perubahan kuota tidak valid.")
-    .min(-10_000, "Perubahan kuota tidak valid.").max(10_000, "Perubahan kuota tidak valid.")
-    .refine((d) => d !== 0, "Perubahan kuota tidak valid.").optional(),
-  quota_today: angka("Kuota hari ini", 0, 10_000).optional(),
-}).refine((b) => (b.delta === undefined) !== (b.quota_today === undefined), "Data kuota tidak valid.");
+export const kuotaSchema = z
+  .object({
+    delta: z
+      .number({ error: "Perubahan kuota tidak valid." })
+      .int("Perubahan kuota tidak valid.")
+      .min(-10_000, "Perubahan kuota tidak valid.")
+      .max(10_000, "Perubahan kuota tidak valid.")
+      .refine((d) => d !== 0, "Perubahan kuota tidak valid.")
+      .optional(),
+    quota_today: angka("Kuota hari ini", 0, 10_000).optional(),
+  })
+  .refine((b) => (b.delta === undefined) !== (b.quota_today === undefined), "Data kuota tidak valid.");
 
 export type KuotaInput = z.infer<typeof kuotaSchema>;

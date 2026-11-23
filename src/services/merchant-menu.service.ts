@@ -8,11 +8,29 @@ import { hariIniWib, segarkanKuota } from "./merchant-kuota.service";
 import { KuotaInput, MenuInput, MenuQuery, menuSchema } from "../dto/merchant-menu.dto";
 
 export type MerchantMenu = {
-  id: number; name: string; description: string | null; image_url: string | null; gallery: string[];
-  category: { id: number; name: string; slug: string }; unit_label: string;
-  price: number; hpp: number; margin: number; daily_quota: number; quota_today: number; sold_today: number; held_today: number;
-  available: number; prep_minutes: number; is_preorder: boolean; preorder_days: number; min_order_qty: number; is_active: boolean;
-  options: { id: number; name: string; extra_price: number }[]; rating_avg: number; rating_count: number;
+  id: number;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  gallery: string[];
+  category: { id: number; name: string; slug: string };
+  unit_label: string;
+  price: number;
+  hpp: number;
+  margin: number;
+  daily_quota: number;
+  quota_today: number;
+  sold_today: number;
+  held_today: number;
+  available: number;
+  prep_minutes: number;
+  is_preorder: boolean;
+  preorder_days: number;
+  min_order_qty: number;
+  is_active: boolean;
+  options: { id: number; name: string; extra_price: number }[];
+  rating_avg: number;
+  rating_count: number;
 };
 
 // Kolom JSON: mysql2 mengurai JSON MySQL, tapi teks (mis. dari sisipan SQL) tetap diterima
@@ -45,7 +63,11 @@ const STATUS: Record<NonNullable<MenuQuery["status"]>, string> = {
 };
 
 // Menu toko (belum terhapus) + opsi aktif: satu kueri menu, satu kueri opsi (tanpa N+1)
-export async function bacaMenu(merchantId: number, where: string[] = [], args: unknown[] = []): Promise<MerchantMenu[]> {
+export async function bacaMenu(
+  merchantId: number,
+  where: string[] = [],
+  args: unknown[] = [],
+): Promise<MerchantMenu[]> {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT x.*, c.name AS c_name, c.slug AS c_slug FROM menus x JOIN categories c ON c.id = x.category_id
      WHERE x.merchant_id = ? AND x.deleted_at IS NULL${where.map((w) => ` AND ${w}`).join("")} ORDER BY x.id DESC`,
@@ -57,15 +79,29 @@ export async function bacaMenu(merchantId: number, where: string[] = [], args: u
     [rows.map((r) => r.id)],
   );
   return rows.map((r) => ({
-    id: r.id, name: r.name, description: r.description, image_url: r.image_url, gallery: galeri(r.gallery),
-    category: { id: r.category_id, name: r.c_name, slug: r.c_slug }, unit_label: r.unit_label,
-    price: r.price, hpp: r.hpp, margin: r.price - r.hpp, daily_quota: r.daily_quota,
-    quota_today: r.quota_today, sold_today: r.sold_today, held_today: r.held_today,
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    image_url: r.image_url,
+    gallery: galeri(r.gallery),
+    category: { id: r.category_id, name: r.c_name, slug: r.c_slug },
+    unit_label: r.unit_label,
+    price: r.price,
+    hpp: r.hpp,
+    margin: r.price - r.hpp,
+    daily_quota: r.daily_quota,
+    quota_today: r.quota_today,
+    sold_today: r.sold_today,
+    held_today: r.held_today,
     available: r.quota_today - r.sold_today - r.held_today,
-    prep_minutes: r.prep_minutes, is_preorder: Boolean(r.is_preorder), preorder_days: r.preorder_days, min_order_qty: r.min_order_qty,
+    prep_minutes: r.prep_minutes,
+    is_preorder: Boolean(r.is_preorder),
+    preorder_days: r.preorder_days,
+    min_order_qty: r.min_order_qty,
     is_active: Boolean(r.is_active),
     options: ops.filter((o) => o.menu_id === r.id).map((o) => ({ id: o.id, name: o.name, extra_price: o.extra_price })),
-    rating_avg: Number(r.rating_avg), rating_count: r.rating_count,
+    rating_avg: Number(r.rating_avg),
+    rating_count: r.rating_count,
   }));
 }
 
@@ -95,20 +131,33 @@ export async function ambilMenu(userId: number, idRaw: unknown): Promise<Merchan
   return m;
 }
 
-const invalidField = (field: string, pesan: string) => new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { [field]: [pesan] });
+const invalidField = (field: string, pesan: string) =>
+  new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { [field]: [pesan] });
 
 // Kunci baris menu milik toko (urutan kunci: menus lalu menu_options); tidak ada/terhapus → 404
 export async function kunciMenu(conn: Conn, merchantId: number, id: number): Promise<RowDataPacket> {
   const [r] = await conn.query<RowDataPacket[]>(
-    "SELECT * FROM menus WHERE id = ? AND merchant_id = ? AND deleted_at IS NULL FOR UPDATE", [id, merchantId],
+    "SELECT * FROM menus WHERE id = ? AND merchant_id = ? AND deleted_at IS NULL FOR UPDATE",
+    [id, merchantId],
   );
   if (!r[0]) throw menuTidakAda();
   return r[0];
 }
 
 const KOLOM = [
-  "name", "category_id", "description", "image_url", "unit_label", "price", "hpp", "daily_quota", "prep_minutes", "is_preorder",
-  "preorder_days", "min_order_qty", "is_active",
+  "name",
+  "category_id",
+  "description",
+  "image_url",
+  "unit_label",
+  "price",
+  "hpp",
+  "daily_quota",
+  "prep_minutes",
+  "is_preorder",
+  "preorder_days",
+  "min_order_qty",
+  "is_active",
 ] as const;
 
 // Validasi antar-field D9: yang tidak dikirim dibandingkan dengan nilai tersimpan; kategori & foto yang sama dengan tersimpan diterima
@@ -118,7 +167,8 @@ async function kolomMenu(conn: Conn, merchantId: number, input: MenuInput, lama:
   if (sets.description === "") sets.description = null;
   if (input.price !== undefined || input.hpp !== undefined) {
     const hpp: number = input.hpp ?? lama!.hpp;
-    if ((input.price ?? lama!.price) <= hpp) throw invalidField("price", `Harga jual harus lebih besar dari HPP (Rp ${hpp.toLocaleString("id-ID")}).`);
+    if ((input.price ?? lama!.price) <= hpp)
+      throw invalidField("price", `Harga jual harus lebih besar dari HPP (Rp ${hpp.toLocaleString("id-ID")}).`);
   }
   if (input.is_preorder !== undefined || input.preorder_days !== undefined) {
     const pre = input.is_preorder ?? Boolean(lama!.is_preorder);
@@ -127,23 +177,31 @@ async function kolomMenu(conn: Conn, merchantId: number, input: MenuInput, lama:
     sets.preorder_days = pre ? hari : 0;
   }
   if (input.category_id !== undefined && input.category_id !== lama?.category_id) {
-    const [c] = await conn.query<RowDataPacket[]>("SELECT id FROM categories WHERE id = ? AND is_active", [input.category_id]);
+    const [c] = await conn.query<RowDataPacket[]>("SELECT id FROM categories WHERE id = ? AND is_active", [
+      input.category_id,
+    ]);
     if (!c[0]) throw invalidField("category_id", "Kategori tidak ditemukan.");
   }
   cekUrlGambar(input.image_url, lama?.image_url ?? null, `merchants/${merchantId}/menu/`, "image_url");
   if (input.gallery !== undefined) {
     // foto tersimpan boleh dipertahankan / diurutkan ulang; yang baru wajib unggahan menu toko ini
     const tersimpan = galeri(lama?.gallery);
-    for (const u of input.gallery) if (!tersimpan.includes(u)) cekUrlGambar(u, null, `merchants/${merchantId}/menu/`, "gallery");
+    for (const u of input.gallery)
+      if (!tersimpan.includes(u)) cekUrlGambar(u, null, `merchants/${merchantId}/menu/`, "gallery");
     sets.gallery = input.gallery.length ? JSON.stringify(input.gallery) : null;
   }
   return sets;
 }
 
 // D8: sinkron berdasarkan nama (tanpa beda huruf besar/kecil) agar option_ids di keranjang tidak rusak; yang hilang dinonaktifkan
-async function sinkronOpsi(conn: Conn, menuId: number, list: { name: string; extra_price: number }[]): Promise<boolean> {
+async function sinkronOpsi(
+  conn: Conn,
+  menuId: number,
+  list: { name: string; extra_price: number }[],
+): Promise<boolean> {
   const [lama] = await conn.query<RowDataPacket[]>(
-    "SELECT id, name, extra_price, is_active FROM menu_options WHERE menu_id = ? ORDER BY is_active, id FOR UPDATE", [menuId],
+    "SELECT id, name, extra_price, is_active FROM menu_options WHERE menu_id = ? ORDER BY is_active, id FOR UPDATE",
+    [menuId],
   );
   const peta = new Map(lama.map((o) => [String(o.name).toLowerCase(), o])); // baris aktif menang (urut is_active)
   const dipakai = new Set<number>();
@@ -151,13 +209,21 @@ async function sinkronOpsi(conn: Conn, menuId: number, list: { name: string; ext
   for (const o of list) {
     const ada = peta.get(o.name.toLowerCase());
     if (!ada) {
-      await conn.query("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, ?, ?)", [menuId, o.name, o.extra_price]);
+      await conn.query("INSERT INTO menu_options (menu_id, name, extra_price) VALUES (?, ?, ?)", [
+        menuId,
+        o.name,
+        o.extra_price,
+      ]);
       berubah = true;
       continue;
     }
     dipakai.add(ada.id);
     if (ada.name !== o.name || ada.extra_price !== o.extra_price || !ada.is_active) {
-      await conn.query("UPDATE menu_options SET name = ?, extra_price = ?, is_active = TRUE WHERE id = ?", [o.name, o.extra_price, ada.id]);
+      await conn.query("UPDATE menu_options SET name = ?, extra_price = ?, is_active = TRUE WHERE id = ?", [
+        o.name,
+        o.extra_price,
+        ada.id,
+      ]);
       berubah = true;
     }
   }
@@ -176,7 +242,9 @@ export async function buatMenu(userId: number, input: z.infer<typeof menuSchema>
       { ...sets, merchant_id: mid, quota_today: input.daily_quota, stock_date: hariIniWib() },
     ]);
     if (input.options.length) {
-      await conn.query("INSERT INTO menu_options (menu_id, name, extra_price) VALUES ?", [input.options.map((o) => [r.insertId, o.name, o.extra_price])]);
+      await conn.query("INSERT INTO menu_options (menu_id, name, extra_price) VALUES ?", [
+        input.options.map((o) => [r.insertId, o.name, o.extra_price]),
+      ]);
     }
     return r.insertId;
   });
@@ -193,14 +261,19 @@ export async function ubahMenu(userId: number, idRaw: unknown, input: MenuInput)
     const lama = await kunciMenu(conn, mid, id);
     // F19: menu yang diturunkan admin tidak bisa diaktifkan penjual
     if (input.is_active === true && lama.moderated_at) {
-      throw new AppError(409, "CONFLICT", `Menu ini diturunkan admin: ${lama.moderation_reason}. Hubungi admin untuk memulihkan.`);
+      throw new AppError(
+        409,
+        "CONFLICT",
+        `Menu ini diturunkan admin: ${lama.moderation_reason}. Hubungi admin untuk memulihkan.`,
+      );
     }
     const sets = await kolomMenu(conn, mid, input, lama);
     const opsiBerubah = input.options ? await sinkronOpsi(conn, id, input.options) : false;
     const cols = Object.keys(sets);
     // kolom yang berubah menggeser updated_at otomatis; perubahan opsi saja digeser eksplisit (D7)
     const set = [...cols.map((c) => `${c} = ?`), ...(opsiBerubah ? ["updated_at = CURRENT_TIMESTAMP"] : [])];
-    if (set.length) await conn.query(`UPDATE menus SET ${set.join(", ")} WHERE id = ?`, [...cols.map((c) => sets[c]), id]);
+    if (set.length)
+      await conn.query(`UPDATE menus SET ${set.join(", ")} WHERE id = ?`, [...cols.map((c) => sets[c]), id]);
   });
   return satu(mid, id);
 }
@@ -230,7 +303,8 @@ export async function ubahKuota(userId: number, idRaw: unknown, input: KuotaInpu
     if (baru > 10_000) throw invalidField("quota_today", "Kuota hari ini maksimal 10.000.");
     if (baru < 0) throw new AppError(409, "CONFLICT", "Kuota tidak bisa kurang dari 0.");
     const dipesan: number = m.sold_today + m.held_today;
-    if (baru < dipesan) throw new AppError(409, "CONFLICT", `Kuota tidak bisa di bawah porsi yang sudah dipesan (${dipesan}).`);
+    if (baru < dipesan)
+      throw new AppError(409, "CONFLICT", `Kuota tidak bisa di bawah porsi yang sudah dipesan (${dipesan}).`);
     await conn.query("UPDATE menus SET quota_today = ?, updated_at = updated_at WHERE id = ?", [baru, id]);
   });
   return satu(mid, id);

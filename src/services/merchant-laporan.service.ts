@@ -17,13 +17,19 @@ export async function ringkasanToko(merchantId: number, r: Rentang) {
     `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(i.line_total), 0) AS revenue, COALESCE(SUM(i.hpp * i.qty), 0) AS hpp_total ${SELESAI}`,
     [merchantId, ...rentangUtc(r)],
   );
-  const [[m]] = await db.query<RowDataPacket[]>("SELECT daily_revenue_target FROM merchants WHERE id = ?", [merchantId]);
+  const [[m]] = await db.query<RowDataPacket[]>("SELECT daily_revenue_target FROM merchants WHERE id = ?", [
+    merchantId,
+  ]);
   const target = Number(m.daily_revenue_target) * jumlahHari(r.from, r.to);
   const revenue = Number(a.revenue);
   const hpp_total = Number(a.hpp_total);
   return {
-    target, revenue, hpp_total, profit: revenue - hpp_total,
-    achievement_pct: target > 0 ? Math.round((revenue * 100) / target) : 0, orders: Number(a.orders),
+    target,
+    revenue,
+    hpp_total,
+    profit: revenue - hpp_total,
+    achievement_pct: target > 0 ? Math.round((revenue * 100) / target) : 0,
+    orders: Number(a.orders),
   };
 }
 
@@ -38,7 +44,12 @@ export async function laporanPerJam(userId: number, date: string) {
      ${SELESAI} GROUP BY hour ORDER BY hour`,
     [await idToko(userId), ...rentangUtc({ from: date, to: date })],
   );
-  return rows.map((x) => ({ hour: Number(x.hour), orders: Number(x.orders), portions: Number(x.portions), revenue: Number(x.revenue) }));
+  return rows.map((x) => ({
+    hour: Number(x.hour),
+    orders: Number(x.orders),
+    portions: Number(x.portions),
+    revenue: Number(x.revenue),
+  }));
 }
 
 // LP-N3: satu baris per menu dalam pesanan.
@@ -51,8 +62,15 @@ export async function laporanTransaksi(userId: number, r: Rentang) {
     [await idToko(userId), ...rentangUtc(r)],
   );
   return rows.map((x) => ({
-    code: x.code, created_at: x.created_at, completed_at: x.completed_at, customer_name: x.customer_name,
-    payment_method: x.payment_method, menu_name: x.menu_name, qty: Number(x.qty), total: Number(x.line_total),
-    hpp_total: Number(x.hpp_total), status: x.status,
+    code: x.code,
+    created_at: x.created_at,
+    completed_at: x.completed_at,
+    customer_name: x.customer_name,
+    payment_method: x.payment_method,
+    menu_name: x.menu_name,
+    qty: Number(x.qty),
+    total: Number(x.line_total),
+    hpp_total: Number(x.hpp_total),
+    status: x.status,
   }));
 }

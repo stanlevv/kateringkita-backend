@@ -112,11 +112,14 @@ test("F01-SEC-1: email beraksen dengan password benar → 401 generik, bukan 200
   expect(res.body.error.message).toBe(GENERIC);
 });
 
-test.each([["\u0001"], ["\u007f"]])("F01-SEC-1: karakter kontrol %j di email dengan password benar → 401", async (ch) => {
-  const res = await login({ identifier: `bu${ch}di@mail.com`, password: "rahasia123", client: "web" });
-  expect(res.status).toBe(401);
-  expect(res.body.error.message).toBe(GENERIC);
-});
+test.each([["\u0001"], ["\u007f"]])(
+  "F01-SEC-1: karakter kontrol %j di email dengan password benar → 401",
+  async (ch) => {
+    const res = await login({ identifier: `bu${ch}di@mail.com`, password: "rahasia123", client: "web" });
+    expect(res.status).toBe(401);
+    expect(res.body.error.message).toBe(GENERIC);
+  },
+);
 
 test("F01-SEC-1: varian aksen memakai bucket limiter yang sama → 429", async () => {
   for (let i = 0; i < 5; i++) {

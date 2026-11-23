@@ -39,9 +39,19 @@ export function samarkan(teks: string, o: { nama?: string[] } = {}): string {
       const digit = m.replace(/\D/g, "").length;
       return digit >= 9 && digit <= 15 ? "[nomor]" : m;
     });
-  const kata = [...new Set((o.nama ?? []).flatMap((n) => n.split(/\s+/)).map((k) => k.trim()).filter((k) => k.length >= 3))];
+  const kata = [
+    ...new Set(
+      (o.nama ?? [])
+        .flatMap((n) => n.split(/\s+/))
+        .map((k) => k.trim())
+        .filter((k) => k.length >= 3),
+    ),
+  ];
   if (kata.length) {
-    hasil = hasil.replace(new RegExp(`(?<![\\p{L}\\p{N}])(${kata.map(escape).join("|")})(?![\\p{L}\\p{N}])`, "giu"), "[nama]");
+    hasil = hasil.replace(
+      new RegExp(`(?<![\\p{L}\\p{N}])(${kata.map(escape).join("|")})(?![\\p{L}\\p{N}])`, "giu"),
+      "[nama]",
+    );
   }
   return hasil;
 }

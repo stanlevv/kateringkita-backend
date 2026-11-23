@@ -10,8 +10,13 @@ import { bekukanJam, pesanDulu, siapCheckout, sisipMenu } from "./helpers/toko";
 // F17: POST /merchant/assistant (Gemini) — konteks hanya data toko sendiri.
 // Rubrik AI: prompt memuat Role, Constraint, Output Schema; keluaran JSON divalidasi & disimpan; injeksi ditolak; data pribadi disamarkan.
 let s: Awaited<ReturnType<typeof siapCheckout>>;
-const tanya = (question: unknown, t = s.tA) => request(app).post("/api/v1/merchant/assistant").set("Authorization", `Bearer ${t}`).send({ question });
-const JSON_OK = JSON.stringify({ jawaban: "Naikkan ke Rp 6.000.", poin: ["HPP Rp 2.500, margin jadi 58%"], asumsi: "" });
+const tanya = (question: unknown, t = s.tA) =>
+  request(app).post("/api/v1/merchant/assistant").set("Authorization", `Bearer ${t}`).send({ question });
+const JSON_OK = JSON.stringify({
+  jawaban: "Naikkan ke Rp 6.000.",
+  poin: ["HPP Rp 2.500, margin jadi 58%"],
+  asumsi: "",
+});
 const hasil = async () => (await db.query<any[]>("SELECT * FROM ai_results ORDER BY id"))[0] as any[];
 
 beforeAll(async () => {
@@ -32,7 +37,9 @@ afterAll(() => {
 
 describe("asisten", () => {
   test("tanpa GEMINI_API_KEY → 503", async () => {
-    expect((await tanya("Berapa harga ideal risol?").expect(503)).body.error.message).toBe("Asisten AI belum diaktifkan.");
+    expect((await tanya("Berapa harga ideal risol?").expect(503)).body.error.message).toBe(
+      "Asisten AI belum diaktifkan.",
+    );
   });
 
   test("konteks: menu + HPP toko sendiri, bukan toko lain; jawaban terstruktur", async () => {
@@ -40,7 +47,10 @@ describe("asisten", () => {
     const spy = vi.spyOn(ai, "tanya").mockResolvedValue(JSON_OK);
     const r = await tanya("  Berapa harga ideal risol?  ").expect(200);
     expect(r.body.data).toEqual({
-      answer: "Naikkan ke Rp 6.000.", points: ["HPP Rp 2.500, margin jadi 58%"], assumption: null, result_id: expect.any(Number),
+      answer: "Naikkan ke Rp 6.000.",
+      points: ["HPP Rp 2.500, margin jadi 58%"],
+      assumption: null,
+      result_id: expect.any(Number),
     });
     const [, pesan] = spy.mock.calls[0];
     expect(pesan).toContain('"nama":"Risol Mayo","harga":5000,"hpp":2500');
@@ -61,23 +71,42 @@ describe("asisten", () => {
   test("keluaran disimpan: fitur asisten, toko, input tersamarkan, output yang lolos validasi", async () => {
     env.GEMINI_API_KEY = "kunci-uji";
     // AI kadang membungkus JSON dengan ```json; teks terlalu panjang & poin berlebih dipotong
-    vi.spyOn(ai, "tanya").mockResolvedValue("```json\n" + JSON.stringify({
-      jawaban: "Naikkan ke Rp 6.000.", poin: ["a", "b", "c", "d", "e", "f", "g"], asumsi: "Harga bahan stabil",
-    }) + "\n```");
+    vi.spyOn(ai, "tanya").mockResolvedValue(
+      "```json\n" +
+        JSON.stringify({
+          jawaban: "Naikkan ke Rp 6.000.",
+          poin: ["a", "b", "c", "d", "e", "f", "g"],
+          asumsi: "Harga bahan stabil",
+        }) +
+        "\n```",
+    );
     const r = await tanya("Pelanggan 081234567890 minta harga risol lebih murah").expect(200);
     expect(r.body.data.points).toEqual(["a", "b", "c", "d", "e"]);
     expect(r.body.data.assumption).toBe("Harga bahan stabil");
     const [h] = await hasil();
-    expect(h).toMatchObject({ id: r.body.data.result_id, fitur: "asisten", merchant_id: s.idA, status: "menunggu", catatan: null, verified_by: null });
+    expect(h).toMatchObject({
+      id: r.body.data.result_id,
+      fitur: "asisten",
+      merchant_id: s.idA,
+      status: "menunggu",
+      catatan: null,
+      verified_by: null,
+    });
     expect(h.input_text).toBe("Pelanggan [nomor] minta harga risol lebih murah");
-    expect(h.output_json).toEqual({ jawaban: "Naikkan ke Rp 6.000.", poin: ["a", "b", "c", "d", "e"], asumsi: "Harga bahan stabil" });
+    expect(h.output_json).toEqual({
+      jawaban: "Naikkan ke Rp 6.000.",
+      poin: ["a", "b", "c", "d", "e"],
+      asumsi: "Harga bahan stabil",
+    });
   });
 
   test("keluaran bukan JSON sesuai skema → 502, tidak disimpan", async () => {
     env.GEMINI_API_KEY = "kunci-uji";
     for (const salah of ["Naikkan ke Rp 6.000.", '{"answer":"tanpa kunci jawaban"}', '{"jawaban":""}']) {
       vi.spyOn(ai, "tanya").mockResolvedValue(salah);
-      expect((await tanya("Berapa harga ideal risol?").expect(502)).body.error.message).toBe("Jawaban AI tidak sesuai format. Coba lagi.");
+      expect((await tanya("Berapa harga ideal risol?").expect(502)).body.error.message).toBe(
+        "Jawaban AI tidak sesuai format. Coba lagi.",
+      );
     }
     expect(await hasil()).toEqual([]);
   });
@@ -104,13 +133,20 @@ describe("asisten", () => {
 
   test("permintaan ke Gemini REST + jawaban diambil dari candidates; upstream gagal → 502", async () => {
     env.GEMINI_API_KEY = "kunci-uji";
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Halo " }, { text: "toko" }] } }] })));
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Halo " }, { text: "toko" }] } }] })),
+      );
     vi.stubGlobal("fetch", fetch);
     expect(await ai.tanya("sistem", "pesan", { fitur: "asisten" })).toBe("Halo toko");
     const [url, init] = fetch.mock.calls[0];
     expect(url).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent`);
     expect(init.headers["x-goog-api-key"]).toBe("kunci-uji");
-    expect(JSON.parse(init.body)).toMatchObject({ systemInstruction: { parts: [{ text: "sistem" }] }, contents: [{ role: "user", parts: [{ text: "pesan" }] }] });
+    expect(JSON.parse(init.body)).toMatchObject({
+      systemInstruction: { parts: [{ text: "sistem" }] },
+      contents: [{ role: "user", parts: [{ text: "pesan" }] }],
+    });
     fetch.mockResolvedValue(new Response("{}", { status: 500 }));
     await expect(ai.tanya("s", "p", { fitur: "asisten" })).rejects.toMatchObject({ status: 502 });
   });

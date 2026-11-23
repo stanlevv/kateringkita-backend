@@ -11,17 +11,44 @@ import { menuRow, pembeliBaru, siapCheckout, tampilkan } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 
 const KUNCI_ORDER = [
-  "can_cancel", "can_complete", "can_review", "cancel_reason", "cancelled_by", "code", "created_at", "discount", "hold_until", "items", "merchant", "note", "payment",
-  "payment_method", "payment_status", "pickup_at", "pickup_point", "seconds_left", "service_fee", "status", "subtotal", "total", "updated_at",
+  "can_cancel",
+  "can_complete",
+  "can_review",
+  "cancel_reason",
+  "cancelled_by",
+  "code",
+  "created_at",
+  "discount",
+  "hold_until",
+  "items",
+  "merchant",
+  "note",
+  "payment",
+  "payment_method",
+  "payment_status",
+  "pickup_at",
+  "pickup_point",
+  "seconds_left",
+  "service_fee",
+  "status",
+  "subtotal",
+  "total",
+  "updated_at",
 ];
 const pesan = (body: unknown, key: string | null = randomUUID(), token = s.tCust) => {
   const r = request(app).post("/api/v1/orders").set("Authorization", `Bearer ${token}`);
   return (key === null ? r : r.set("Idempotency-Key", key)).send(body as object);
 };
-const isi = (o: Record<string, unknown> = {}, item: Record<string, unknown> = {}) =>
-  ({ items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju], ...item }], pickup_point_id: 1, payment_method: "cod", ...o });
-const baca = (code: string, token = s.tCust) => request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${token}`);
-const hitung = async (tabel: string) => Number(((await db.query<any[]>(`SELECT COUNT(*) n FROM ${tabel}`))[0] as any[])[0].n);
+const isi = (o: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
+  items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju], ...item }],
+  pickup_point_id: 1,
+  payment_method: "cod",
+  ...o,
+});
+const baca = (code: string, token = s.tCust) =>
+  request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${token}`);
+const hitung = async (tabel: string) =>
+  Number(((await db.query<any[]>(`SELECT COUNT(*) n FROM ${tabel}`))[0] as any[])[0].n);
 
 beforeEach(async () => {
   s = await siapCheckout();
@@ -36,16 +63,32 @@ test("201: bentuk Order + payment tunai, kode KK-tanggal WIB, harga server, tanp
   expect(Object.keys(d).sort()).toEqual(KUNCI_ORDER);
   expect(d.code).toMatch(new RegExp(`^KK-${hariIniWib().replace(/-/g, "")}-[0-9A-HJKMNP-TV-Z]{4}$`));
   expect(d).toMatchObject({
-    status: "holding", payment_method: "cod", payment_status: "unpaid", payment: { method: "cod", status: "unpaid", amount: 36000 },
+    status: "holding",
+    payment_method: "cod",
+    payment_status: "unpaid",
+    payment: { method: "cod", status: "unpaid", amount: 36000 },
     merchant: { id: s.idA, business_name: "Dapur Siti", wa_number: "081298765432" },
-    pickup_point: { id: 1, name: "Gedung Vokasi UB (Lt. 2)" }, note: "Sambal dipisah", pickup_at: null,
-    subtotal: 36000, discount: 0, service_fee: 0, total: 36000,
-    can_cancel: true, can_complete: false, can_review: false,
+    pickup_point: { id: 1, name: "Gedung Vokasi UB (Lt. 2)" },
+    note: "Sambal dipisah",
+    pickup_at: null,
+    subtotal: 36000,
+    discount: 0,
+    service_fee: 0,
+    total: 36000,
+    can_cancel: true,
+    can_complete: false,
+    can_review: false,
   });
-  expect(d.items).toEqual([{
-    menu_id: s.menu, menu_name: "Nasi Ayam", qty: 2, unit_price: 18000, options: [{ id: s.keju, name: "Keju", extra_price: 3000 }],
-    line_total: 36000,
-  }]);
+  expect(d.items).toEqual([
+    {
+      menu_id: s.menu,
+      menu_name: "Nasi Ayam",
+      qty: 2,
+      unit_price: 18000,
+      options: [{ id: s.keju, name: "Keju", extra_price: 3000 }],
+      line_total: 36000,
+    },
+  ]);
   expect(d.seconds_left).toBeGreaterThanOrEqual(295);
   expect(d.seconds_left).toBeLessThanOrEqual(300);
   expect(JSON.stringify(r.body)).not.toContain('"hpp"');
@@ -61,27 +104,52 @@ test("DB: salinan pesanan, item, log status, held_today naik; nama dari body", a
   const [[o]] = await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [r.body.data.code]);
   const [[budi]] = await db.query<any[]>("SELECT id FROM users WHERE full_name = 'Budi'");
   expect(o).toMatchObject({
-    customer_id: budi.id, customer_name: "Budi", customer_phone: "081234567890", total: 36000, subtotal: 36000, payment_method: "cod",
-    payment_status: "unpaid", status: "holding", merchant_id: s.idA, pickup_point_id: 1,
+    customer_id: budi.id,
+    customer_name: "Budi",
+    customer_phone: "081234567890",
+    total: 36000,
+    subtotal: 36000,
+    payment_method: "cod",
+    payment_status: "unpaid",
+    status: "holding",
+    merchant_id: s.idA,
+    pickup_point_id: 1,
   });
   const [[sd]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') d FROM orders WHERE id = ?", [o.id]);
   expect(sd.d).toBe(hariIniWib());
-  const [items] = await db.query<any[]>("SELECT menu_id, menu_name, unit_price, hpp, qty, options, line_total FROM order_items WHERE order_id = ?", [o.id]);
-  expect(items).toEqual([{
-    menu_id: s.menu, menu_name: "Nasi Ayam", unit_price: 18000, hpp: 9000, qty: 2, line_total: 36000,
-    options: [{ id: s.keju, name: "Keju", extra_price: 3000 }],
-  }]);
-  const [logs] = await db.query<any[]>("SELECT from_status, to_status, actor_user_id FROM order_status_logs WHERE order_id = ?", [o.id]);
+  const [items] = await db.query<any[]>(
+    "SELECT menu_id, menu_name, unit_price, hpp, qty, options, line_total FROM order_items WHERE order_id = ?",
+    [o.id],
+  );
+  expect(items).toEqual([
+    {
+      menu_id: s.menu,
+      menu_name: "Nasi Ayam",
+      unit_price: 18000,
+      hpp: 9000,
+      qty: 2,
+      line_total: 36000,
+      options: [{ id: s.keju, name: "Keju", extra_price: 3000 }],
+    },
+  ]);
+  const [logs] = await db.query<any[]>(
+    "SELECT from_status, to_status, actor_user_id FROM order_status_logs WHERE order_id = ?",
+    [o.id],
+  );
   expect(logs).toEqual([{ from_status: null, to_status: "holding", actor_user_id: budi.id }]);
   expect(await menuRow(s.menu)).toMatchObject({ held_today: 2, sold_today: 0 });
 
   const r2 = await pesan(isi({ customer_name: "Rina", customer_phone: "081111111111" })).expect(201);
-  const [[o2]] = await db.query<any[]>("SELECT customer_name, customer_phone FROM orders WHERE code = ?", [r2.body.data.code]);
+  const [[o2]] = await db.query<any[]>("SELECT customer_name, customer_phone FROM orders WHERE code = ?", [
+    r2.body.data.code,
+  ]);
   expect(o2).toEqual({ customer_name: "Rina", customer_phone: "081111111111" });
 
   // kosong / spasi → nilai akun, sama dengan null
   const r3 = await pesan(isi({ customer_name: "  ", customer_phone: "" })).expect(201);
-  const [[o3]] = await db.query<any[]>("SELECT customer_name, customer_phone FROM orders WHERE code = ?", [r3.body.data.code]);
+  const [[o3]] = await db.query<any[]>("SELECT customer_name, customer_phone FROM orders WHERE code = ?", [
+    r3.body.data.code,
+  ]);
   expect(o3).toEqual({ customer_name: "Budi", customer_phone: "081234567890" });
 });
 
@@ -94,9 +162,14 @@ test("R-05: harga menu berubah setelah checkout → pesanan tetap harga lama", a
 });
 
 test("stok kemarin di-reset lewat segarkanKuota sebelum hold", async () => {
-  await db.query("UPDATE menus SET stock_date = DATE_SUB(stock_date, INTERVAL 1 DAY), held_today = 7 WHERE id = ?", [s.menu]);
+  await db.query("UPDATE menus SET stock_date = DATE_SUB(stock_date, INTERVAL 1 DAY), held_today = 7 WHERE id = ?", [
+    s.menu,
+  ]);
   await pesan(isi()).expect(201);
-  const [[m]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') d, held_today FROM menus WHERE id = ?", [s.menu]);
+  const [[m]] = await db.query<any[]>(
+    "SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') d, held_today FROM menus WHERE id = ?",
+    [s.menu],
+  );
   expect(m).toEqual({ d: hariIniWib(), held_today: 2 });
 });
 
@@ -113,7 +186,11 @@ test("balapan tengah malam: menu sudah pindah ke tanggal stok lain → 409, hold
 test("OUT_OF_STOCK: 409 dengan sisa per baris, tidak ada pesanan, held_today tetap", async () => {
   await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [s.menu]);
   const r = await pesan(isi()).expect(409);
-  expect(r.body.error).toEqual({ code: "OUT_OF_STOCK", message: "Sisa porsi tidak cukup.", fields: { "items.0.qty": ["Sisa 1 porsi."] } });
+  expect(r.body.error).toEqual({
+    code: "OUT_OF_STOCK",
+    message: "Sisa porsi tidak cukup.",
+    fields: { "items.0.qty": ["Sisa 1 porsi."] },
+  });
   expect(await hitung("orders")).toBe(0);
   expect(await hitung("order_idempotency")).toBe(0);
   expect((await menuRow(s.menu)).held_today).toBe(4);
@@ -154,7 +231,10 @@ test("D11: 3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async ()
   for (let i = 0; i < 3; i++) await pesan(isi({}, { qty: 1 })).expect(201);
   const k = randomUUID();
   const r = await pesan(isi({}, { qty: 1 }), k).expect(409);
-  expect(r.body.error).toMatchObject({ code: "CONFLICT", message: "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu." });
+  expect(r.body.error).toMatchObject({
+    code: "CONFLICT",
+    message: "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu.",
+  });
   await db.query("UPDATE orders SET hold_until = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE) ORDER BY id LIMIT 1");
   await pesan(isi({}, { qty: 1 }), k).expect(201);
 });

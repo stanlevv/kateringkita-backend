@@ -11,8 +11,12 @@ import { menuRow, siapCheckout, sisipMenu } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 
 const pesan = async (items: { menu_id: number; qty: number }[]) => {
-  const r = await request(app).post("/api/v1/orders").set("Authorization", `Bearer ${s.tCust}`).set("Idempotency-Key", randomUUID())
-    .send({ items, pickup_point_id: 1, payment_method: "cod" }).expect(201);
+  const r = await request(app)
+    .post("/api/v1/orders")
+    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Idempotency-Key", randomUUID())
+    .send({ items, pickup_point_id: 1, payment_method: "cod" })
+    .expect(201);
   const [[o]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [r.body.data.code]);
   return o.id as number;
 };
@@ -39,8 +43,11 @@ test("hari sama: kembali → held turun; terjual → held turun, sold_today & so
 
 test("lintas tengah malam: penghitung harian hari baru tidak disentuh, sold_total tetap naik", async () => {
   const a = await pesan([{ menu_id: s.menu, qty: 2 }]);
-  const geser = () => db.query(
-    "UPDATE menus SET stock_date = DATE_ADD(stock_date, INTERVAL 1 DAY), held_today = 5, sold_today = 1 WHERE id = ?", [s.menu]);
+  const geser = () =>
+    db.query(
+      "UPDATE menus SET stock_date = DATE_ADD(stock_date, INTERVAL 1 DAY), held_today = 5, sold_today = 1 WHERE id = ?",
+      [s.menu],
+    );
   await geser();
   await lepas(a, "kembali");
   expect(await stok(s.menu)).toEqual({ held: 5, sold: 1, total: 0 });
@@ -71,7 +78,11 @@ test("held_today dijepit ≥ 0", async () => {
 });
 
 test("dua menu (baris menu sama dijumlah) → keduanya diperbarui; stock_date NULL → penghitung harian tetap", async () => {
-  const a = await pesan([{ menu_id: s.menu, qty: 1 }, { menu_id: s.menu2, qty: 3 }, { menu_id: s.menu, qty: 2 }]);
+  const a = await pesan([
+    { menu_id: s.menu, qty: 1 },
+    { menu_id: s.menu2, qty: 3 },
+    { menu_id: s.menu, qty: 2 },
+  ]);
   await lepas(a, "terjual");
   expect(await stok(s.menu)).toEqual({ held: 0, sold: 3, total: 3 });
   expect(await stok(s.menu2)).toEqual({ held: 0, sold: 3, total: 3 });
@@ -86,9 +97,15 @@ test("dua menu (baris menu sama dijumlah) → keduanya diperbarui; stock_date NU
 test("satu pembeli maksimal 20 porsi menunggu", async () => {
   const besar = await sisipMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
   await pesan([{ menu_id: besar, qty: 15 }]);
-  const r = await request(app).post("/api/v1/orders").set("Authorization", `Bearer ${s.tCust}`).set("Idempotency-Key", randomUUID())
-    .send({ items: [{ menu_id: besar, qty: 6 }], pickup_point_id: 1, payment_method: "cod" }).expect(409);
-  expect(r.body.error.message).toBe("Maksimal 20 porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.");
+  const r = await request(app)
+    .post("/api/v1/orders")
+    .set("Authorization", `Bearer ${s.tCust}`)
+    .set("Idempotency-Key", randomUUID())
+    .send({ items: [{ menu_id: besar, qty: 6 }], pickup_point_id: 1, payment_method: "cod" })
+    .expect(409);
+  expect(r.body.error.message).toBe(
+    "Maksimal 20 porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.",
+  );
   expect((await menuRow(besar)).held_today).toBe(15);
   await pesan([{ menu_id: besar, qty: 5 }]); // tepat 20 masih boleh
 });

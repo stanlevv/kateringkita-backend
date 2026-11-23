@@ -25,7 +25,10 @@ test("delta & quota_today mengubah kuota hari ini", async () => {
 test("tidak bisa di bawah porsi yang sudah dipesan → 409", async () => {
   const id = await sisipMenu(idA, { quota_today: 10, sold_today: 3, held_today: 2 });
   const r = await kuota(id, { quota_today: 4 }).expect(409);
-  expect(r.body.error).toEqual({ code: "CONFLICT", message: "Kuota tidak bisa di bawah porsi yang sudah dipesan (5)." });
+  expect(r.body.error).toEqual({
+    code: "CONFLICT",
+    message: "Kuota tidak bisa di bawah porsi yang sudah dipesan (5).",
+  });
   expect((await kuota(id, { quota_today: 5 }).expect(200)).body.data.available).toBe(0);
   await kuota(id, { delta: -1 }).expect(409);
   expect((await menuRow(id)).quota_today).toBe(5);
@@ -37,7 +40,15 @@ test("tidak bisa di bawah porsi yang sudah dipesan → 409", async () => {
 
 test("validasi body kuota", async () => {
   const id = await sisipMenu(idA, { quota_today: 5 });
-  for (const b of [{}, { delta: 0 }, { delta: 1, quota_today: 2 }, { delta: "1" }, { quota_today: -1 }, { delta: 1.5 }, { delta: 10001 }]) {
+  for (const b of [
+    {},
+    { delta: 0 },
+    { delta: 1, quota_today: 2 },
+    { delta: "1" },
+    { quota_today: -1 },
+    { delta: 1.5 },
+    { delta: 10001 },
+  ]) {
     const r = await kuota(id, b).expect(400);
     expect(r.body.error.message).toBe("Data kuota tidak valid.");
   }
@@ -70,15 +81,23 @@ test("D7: ubah kuota tidak menggeser updated_at & tidak memunculkan 'diperbarui 
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   const tAdmin = await login("081300000009");
   const id = await sisipMenu(idA, { updated_at: "2026-01-01 00:00:00" });
-  await request(app).post(`/api/v1/admin/merchants/${idA}/request-fix`).set("Authorization", `Bearer ${tAdmin}`)
-    .send({ reason: "Tambah foto menu" }).expect(200);
+  await request(app)
+    .post(`/api/v1/admin/merchants/${idA}/request-fix`)
+    .set("Authorization", `Bearer ${tAdmin}`)
+    .send({ reason: "Tambah foto menu" })
+    .expect(200);
   // catatan admin setelah semua perubahan penjual; perubahan berikutnya yang menggeser updated_at akan membuatnya true
   await db.query("UPDATE merchants SET updated_at = '2026-01-01 00:00:00' WHERE id = ?", [idA]);
-  await db.query("UPDATE admin_audit_logs SET created_at = '2026-06-01 00:00:00' WHERE action = 'merchant.request_fix'");
+  await db.query(
+    "UPDATE admin_audit_logs SET created_at = '2026-06-01 00:00:00' WHERE action = 'merchant.request_fix'",
+  );
   await kuota(id, { delta: 3 }).expect(200);
   await kuota(id, { quota_today: 7 }).expect(200);
   expect((await menuRow(id)).updated_at.toISOString()).toBe("2026-01-01T00:00:00.000Z");
-  const q = await request(app).get("/api/v1/admin/verification-queue").set("Authorization", `Bearer ${tAdmin}`).expect(200);
+  const q = await request(app)
+    .get("/api/v1/admin/verification-queue")
+    .set("Authorization", `Bearer ${tAdmin}`)
+    .expect(200);
   expect(q.body.data.find((m: any) => m.id === idA).updated_after_note).toBe(false);
 });
 
@@ -89,5 +108,9 @@ test("penjual B, menu terhapus, id aneh → 404", async () => {
   expect((await menuRow(id)).quota_today).toBe(5);
   await request(app).delete(`/api/v1/merchant/menus/${id}`).set("Authorization", `Bearer ${tA}`).expect(204);
   expect((await kuota(id, { delta: 1 }).expect(404)).body.error.message).toBe("Menu tidak ditemukan.");
-  await request(app).patch("/api/v1/merchant/menus/abc/quota").set("Authorization", `Bearer ${tA}`).send({ delta: 1 }).expect(404);
+  await request(app)
+    .patch("/api/v1/merchant/menus/abc/quota")
+    .set("Authorization", `Bearer ${tA}`)
+    .send({ delta: 1 })
+    .expect(404);
 });

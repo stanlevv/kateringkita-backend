@@ -24,7 +24,10 @@ export async function catat(conn: Pick<PoolConnection, "query">, e: AuditEntry):
 }
 
 // Satu transaksi: commit bila fn selesai, rollback bila melempar. `isolasi` hanya berlaku untuk transaksi ini.
-export async function dalamTransaksi<T>(fn: (conn: PoolConnection) => Promise<T>, isolasi?: "READ COMMITTED"): Promise<T> {
+export async function dalamTransaksi<T>(
+  fn: (conn: PoolConnection) => Promise<T>,
+  isolasi?: "READ COMMITTED",
+): Promise<T> {
   const conn = await db.getConnection();
   try {
     if (isolasi) await conn.query(`SET TRANSACTION ISOLATION LEVEL ${isolasi}`);
@@ -43,20 +46,35 @@ export async function dalamTransaksi<T>(fn: (conn: PoolConnection) => Promise<T>
 export type Conn = PoolConnection;
 
 // is_public hanya ada di baris promos (migrasi 014); baris lain tidak diberi kolom itu
-export const withBool = (r: RowDataPacket) => ({ ...r, is_active: Boolean(r.is_active), ...("is_public" in r ? { is_public: Boolean(r.is_public) } : {}) });
+export const withBool = (r: RowDataPacket) => ({
+  ...r,
+  is_active: Boolean(r.is_active),
+  ...("is_public" in r ? { is_public: Boolean(r.is_public) } : {}),
+});
 
 // Kunci satu baris (FOR UPDATE) di dalam transaksi; id tak valid atau tak ada -> 404.
 export async function kunci(conn: Conn, table: string, idRaw: unknown, o: { where?: string; notFound?: string } = {}) {
   const id = Number(idRaw);
-  const [rows] = Number.isInteger(id) && id > 0
-    ? await conn.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE id = ?${o.where ? ` AND ${o.where}` : ""} FOR UPDATE`, [id])
-    : [[]];
+  const [rows] =
+    Number.isInteger(id) && id > 0
+      ? await conn.query<RowDataPacket[]>(
+          `SELECT * FROM ${table} WHERE id = ?${o.where ? ` AND ${o.where}` : ""} FOR UPDATE`,
+          [id],
+        )
+      : [[]];
   if (!rows[0]) throw new AppError(404, "NOT_FOUND", o.notFound ?? "Data tidak ditemukan.");
   return rows[0];
 }
 
 export type LogFilter = {
-  page: number; limit: number; admin?: number; action?: string; targetType?: string; targetId?: string; from?: Date; to?: Date;
+  page: number;
+  limit: number;
+  admin?: number;
+  action?: string;
+  targetType?: string;
+  targetId?: string;
+  from?: Date;
+  to?: Date;
 };
 
 const salah = (field: string, msg: string): never => {
@@ -78,7 +96,13 @@ export function filterLog(q: Record<string, unknown>, page: number, limit: numbe
     if (typeof v !== "string" || v.length > max) return salah(k, `Maksimal ${max} karakter.`);
     return v;
   };
-  const f: LogFilter = { page, limit, action: s("action", 60), targetType: s("target_type", 30), targetId: s("target_id", 40) };
+  const f: LogFilter = {
+    page,
+    limit,
+    action: s("action", 60),
+    targetType: s("target_type", 30),
+    targetId: s("target_id", 40),
+  };
   const admin = s("admin", 10);
   if (admin !== undefined) {
     if (!/^[1-9]\d*$/.test(admin)) salah("admin", "Admin tidak valid.");
@@ -94,7 +118,12 @@ export function filterLog(q: Record<string, unknown>, page: number, limit: numbe
 export async function daftarLog({ page, limit, admin, action, targetType, targetId, from, to }: LogFilter) {
   const where: string[] = [];
   const args: unknown[] = [];
-  const add = (sql: string, v: unknown) => { if (v !== undefined) { where.push(sql); args.push(v); } };
+  const add = (sql: string, v: unknown) => {
+    if (v !== undefined) {
+      where.push(sql);
+      args.push(v);
+    }
+  };
   add("l.admin_user_id = ?", admin);
   add("l.action = ?", action);
   add("l.target_type = ?", targetType);

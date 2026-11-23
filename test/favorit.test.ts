@@ -10,9 +10,24 @@ const api = (method: "get" | "put" | "delete", u: string, t?: string) => {
   const r = request(app)[method](`/api/v1${u}`);
   return t ? r.set("Authorization", `Bearer ${t}`) : r;
 };
-const favIds = async (q = "", t = tCust) => (await api("get", `/me/favorites${q}`, t).expect(200)).body.data.map((m: any) => m.id);
-const jumlahBaris = async () => Number(((await db.query<any[]>("SELECT COUNT(*) AS n FROM favorites"))[0] as any[])[0].n);
-const KUNCI = ["available", "badge", "category", "id", "image_url", "is_favorite", "merchant", "name", "price", "rating_avg", "rating_count", "unit_label"];
+const favIds = async (q = "", t = tCust) =>
+  (await api("get", `/me/favorites${q}`, t).expect(200)).body.data.map((m: any) => m.id);
+const jumlahBaris = async () =>
+  Number(((await db.query<any[]>("SELECT COUNT(*) AS n FROM favorites"))[0] as any[])[0].n);
+const KUNCI = [
+  "available",
+  "badge",
+  "category",
+  "id",
+  "image_url",
+  "is_favorite",
+  "merchant",
+  "name",
+  "price",
+  "rating_avg",
+  "rating_count",
+  "unit_label",
+];
 
 beforeEach(async () => {
   bekukanJam();
@@ -61,11 +76,14 @@ test("D14: is_favorite di katalog; token rusak/logout/penjual tidak 401", async 
 
 test("D14: galat DB saat membaca sesi, akun nonaktif, sesi kedaluwarsa → katalog 200 sebagai tamu", async () => {
   await api("put", `/me/favorites/${a1}`, tCust).expect(204);
-  const favA1 = async () => (await api("get", "/menus", tCust).expect(200)).body.data.find((m: any) => m.id === a1).is_favorite;
+  const favA1 = async () =>
+    (await api("get", "/menus", tCust).expect(200)).body.data.find((m: any) => m.id === a1).is_favorite;
   expect(await favA1()).toBe(true);
   const asli = db.query.bind(db);
-  const spy = vi.spyOn(db, "query").mockImplementation(((sql: any, ...rest: any[]) =>
-    String(sql).includes("auth_sessions") ? Promise.reject(new Error("putus")) : (asli as any)(sql, ...rest)) as any);
+  const spy = vi
+    .spyOn(db, "query")
+    .mockImplementation(((sql: any, ...rest: any[]) =>
+      String(sql).includes("auth_sessions") ? Promise.reject(new Error("putus")) : (asli as any)(sql, ...rest)) as any);
   try {
     expect(await favA1()).toBe(false);
     await api("get", "/me/favorites", tCust).expect(500);
@@ -94,7 +112,11 @@ test("PUT: menu tersembunyi/id tidak valid 404, toko tutup 204", async () => {
 });
 
 test("D13: hanya menu tampil, terbaru dulu, toko tutup & habis tetap ada, paginated", async () => {
-  for (const [id, at] of [[a1, "2026-01-01 00:00:00"], [a2, "2026-01-02 00:00:00"], [b1, "2026-01-03 00:00:00"]]) {
+  for (const [id, at] of [
+    [a1, "2026-01-01 00:00:00"],
+    [a2, "2026-01-02 00:00:00"],
+    [b1, "2026-01-03 00:00:00"],
+  ]) {
     await api("put", `/me/favorites/${id}`, tCust).expect(204);
     await db.query("UPDATE favorites SET created_at = ? WHERE menu_id = ?", [at, id]);
   }
@@ -118,13 +140,19 @@ test("D13: hanya menu tampil, terbaru dulu, toko tutup & habis tetap ada, pagina
 });
 
 test("auth: tanpa token 401, penjual 403, favorit per pembeli", async () => {
-  for (const [m, u] of [["get", "/me/favorites"], ["put", `/me/favorites/${a1}`], ["delete", `/me/favorites/${a1}`]] as const) {
+  for (const [m, u] of [
+    ["get", "/me/favorites"],
+    ["put", `/me/favorites/${a1}`],
+    ["delete", `/me/favorites/${a1}`],
+  ] as const) {
     await api(m, u).expect(401);
     const r = await api(m, u, tA).expect(403);
     expect(r.body.error.message).toBe("Anda tidak memiliki akses.");
   }
-  await request(app).post("/api/v1/auth/customer/register")
-    .send({ full_name: "Citra", email: "citra@mail.com", phone: "081233334444", password: "rahasia123" }).expect(201);
+  await request(app)
+    .post("/api/v1/auth/customer/register")
+    .send({ full_name: "Citra", email: "citra@mail.com", phone: "081233334444", password: "rahasia123" })
+    .expect(201);
   const tCitra = await login("citra@mail.com");
   await api("put", `/me/favorites/${a1}`, tCitra).expect(204);
   expect(await favIds()).toEqual([]);

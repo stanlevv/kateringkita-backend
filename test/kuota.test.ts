@@ -10,7 +10,13 @@ test("hariIniWib: tanggal di zona Asia/Jakarta (UTC+7)", () => {
 
 test("tengah malam: permintaan yang masih membawa tanggal kemarin tidak me-reset mundur", async () => {
   const { idA } = await siapkanToko();
-  const id = await sisipMenu(idA, { stock_date: "2026-11-02", daily_quota: 20, quota_today: 10, sold_today: 5, held_today: 2 });
+  const id = await sisipMenu(idA, {
+    stock_date: "2026-11-02",
+    daily_quota: 20,
+    quota_today: 10,
+    sold_today: 5,
+    held_today: 2,
+  });
   await segarkanKuota(db, idA, "2026-11-01");
   const [[r]] = await db.query<any[]>("SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') AS s FROM menus WHERE id = ?", [id]);
   expect(r.s).toBe("2026-11-02");

@@ -97,26 +97,26 @@ test("sesi kedaluwarsa → 401", async () => {
 });
 
 test("customer ke GET /api/v1/merchant/menus → 403 FORBIDDEN", async () => {
-  const res = await request(app)
-    .get("/api/v1/merchant/menus")
-    .set("Authorization", `Bearer ${customerToken}`);
+  const res = await request(app).get("/api/v1/merchant/menus").set("Authorization", `Bearer ${customerToken}`);
   expect(res.status).toBe(403);
   expect(res.body.error.code).toBe("FORBIDDEN");
 });
 
 test("JWT exp lewat (sesi DB masih hidup) → 401", async () => {
   const { sub, jti } = jwt.decode(customerToken) as { sub: string; jti: string };
-  const expired = jwt.sign({ sub, role: "customer", exp: Math.floor(Date.now() / 1000) - 10 }, process.env.JWT_SECRET!, {
-    jwtid: jti,
-  });
+  const expired = jwt.sign(
+    { sub, role: "customer", exp: Math.floor(Date.now() / 1000) - 10 },
+    process.env.JWT_SECRET!,
+    {
+      jwtid: jti,
+    },
+  );
   expect((await me(expired)).status).toBe(401);
   expect((await me(customerToken)).status).toBe(200);
 });
 
 test("merchant lolos requireRole di route menu penjual", async () => {
-  const res = await request(app)
-    .get("/api/v1/merchant/menus")
-    .set("Authorization", `Bearer ${merchantToken}`);
+  const res = await request(app).get("/api/v1/merchant/menus").set("Authorization", `Bearer ${merchantToken}`);
   expect(res.status).toBe(200);
 });
 
@@ -140,8 +140,11 @@ test("login yang dijeda setelah compare, lalu sandi diganti → login itu 401", 
   }) as never);
   const telat = login("budi@mail.com").then((r) => r);
   await dijeda;
-  await request(app).put("/api/v1/me/password").set("Authorization", `Bearer ${customerToken}`)
-    .send({ current_password: "rahasia123", new_password: "sandibaru123" }).expect(204);
+  await request(app)
+    .put("/api/v1/me/password")
+    .set("Authorization", `Bearer ${customerToken}`)
+    .send({ current_password: "rahasia123", new_password: "sandibaru123" })
+    .expect(204);
   lepas();
   expect((await telat).status).toBe(401);
   vi.restoreAllMocks();

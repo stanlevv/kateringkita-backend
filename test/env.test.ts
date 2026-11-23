@@ -45,7 +45,13 @@ describe("loadEnv", () => {
   });
 
   test("R2_* semua-atau-tidak (D13)", () => {
-    const r2 = { R2_ACCOUNT_ID: "acc", R2_ACCESS_KEY_ID: "id", R2_SECRET_ACCESS_KEY: "rahasia", R2_BUCKET: "b", R2_PUBLIC_URL: "https://foto.test/" };
+    const r2 = {
+      R2_ACCOUNT_ID: "acc",
+      R2_ACCESS_KEY_ID: "id",
+      R2_SECRET_ACCESS_KEY: "rahasia",
+      R2_BUCKET: "b",
+      R2_PUBLIC_URL: "https://foto.test/",
+    };
     // terisi sebagian: tidak menggagalkan release, semua R2 dikosongkan (unggah mati) + peringatan nama variabel
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(loadEnv({ ...valid, R2_BUCKET: "b" }).R2_BUCKET).toBeUndefined();
@@ -59,8 +65,16 @@ describe("loadEnv", () => {
   });
 
   test("SMTP_* semua-atau-tidak (F11)", () => {
-    const smtp = { SMTP_HOST: "smtp.test", SMTP_PORT: "465", SMTP_USER: "u", SMTP_PASS: "p", SMTP_FROM: "KateringKita <no-reply@test>" };
-    expect(() => loadEnv({ ...valid, SMTP_HOST: "smtp.test" })).toThrow("SMTP_* harus diisi semua atau dikosongkan semua");
+    const smtp = {
+      SMTP_HOST: "smtp.test",
+      SMTP_PORT: "465",
+      SMTP_USER: "u",
+      SMTP_PASS: "p",
+      SMTP_FROM: "KateringKita <no-reply@test>",
+    };
+    expect(() => loadEnv({ ...valid, SMTP_HOST: "smtp.test" })).toThrow(
+      "SMTP_* harus diisi semua atau dikosongkan semua",
+    );
     expect(loadEnv({ ...valid, ...smtp }).SMTP_PORT).toBe(465);
     expect(loadEnv({ ...valid, SMTP_HOST: "" }).SMTP_HOST).toBeUndefined();
   });

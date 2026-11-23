@@ -25,23 +25,51 @@ const post = (u: string, t: string, body?: object) => {
   return body === undefined ? r : r.send(body);
 };
 const ISI = { category: "pembayaran", subject: "VA sudah dibayar", message: "Status belum lunas padahal sudah bayar." };
-const buat = async (t: string, o: object = {}) => (await post("/me/tickets", t, { ...ISI, ...o }).expect(201)).body.data.code as string;
+const buat = async (t: string, o: object = {}) =>
+  (await post("/me/tickets", t, { ...ISI, ...o }).expect(201)).body.data.code as string;
 const kode = (r: request.Response) => r.body.data.map((t: any) => t.code);
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const KUNCI_RINGKAS = [
-  "category", "code", "created_at", "customer", "last_message_at", "last_message_preview", "last_sender_role", "order_code", "status", "subject",
+  "category",
+  "code",
+  "created_at",
+  "customer",
+  "last_message_at",
+  "last_message_preview",
+  "last_sender_role",
+  "order_code",
+  "status",
+  "subject",
 ];
 const KUNCI_DETAIL = [
-  "category", "closed_at", "closed_by", "code", "created_at", "customer", "last_message_at", "last_sender_role", "messages", "order",
-  "order_code", "status", "subject",
+  "category",
+  "closed_at",
+  "closed_by",
+  "code",
+  "created_at",
+  "customer",
+  "last_message_at",
+  "last_sender_role",
+  "messages",
+  "order",
+  "order_code",
+  "status",
+  "subject",
 ];
 const DITUTUP = { code: "TICKET_CLOSED", message: "Tiket sudah ditutup. Buat tiket baru bila masih perlu bantuan." };
 
-const baris = async (code: string) => ((await db.query<any[]>("SELECT * FROM support_tickets WHERE code = ?", [code]))[0] as any[])[0];
+const baris = async (code: string) =>
+  ((await db.query<any[]>("SELECT * FROM support_tickets WHERE code = ?", [code]))[0] as any[])[0];
 const notifs = async (userId: number) =>
-  (await db.query<any[]>("SELECT type, title, body, data FROM notifications WHERE user_id = ? ORDER BY id", [userId]))[0] as any[];
+  (
+    await db.query<any[]>("SELECT type, title, body, data FROM notifications WHERE user_id = ? ORDER BY id", [userId])
+  )[0] as any[];
 const audit = async () =>
-  (await db.query<any[]>("SELECT admin_user_id, action, target_type, target_id, before_json, after_json FROM admin_audit_logs ORDER BY id"))[0] as any[];
+  (
+    await db.query<any[]>(
+      "SELECT admin_user_id, action, target_type, target_id, before_json, after_json FROM admin_audit_logs ORDER BY id",
+    )
+  )[0] as any[];
 const atur = (code: string, status: string, ts: string) =>
   db.query("UPDATE support_tickets SET status = ?, last_message_at = ? WHERE code = ?", [status, ts, code]);
 
@@ -54,7 +82,9 @@ beforeAll(async () => {
   await db.query("UPDATE users SET admin_level = 'ops' WHERE phone = '081300000010'");
   await db.query("UPDATE users SET admin_level = 'support' WHERE phone = '081300000011'");
   [tSuper, tOps, tSupport] = [await login("081300000009"), await login("081300000010"), await login("081300000011")];
-  const [u] = await db.query<any[]>("SELECT id, email FROM users WHERE email IN ('budi@mail.com', 'pembeli1@mail.com')");
+  const [u] = await db.query<any[]>(
+    "SELECT id, email FROM users WHERE email IN ('budi@mail.com', 'pembeli1@mail.com')",
+  );
   budi = u.find((r: any) => r.email === "budi@mail.com").id;
   lainId = u.find((r: any) => r.email === "pembeli1@mail.com").id;
   kodeBudi = await pesanDulu(s.tCust, s.menu);
@@ -88,9 +118,15 @@ describe("GET /admin/tickets", () => {
     expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 4, counts: { open: 2, answered: 1, closed: 1 } });
     for (const t of r.body.data) expect(Object.keys(t).sort()).toEqual(KUNCI_RINGKAS);
     expect(r.body.data[0]).toEqual({
-      code: a, category: "pembayaran", subject: "VA belum lunas", status: "open", order_code: kodeBudi,
-      created_at: expect.stringMatching(ISO), last_message_at: "2026-01-04T00:00:00.000Z",
-      last_message_preview: ISI.message, last_sender_role: "customer",
+      code: a,
+      category: "pembayaran",
+      subject: "VA belum lunas",
+      status: "open",
+      order_code: kodeBudi,
+      created_at: expect.stringMatching(ISO),
+      last_message_at: "2026-01-04T00:00:00.000Z",
+      last_message_preview: ISI.message,
+      last_sender_role: "customer",
       customer: { id: budi, full_name: "Budi", phone: "081234567890" },
     });
     expect(r.body.data[3].customer).toEqual({ id: lainId, full_name: "Pembeli 1", phone: "081300000001" });
@@ -111,7 +147,8 @@ describe("GET /admin/tickets", () => {
   });
 
   test("q: kode, judul (tanpa peka huruf), nama & nomor pembeli; % harfiah; bisa digabung status", async () => {
-    const q = async (v: string, extra = "") => kode(await get(`/admin/tickets?q=${encodeURIComponent(v)}${extra}`, tSuper).expect(200));
+    const q = async (v: string, extra = "") =>
+      kode(await get(`/admin/tickets?q=${encodeURIComponent(v)}${extra}`, tSuper).expect(200));
     expect(await q(a)).toEqual([a]);
     expect(await q(c.slice(-5).toLowerCase())).toEqual([c]);
     expect(await q("aplikasi")).toEqual([b]);
@@ -132,7 +169,10 @@ describe("GET /admin/tickets", () => {
     expect(kode(r)).toEqual([b]);
     expect(r.body.meta).toMatchObject({ page: 2, limit: 1, total: 4 });
     expect((await get("/admin/tickets?limit=999", tSuper).expect(200)).body.meta.limit).toBe(50);
-    expect((await get("/admin/tickets?page=x&limit=0", tSuper).expect(200)).body.meta).toMatchObject({ page: 1, limit: 20 });
+    expect((await get("/admin/tickets?page=x&limit=0", tSuper).expect(200)).body.meta).toMatchObject({
+      page: 1,
+      limit: 20,
+    });
   });
 });
 
@@ -145,21 +185,48 @@ describe("GET /admin/tickets/:code", () => {
     expect(Object.keys(dt).sort()).toEqual(KUNCI_DETAIL);
     const [[o]] = await db.query<any[]>("SELECT status, total, created_at FROM orders WHERE code = ?", [kodeBudi]);
     expect(dt).toMatchObject({
-      code: a, category: "pembayaran", subject: ISI.subject, status: "answered", order_code: kodeBudi, last_sender_role: "admin",
-      closed_at: null, closed_by: null,
+      code: a,
+      category: "pembayaran",
+      subject: ISI.subject,
+      status: "answered",
+      order_code: kodeBudi,
+      last_sender_role: "admin",
+      closed_at: null,
+      closed_by: null,
       customer: { id: budi, full_name: "Budi", phone: "081234567890", email: "budi@mail.com" },
-      order: { code: kodeBudi, status: o.status, total: o.total, merchant_name: "Dapur Siti", created_at: o.created_at.toISOString() },
+      order: {
+        code: kodeBudi,
+        status: o.status,
+        total: o.total,
+        merchant_name: "Dapur Siti",
+        created_at: o.created_at.toISOString(),
+      },
     });
     expect(Object.keys(dt.order).sort()).toEqual(["code", "created_at", "merchant_name", "status", "total"]);
     expect(dt.messages).toEqual([
-      { id: expect.any(Number), sender_role: "customer", sender_name: "Budi", body: ISI.message, created_at: expect.stringMatching(ISO) },
-      { id: expect.any(Number), sender_role: "admin", sender_name: "Admin Super", body: "Sudah kami cek.", created_at: expect.stringMatching(ISO) },
+      {
+        id: expect.any(Number),
+        sender_role: "customer",
+        sender_name: "Budi",
+        body: ISI.message,
+        created_at: expect.stringMatching(ISO),
+      },
+      {
+        id: expect.any(Number),
+        sender_role: "admin",
+        sender_name: "Admin Super",
+        body: "Sudah kami cek.",
+        created_at: expect.stringMatching(ISO),
+      },
     ]);
     // GET admin tidak menandai dibaca untuk pembeli
     expect((await baris(a)).customer_last_read_at).toBeNull();
 
     const b = await buat(tLain);
-    expect((await get(`/admin/tickets/${b}`, tSuper).expect(200)).body.data).toMatchObject({ order: null, order_code: null });
+    expect((await get(`/admin/tickets/${b}`, tSuper).expect(200)).body.data).toMatchObject({
+      order: null,
+      order_code: null,
+    });
     const e = await get("/admin/tickets/TK-20000101-ZZZZ", tSuper).expect(404);
     expect(e.body.error).toMatchObject({ code: "NOT_FOUND", message: "Tiket tidak ditemukan." });
   });
@@ -168,23 +235,40 @@ describe("GET /admin/tickets/:code", () => {
 describe("POST /admin/tickets/:code/messages", () => {
   test("201: status answered, notifikasi info ke pembeli, audit; pembeli melihat Tim KateringKita & belum dibaca", async () => {
     const a = await buat(s.tCust, { subject: "VA belum lunas" });
-    const r = await post(`/admin/tickets/${a}/messages`, tSuper, { body: "  Dana sudah masuk, status kami perbarui.  " }).expect(201);
+    const r = await post(`/admin/tickets/${a}/messages`, tSuper, {
+      body: "  Dana sudah masuk, status kami perbarui.  ",
+    }).expect(201);
     const dt = r.body.data;
     expect(Object.keys(dt).sort()).toEqual(KUNCI_DETAIL);
     expect(dt).toMatchObject({ code: a, status: "answered", last_sender_role: "admin" });
-    expect(dt.messages[1]).toMatchObject({ sender_role: "admin", sender_name: "Admin Super", body: "Dana sudah masuk, status kami perbarui." });
+    expect(dt.messages[1]).toMatchObject({
+      sender_role: "admin",
+      sender_name: "Admin Super",
+      body: "Dana sudah masuk, status kami perbarui.",
+    });
     expect(dt.last_message_at).toBe(dt.messages[1].created_at);
 
     expect(await notifs(budi)).toEqual([
-      { type: "info", title: `Balasan tiket ${a}`, body: 'Tim KateringKita membalas "VA belum lunas".', data: { ticket_code: a } },
+      {
+        type: "info",
+        title: `Balasan tiket ${a}`,
+        body: 'Tim KateringKita membalas "VA belum lunas".',
+        data: { ticket_code: a },
+      },
     ]);
     expect(await notifs(lainId)).toEqual([]);
     const n = await get("/me/notifications?type=info", s.tCust).expect(200);
     expect(n.body.data[0]).toMatchObject({ type: "info", title: `Balasan tiket ${a}`, data: { ticket_code: a } });
-    expect(await audit()).toEqual([{
-      admin_user_id: superId, action: "ticket.reply", target_type: "ticket", target_id: a,
-      before_json: { status: "open" }, after_json: { status: "answered", message_id: dt.messages[1].id },
-    }]);
+    expect(await audit()).toEqual([
+      {
+        admin_user_id: superId,
+        action: "ticket.reply",
+        target_type: "ticket",
+        target_id: a,
+        before_json: { status: "open" },
+        after_json: { status: "answered", message_id: dt.messages[1].id },
+      },
+    ]);
 
     const l = await get("/me/tickets", s.tCust).expect(200);
     expect(l.body.meta.unread_count).toBe(1);
@@ -234,21 +318,36 @@ describe("POST /admin/tickets/:code/close", () => {
     expect(r.body.data).toMatchObject({ code: a, status: "closed", closed_by: "admin" });
     expect(r.body.data.closed_at).toMatch(ISO);
     expect((await notifs(budi))[1]).toEqual({
-      type: "info", title: `Tiket ${a} ditutup`, body: 'Tiket "VA belum lunas" ditutup oleh Tim KateringKita.', data: { ticket_code: a },
+      type: "info",
+      title: `Tiket ${a} ditutup`,
+      body: 'Tiket "VA belum lunas" ditutup oleh Tim KateringKita.',
+      data: { ticket_code: a },
     });
     expect((await audit())[1]).toEqual({
-      admin_user_id: superId, action: "ticket.close", target_type: "ticket", target_id: a,
-      before_json: { status: "answered" }, after_json: { status: "closed" },
+      admin_user_id: superId,
+      action: "ticket.close",
+      target_type: "ticket",
+      target_id: a,
+      before_json: { status: "answered" },
+      after_json: { status: "closed" },
     });
 
     await db.query("UPDATE support_tickets SET closed_at = '2026-01-01 00:00:00' WHERE code = ?", [a]);
     const ulang = await post(`/admin/tickets/${a}/close`, tSuper).expect(200);
-    expect(ulang.body.data).toMatchObject({ status: "closed", closed_by: "admin", closed_at: "2026-01-01T00:00:00.000Z" });
+    expect(ulang.body.data).toMatchObject({
+      status: "closed",
+      closed_by: "admin",
+      closed_at: "2026-01-01T00:00:00.000Z",
+    });
     expect(await notifs(budi)).toHaveLength(2);
     expect(await audit()).toHaveLength(2);
 
-    expect((await post(`/admin/tickets/${a}/messages`, tSuper, { body: "Halo" }).expect(409)).body.error).toEqual(DITUTUP);
-    expect((await post(`/me/tickets/${a}/messages`, s.tCust, { body: "Halo" }).expect(409)).body.error).toEqual(DITUTUP);
+    expect((await post(`/admin/tickets/${a}/messages`, tSuper, { body: "Halo" }).expect(409)).body.error).toEqual(
+      DITUTUP,
+    );
+    expect((await post(`/me/tickets/${a}/messages`, s.tCust, { body: "Halo" }).expect(409)).body.error).toEqual(
+      DITUTUP,
+    );
   });
 
   test("tiket yang ditutup pembeli: 200 tanpa perubahan/notifikasi; tidak ada 404", async () => {
@@ -265,7 +364,10 @@ describe("POST /admin/tickets/:code/close", () => {
 
 describe("akses /admin/tickets", () => {
   test("support & ops boleh baca, balas, tutup; support tetap tidak boleh menulis di luar /tickets", async () => {
-    for (const [tok, nama] of [[tSupport, "Admin Support"], [tOps, "Admin Ops"]]) {
+    for (const [tok, nama] of [
+      [tSupport, "Admin Support"],
+      [tOps, "Admin Ops"],
+    ]) {
       const a = await buat(s.tCust);
       expect(kode(await get("/admin/tickets", tok).expect(200))).toContain(a);
       await get(`/admin/tickets/${a}`, tok).expect(200);
@@ -273,7 +375,10 @@ describe("akses /admin/tickets", () => {
       expect(r.body.data.messages[1].sender_name).toBe(nama);
       await post(`/admin/tickets/${a}/close`, tok).expect(200);
     }
-    expect((await audit()).filter((x) => x.admin_user_id === supportId).map((x) => x.action)).toEqual(["ticket.reply", "ticket.close"]);
+    expect((await audit()).filter((x) => x.admin_user_id === supportId).map((x) => x.action)).toEqual([
+      "ticket.reply",
+      "ticket.close",
+    ]);
 
     await get("/admin/merchants", tSupport).expect(200);
     const larang = await post("/admin/broadcasts", tSupport, { audience: "all", title: "x", body: "y" }).expect(403);

@@ -1,7 +1,16 @@
 import { Router } from "express";
 import {
-  daftarFavoritHandler, daftarFavoritTokoHandler, daftarKatalogHandler, detailMenuHandler, hapusFavoritHandler, hapusFavoritTokoHandler,
-  profilTokoHandler, simpanFavoritHandler, simpanFavoritTokoHandler, rekomendasiHandler, ulasanMenuHandler,
+  daftarFavoritHandler,
+  daftarFavoritTokoHandler,
+  daftarKatalogHandler,
+  detailMenuHandler,
+  hapusFavoritHandler,
+  hapusFavoritTokoHandler,
+  profilTokoHandler,
+  simpanFavoritHandler,
+  simpanFavoritTokoHandler,
+  rekomendasiHandler,
+  ulasanMenuHandler,
 } from "../handlers/katalog.handler";
 import { klaimVoucherHandler, voucherPlatformHandler, voucherSayaHandler } from "../handlers/voucher.handler";
 import { bannerPublikHandler } from "../handlers/banner.handler";
@@ -45,4 +54,11 @@ katalog.put("/me/favorite-merchants/:merchantId", requireAuth, requireRole("cust
 katalog.delete("/me/favorite-merchants/:merchantId", requireAuth, requireRole("customer"), hapusFavoritTokoHandler);
 
 // F24 rekomendasi AI pembeli (RAG); kuota bersama asisten AI: 10 per pengguna per 10 menit
-katalog.post("/assistant/recommendations", requireAuth, requireRole("customer"), validate(rekomendasiSchema), asistenLimiter, rekomendasiHandler);
+katalog.post(
+  "/assistant/recommendations",
+  requireAuth,
+  requireRole("customer"),
+  validate(rekomendasiSchema),
+  asistenLimiter,
+  rekomendasiHandler,
+);

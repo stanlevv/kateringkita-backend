@@ -3,8 +3,20 @@ import db from "../config/db";
 import { hariIniWib } from "./merchant-kuota.service";
 import { menuId, menuTidakAda } from "./merchant-menu.service";
 import {
-  DARI, DARI_TOKO, JOIN_FAVORIT, JOIN_FAVORIT_TOKO, KOLOM_KARTU, KOLOM_TOKO, TAMPIL, TOKO_TAMPIL, jam, kartu, profilPublik, titikTemuToko,
-  tokoId, tokoTidakAda,
+  DARI,
+  DARI_TOKO,
+  JOIN_FAVORIT,
+  JOIN_FAVORIT_TOKO,
+  KOLOM_KARTU,
+  KOLOM_TOKO,
+  TAMPIL,
+  TOKO_TAMPIL,
+  jam,
+  kartu,
+  profilPublik,
+  titikTemuToko,
+  tokoId,
+  tokoTidakAda,
 } from "./katalog.service";
 import { Halaman } from "../dto/katalog.dto";
 
@@ -30,7 +42,9 @@ export async function daftarFavorit(userId: number, h: Halaman) {
      ORDER BY f.created_at DESC, x.id DESC LIMIT ? OFFSET ?`,
     [hariIniWib(new Date(ms)), userId, h.limit, (h.page - 1) * h.limit],
   );
-  const [c] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM ${DARI} ${JOIN_FAVORIT} WHERE ${syarat}`, [userId]);
+  const [c] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM ${DARI} ${JOIN_FAVORIT} WHERE ${syarat}`, [
+    userId,
+  ]);
   return { data: rows.map((r) => kartu(r, ms)), meta: { page: h.page, limit: h.limit, total: Number(c[0].total) } };
 }
 
@@ -39,7 +53,9 @@ export async function daftarFavorit(userId: number, h: Halaman) {
 
 export async function simpanFavoritToko(userId: number, idRaw: unknown): Promise<void> {
   const id = tokoId(idRaw);
-  const [ada] = await db.query<RowDataPacket[]>(`SELECT m.id FROM ${DARI_TOKO} WHERE m.id = ? AND ${TOKO_TAMPIL}`, [id]);
+  const [ada] = await db.query<RowDataPacket[]>(`SELECT m.id FROM ${DARI_TOKO} WHERE m.id = ? AND ${TOKO_TAMPIL}`, [
+    id,
+  ]);
   if (!ada[0]) throw tokoTidakAda();
   await db.query("INSERT IGNORE INTO merchant_favorites (user_id, merchant_id) VALUES (?, ?)", [userId, id]);
 }
@@ -57,7 +73,10 @@ export async function daftarFavoritToko(userId: number, h: Halaman) {
      ORDER BY mf.created_at DESC, m.id DESC LIMIT ? OFFSET ?`,
     [userId, h.limit, (h.page - 1) * h.limit],
   );
-  const [c] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM ${DARI_TOKO} ${JOIN_FAVORIT_TOKO} WHERE ${syarat}`, [userId]);
+  const [c] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM ${DARI_TOKO} ${JOIN_FAVORIT_TOKO} WHERE ${syarat}`,
+    [userId],
+  );
   const titik = await titikTemuToko(rows.map((m) => m.id));
   return {
     data: rows.map((m) => profilPublik(m, ms, titik.get(m.id) ?? [])),

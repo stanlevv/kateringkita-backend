@@ -13,7 +13,13 @@ export async function kirimPengumuman(adminId: number, p: PengumumanInput) {
        SELECT id, 'info', ?, ?, JSON_OBJECT('audience', ?), UTC_TIMESTAMP() FROM users WHERE is_active AND role IN (?)`,
       [p.title, p.body, p.audience, peran],
     );
-    await catat(conn, { adminId, action: "notification.broadcast", targetType: "notification", targetId: p.audience, after: { ...p, sent: r.affectedRows } });
+    await catat(conn, {
+      adminId,
+      action: "notification.broadcast",
+      targetType: "notification",
+      targetId: p.audience,
+      after: { ...p, sent: r.affectedRows },
+    });
     return { sent: r.affectedRows };
   });
 }
@@ -25,7 +31,8 @@ export async function kabariPromoToko(p: RowDataPacket) {
   if (!p.is_active || !p.is_public || new Date(p.ends_at).getTime() <= Date.now()) return;
   // AUD-33: toko yang tidak tampil di katalog (suspend, belum verifikasi, pemilik nonaktif) tidak boleh menyiarkan promo
   const [[m]] = await db.query<RowDataPacket[]>(
-    `SELECT m.business_name FROM merchants m JOIN users u ON u.id = m.user_id WHERE m.id = ? AND ${TOKO_TAMPIL}`, [p.merchant_id],
+    `SELECT m.business_name FROM merchants m JOIN users u ON u.id = m.user_id WHERE m.id = ? AND ${TOKO_TAMPIL}`,
+    [p.merchant_id],
   );
   if (!m) return;
   const title = `Promo baru dari ${m.business_name}`.slice(0, 120);

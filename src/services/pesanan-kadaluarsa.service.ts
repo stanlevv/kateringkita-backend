@@ -13,7 +13,8 @@ export async function kadaluarsakan(
   expire: (code: string) => Promise<unknown> = (code) => dalamTransaksi((c) => transisi(c, code, "expire", SISTEM)),
 ): Promise<number> {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT code FROM orders WHERE status = 'holding' AND hold_until <= UTC_TIMESTAMP() ORDER BY hold_until, id LIMIT ?", [batas],
+    "SELECT code FROM orders WHERE status = 'holding' AND hold_until <= UTC_TIMESTAMP() ORDER BY hold_until, id LIMIT ?",
+    [batas],
   );
   let n = 0;
   // berurutan, bukan paralel: pool 10 koneksi dipakai bersama rute
@@ -38,9 +39,11 @@ export function mulaiJobKadaluarsa(ms = 30_000, sapu: () => Promise<unknown> = (
   let t: NodeJS.Timeout | undefined;
   // sapuan berikutnya dijadwalkan setelah yang ini selesai → tidak pernah tumpang tindih (D2)
   const jalan = () => {
-    sapu().catch((e) => console.error("[kadaluarsa] sapuan gagal:", (e as Error).message)).finally(() => {
-      if (!berhenti) t = setTimeout(jalan, ms);
-    });
+    sapu()
+      .catch((e) => console.error("[kadaluarsa] sapuan gagal:", (e as Error).message))
+      .finally(() => {
+        if (!berhenti) t = setTimeout(jalan, ms);
+      });
   };
   jalan();
   return () => {

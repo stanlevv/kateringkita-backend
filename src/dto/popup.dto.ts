@@ -8,7 +8,8 @@ const periode = (d: { starts_at?: string; ends_at?: string }, ctx: z.RefinementC
   if (d.starts_at && d.ends_at && Date.parse(d.ends_at) <= Date.parse(d.starts_at)) {
     ctx.addIssue({ code: "custom", path: ["ends_at"], message: "Waktu selesai harus setelah waktu mulai." });
   }
-  if (d.ends_at && Date.parse(d.ends_at) <= Date.now()) ctx.addIssue({ code: "custom", path: ["ends_at"], message: "Waktu selesai sudah lewat." });
+  if (d.ends_at && Date.parse(d.ends_at) <= Date.now())
+    ctx.addIssue({ code: "custom", path: ["ends_at"], message: "Waktu selesai sudah lewat." });
 };
 const kolom = {
   title: z.string({ error: JUDUL }).trim().min(3, JUDUL).max(80, JUDUL),
@@ -20,10 +21,16 @@ const kolom = {
 };
 
 export const popupSchema = z.object({ ...kolom, is_active: kolom.is_active.default(true) }).superRefine(periode);
-export const ubahPopupSchema = z.object({
-  title: kolom.title.optional(), image_url: kolom.image_url.optional(), promo_id: kolom.promo_id, starts_at: kolom.starts_at.optional(),
-  ends_at: kolom.ends_at.optional(), is_active: kolom.is_active.optional(),
-}).superRefine(periode);
+export const ubahPopupSchema = z
+  .object({
+    title: kolom.title.optional(),
+    image_url: kolom.image_url.optional(),
+    promo_id: kolom.promo_id,
+    starts_at: kolom.starts_at.optional(),
+    ends_at: kolom.ends_at.optional(),
+    is_active: kolom.is_active.optional(),
+  })
+  .superRefine(periode);
 
 export type PopupInput = z.infer<typeof popupSchema>;
 export type UbahPopup = z.infer<typeof ubahPopupSchema>;

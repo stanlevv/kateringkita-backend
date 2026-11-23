@@ -26,8 +26,15 @@ test("DELETE → 204 soft delete; semua rute penjual lalu 404; baris tetap ada",
   const id = await sisipMenu(idA);
   const r = await req("delete", `/menus/${id}`).expect(204);
   expect(r.text).toBe("");
-  for (const [m, u] of [["get", `/menus/${id}`], ["patch", `/menus/${id}`], ["delete", `/menus/${id}`]] as const) { // …/quota terhapus → 404 diuji di merchant-quota.test.ts
-    const x = await req(m, u).send(m === "patch" ? { name: "x" } : undefined).expect(404);
+  for (const [m, u] of [
+    ["get", `/menus/${id}`],
+    ["patch", `/menus/${id}`],
+    ["delete", `/menus/${id}`],
+  ] as const) {
+    // …/quota terhapus → 404 diuji di merchant-quota.test.ts
+    const x = await req(m, u)
+      .send(m === "patch" ? { name: "x" } : undefined)
+      .expect(404);
     expect(x.body.error.message).toBe("Menu tidak ditemukan.");
   }
   expect((await req("get", "/menus").expect(200)).body.data).toEqual([]);
@@ -66,7 +73,8 @@ test("checklist F18: hapus atau nonaktif membuat active_menu & menu_with_photo f
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   const tAdmin = await login("081300000009");
   const cek = async () =>
-    (await request(app).get(`/api/v1/admin/merchants/${idA}`).set("Authorization", `Bearer ${tAdmin}`).expect(200)).body.data.checklist;
+    (await request(app).get(`/api/v1/admin/merchants/${idA}`).set("Authorization", `Bearer ${tAdmin}`).expect(200)).body
+      .data.checklist;
   const id = await sisipMenu(idA, { image_url: "/menu/1.png" });
   expect(await cek()).toMatchObject({ active_menu: true, menu_with_photo: true });
   await req("patch", `/menus/${id}`).send({ is_active: false }).expect(200);

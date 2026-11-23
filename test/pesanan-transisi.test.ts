@@ -17,11 +17,15 @@ const BERUBAH = "Pesanan sudah berubah status.";
 const HABIS = "Batas waktu pesanan sudah habis.";
 const jalan = (code: string, aksi: Aksi, aktor: Aktor, reason?: string | null) =>
   dalamTransaksi((c) => transisi(c, code, aksi, aktor, reason));
-const pesanan = async (code: string) => ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
-const log = async (code: string) => (await db.query<any[]>(
-  "SELECT l.from_status, l.to_status, l.actor_user_id FROM order_status_logs l JOIN orders o ON o.id = l.order_id WHERE o.code = ? ORDER BY l.id",
-  [code],
-))[0] as any[];
+const pesanan = async (code: string) =>
+  ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
+const log = async (code: string) =>
+  (
+    await db.query<any[]>(
+      "SELECT l.from_status, l.to_status, l.actor_user_id FROM order_status_logs l JOIN orders o ON o.id = l.order_id WHERE o.code = ? ORDER BY l.id",
+      [code],
+    )
+  )[0] as any[];
 const stok = async () => {
   const m = await menuRow(s.menu);
   return { held: m.held_today, sold: m.sold_today, total: m.sold_total };
@@ -32,11 +36,13 @@ const siap = async (status: Status = "holding", o: Record<string, unknown> = {})
   await db.query("UPDATE orders SET ? WHERE code = ?", [{ status, ...o }, code]);
   return code;
 };
-const lewat = (code: string) => db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [code]);
+const lewat = (code: string) =>
+  db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [code]);
 
 beforeAll(async () => {
   s = await siapCheckout();
-  const id = async (email: string) => Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
+  const id = async (email: string) =>
+    Number(((await db.query<any[]>("SELECT id FROM users WHERE email = ?", [email]))[0] as any[])[0].id);
   penjual = { jenis: "merchant", userId: await id("siti@mail.com"), merchantId: s.idA };
   penjualB = { jenis: "merchant", userId: await id("andi@mail.com"), merchantId: s.idB };
   pembeli = { jenis: "customer", userId: await id("budi@mail.com") };
@@ -46,8 +52,10 @@ beforeAll(async () => {
 // batas 3 holding per pembeli & stok menu dikembalikan agar tiap test mulai bersih
 afterEach(async () => {
   await db.query("UPDATE orders SET status = 'expired' WHERE status = 'holding'");
-  await db.query("UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, deleted_at = NULL, is_active = TRUE, stock_date = ?",
-    [hariIniWib()]);
+  await db.query(
+    "UPDATE menus SET held_today = 0, sold_today = 0, sold_total = 0, deleted_at = NULL, is_active = TRUE, stock_date = ?",
+    [hariIniWib()],
+  );
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -55,13 +63,19 @@ afterAll(() => {
 
 describe("tabel D1: aksi × status asal", () => {
   const SAH: Partial<Record<Aksi, Partial<Record<Status, Status>>>> = {
-    confirm: { holding: "confirmed" }, cook: { confirmed: "cooking" }, ready: { cooking: "ready" }, complete: { ready: "completed" },
-    reject: { holding: "cancelled", confirmed: "cancelled" }, cancel: { holding: "cancelled", confirmed: "cancelled" },
+    confirm: { holding: "confirmed" },
+    cook: { confirmed: "cooking" },
+    ready: { cooking: "ready" },
+    complete: { ready: "completed" },
+    reject: { holding: "cancelled", confirmed: "cancelled" },
+    cancel: { holding: "cancelled", confirmed: "cancelled" },
     expire: { holding: "expired" },
   };
   const STATUS: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
   const aktor = (a: Aksi) => (a === "cancel" || a === "complete" ? pembeli : a === "expire" ? sistem : penjual);
-  const kasus = (Object.keys(SAH) as Aksi[]).flatMap((aksi) => STATUS.map((dari) => [aksi, dari, SAH[aksi]?.[dari] ?? null] as const));
+  const kasus = (Object.keys(SAH) as Aksi[]).flatMap((aksi) =>
+    STATUS.map((dari) => [aksi, dari, SAH[aksi]?.[dari] ?? null] as const),
+  );
 
   test.each(kasus)("%s dari %s → %s", async (aksi, dari, ke) => {
     const code = await siap(dari);
@@ -84,7 +98,11 @@ describe("tabel D1: aksi × status asal", () => {
 
 describe("aktor & kepemilikan", () => {
   test.each([
-    ["confirm", "customer"], ["cook", "customer"], ["reject", "customer"], ["cancel", "merchant"], ["confirm", "system"],
+    ["confirm", "customer"],
+    ["cook", "customer"],
+    ["reject", "customer"],
+    ["cancel", "merchant"],
+    ["confirm", "system"],
   ] as const)("%s oleh %s → 409", async (aksi, jenis) => {
     const code = await siap(aksi === "cook" ? "confirmed" : "holding");
     const a = jenis === "customer" ? pembeli : jenis === "merchant" ? penjual : sistem;
@@ -93,8 +111,14 @@ describe("aktor & kepemilikan", () => {
 
   test("pembeli B / toko B → 404, status tetap", async () => {
     const code = await siap("holding");
-    await expect(jalan(code, "cancel", pembeliB)).rejects.toMatchObject({ status: 404, message: "Pesanan tidak ditemukan." });
-    await expect(jalan(code, "confirm", penjualB)).rejects.toMatchObject({ status: 404, message: "Pesanan tidak ditemukan." });
+    await expect(jalan(code, "cancel", pembeliB)).rejects.toMatchObject({
+      status: 404,
+      message: "Pesanan tidak ditemukan.",
+    });
+    await expect(jalan(code, "confirm", penjualB)).rejects.toMatchObject({
+      status: 404,
+      message: "Pesanan tidak ditemukan.",
+    });
     await expect(jalan("KK-00000000-XXXX", "confirm", penjual)).rejects.toMatchObject({ status: 404 });
     expect((await pesanan(code)).status).toBe("holding");
   });
@@ -108,7 +132,10 @@ describe("pembayaran (D1, D3)", () => {
 
   test("confirm online belum lunas → 409 belum dibayar; lunas → sukses", async () => {
     const code = await siap("holding", { payment_method: "online" });
-    await expect(jalan(code, "confirm", penjual)).rejects.toMatchObject({ status: 409, message: "Pesanan belum dibayar." });
+    await expect(jalan(code, "confirm", penjual)).rejects.toMatchObject({
+      status: 409,
+      message: "Pesanan belum dibayar.",
+    });
     await db.query("UPDATE orders SET payment_status = 'paid' WHERE code = ?", [code]);
     await expect(jalan(code, "confirm", penjual)).resolves.toMatchObject({ ke: "confirmed" });
   });
@@ -118,8 +145,10 @@ describe("lewat waktu (D2)", () => {
   test.each(["confirm", "cancel", "reject"] as const)("%s → 409 habis, status & held tetap", async (aksi) => {
     const code = await siap("holding");
     await lewat(code);
-    await expect(jalan(code, aksi, aksi === "cancel" ? pembeli : penjual, "Stok habis"))
-      .rejects.toMatchObject({ status: 409, message: HABIS });
+    await expect(jalan(code, aksi, aksi === "cancel" ? pembeli : penjual, "Stok habis")).rejects.toMatchObject({
+      status: 409,
+      message: HABIS,
+    });
     expect((await pesanan(code)).status).toBe("holding");
     expect((await stok()).held).toBe(2);
   });
@@ -129,7 +158,11 @@ describe("lewat waktu (D2)", () => {
     await lewat(code);
     await jalan(code, "expire", sistem);
     const o = await pesanan(code);
-    expect(o).toMatchObject({ status: "expired", cancelled_by: "system", cancel_reason: "Tidak dikonfirmasi tepat waktu." });
+    expect(o).toMatchObject({
+      status: "expired",
+      cancelled_by: "system",
+      cancel_reason: "Tidak dikonfirmasi tepat waktu.",
+    });
     expect(o.cancelled_at).not.toBeNull();
     expect(await stok()).toEqual({ held: 0, sold: 0, total: 0 });
     expect((await log(code)).at(-1)).toEqual({ from_status: "holding", to_status: "expired", actor_user_id: null });
@@ -159,7 +192,11 @@ describe("kolom & log (D7)", () => {
   test("reject dipangkas → cancel_reason, cancelled_by merchant", async () => {
     const code = await siap("holding");
     await jalan(code, "reject", penjual, "  Stok habis  ");
-    expect(await pesanan(code)).toMatchObject({ status: "cancelled", cancel_reason: "Stok habis", cancelled_by: "merchant" });
+    expect(await pesanan(code)).toMatchObject({
+      status: "cancelled",
+      cancel_reason: "Stok habis",
+      cancelled_by: "merchant",
+    });
     expect((await pesanan(code)).cancelled_at).not.toBeNull();
   });
 
@@ -209,7 +246,10 @@ describe("stok (D4), qty 2", () => {
   test("lintas hari: reject dari confirmed → sold_today hari baru tetap, sold_total −2", async () => {
     const code = await siap("holding");
     await jalan(code, "confirm", penjual);
-    await db.query("UPDATE menus SET stock_date = DATE_ADD(stock_date, INTERVAL 1 DAY), held_today = 5, sold_today = 1 WHERE id = ?", [s.menu]);
+    await db.query(
+      "UPDATE menus SET stock_date = DATE_ADD(stock_date, INTERVAL 1 DAY), held_today = 5, sold_today = 1 WHERE id = ?",
+      [s.menu],
+    );
     await jalan(code, "reject", penjual, "Stok habis");
     expect(await stok()).toEqual({ held: 5, sold: 1, total: 0 });
   });

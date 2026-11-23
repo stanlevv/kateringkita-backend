@@ -1,6 +1,14 @@
 import { RequestHandler } from "express";
 import { AuthedRequest } from "../middleware/auth";
-import { changePassword, getMe, login, logout, registerCustomer, registerMerchant, updateMe } from "../services/auth.service";
+import {
+  changePassword,
+  getMe,
+  login,
+  logout,
+  registerCustomer,
+  registerMerchant,
+  updateMe,
+} from "../services/auth.service";
 import { cekOtp, mintaOtp, resetSandi } from "../services/lupa-sandi.service";
 import { buatUnggahan } from "../services/upload.service";
 

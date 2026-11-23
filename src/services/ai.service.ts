@@ -22,7 +22,10 @@ type Token = { prompt: number | null; completion: number | null; total: number |
 export type Konteks = { fitur: "asisten" | "rekomendasi" | "uji"; userId?: number | null };
 
 class GagalPenyedia extends Error {
-  constructor(message: string, readonly istirahatDetik: number) {
+  constructor(
+    message: string,
+    readonly istirahatDetik: number,
+  ) {
     super(message);
   }
 }
@@ -41,7 +44,8 @@ async function kirim(url: string, init: RequestInit): Promise<any> {
       throw new GagalPenyedia("Kuota/batas pemakaian habis (429).", Math.min(s > 0 ? s : 60, 3600));
     }
     if (res.status === 401 || res.status === 403) throw new GagalPenyedia(`API key ditolak (${res.status}).`, 600);
-    if (res.status === 400 || res.status === 404) throw new GagalPenyedia(`Permintaan ditolak (${res.status}). Periksa nama model.`, 600);
+    if (res.status === 400 || res.status === 404)
+      throw new GagalPenyedia(`Permintaan ditolak (${res.status}). Periksa nama model.`, 600);
     throw new GagalPenyedia(`Server penyedia error (${res.status}).`, 30);
   }
   return res.json().catch(() => {
@@ -51,7 +55,8 @@ async function kirim(url: string, init: RequestInit): Promise<any> {
 
 const angka = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
 const token = (masuk: unknown, keluar: unknown, total: unknown): Token => {
-  const a = angka(masuk), b = angka(keluar);
+  const a = angka(masuk),
+    b = angka(keluar);
   return { prompt: a, completion: b, total: angka(total) ?? (a !== null && b !== null ? a + b : null) };
 };
 
@@ -69,15 +74,31 @@ async function panggil(p: Penyedia, system: string, pesan: string): Promise<{ te
         generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
       }),
     });
-    teks = body?.candidates?.[0]?.content?.parts?.map((x: { text?: string }) => x.text ?? "").join("").trim();
-    t = token(body?.usageMetadata?.promptTokenCount, body?.usageMetadata?.candidatesTokenCount, body?.usageMetadata?.totalTokenCount);
+    teks = body?.candidates?.[0]?.content?.parts
+      ?.map((x: { text?: string }) => x.text ?? "")
+      .join("")
+      .trim();
+    t = token(
+      body?.usageMetadata?.promptTokenCount,
+      body?.usageMetadata?.candidatesTokenCount,
+      body?.usageMetadata?.totalTokenCount,
+    );
   } else {
     const body = await kirim(JENIS[p.jenis].url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${p.key}`, ...(p.jenis === "openrouter" ? { "X-Title": "KateringKita" } : {}) },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${p.key}`,
+        ...(p.jenis === "openrouter" ? { "X-Title": "KateringKita" } : {}),
+      },
       body: JSON.stringify({
-        model: p.model, temperature: 0.4, max_tokens: 1024,
-        messages: [{ role: "system", content: system }, { role: "user", content: pesan }],
+        model: p.model,
+        temperature: 0.4,
+        max_tokens: 1024,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: pesan },
+        ],
       }),
     });
     teks = body?.choices?.[0]?.message?.content?.trim();
@@ -89,12 +110,26 @@ async function panggil(p: Penyedia, system: string, pesan: string): Promise<{ te
 
 // F25: satu baris per percobaan; gagal mencatat tidak boleh menggagalkan jawaban AI
 async function catatPakai(p: Penyedia, k: Konteks, ms: number, h: { token?: Token; error?: string }) {
-  await db.query(
-    `INSERT INTO ai_usage (provider_id, provider, label, model, fitur, ok, latency_ms, prompt_tokens, completion_tokens, total_tokens, error, user_id)
+  await db
+    .query(
+      `INSERT INTO ai_usage (provider_id, provider, label, model, fitur, ok, latency_ms, prompt_tokens, completion_tokens, total_tokens, error, user_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [p.id, p.jenis, p.label.slice(0, 60), p.model.slice(0, 120), k.fitur, !h.error, ms,
-      h.token?.prompt ?? null, h.token?.completion ?? null, h.token?.total ?? null, h.error?.slice(0, 255) ?? null, k.userId ?? null],
-  ).catch((e) => console.error("[ai] gagal mencatat pemakaian:", (e as Error).message));
+      [
+        p.id,
+        p.jenis,
+        p.label.slice(0, 60),
+        p.model.slice(0, 120),
+        k.fitur,
+        !h.error,
+        ms,
+        h.token?.prompt ?? null,
+        h.token?.completion ?? null,
+        h.token?.total ?? null,
+        h.error?.slice(0, 255) ?? null,
+        k.userId ?? null,
+      ],
+    )
+    .catch((e) => console.error("[ai] gagal mencatat pemakaian:", (e as Error).message));
 }
 
 // istirahat penyedia env disimpan di memori proses (tidak ada barisnya di DB)
@@ -102,7 +137,11 @@ let istirahatEnv = 0;
 
 async function tandaiOk(p: Penyedia) {
   if (p.id === null) istirahatEnv = 0;
-  else await db.query("UPDATE ai_providers SET last_ok_at = UTC_TIMESTAMP(), cooldown_until = NULL, updated_at = updated_at WHERE id = ?", [p.id]);
+  else
+    await db.query(
+      "UPDATE ai_providers SET last_ok_at = UTC_TIMESTAMP(), cooldown_until = NULL, updated_at = updated_at WHERE id = ?",
+      [p.id],
+    );
 }
 
 async function tandaiGagal(p: Pick<Penyedia, "id" | "label">, pesan: string, detik: number) {
@@ -127,10 +166,21 @@ async function penyedia(): Promise<{ siap: Penyedia[]; ada: boolean }> {
     if (Number(r.istirahat)) continue;
     const key = dekripsi(r.api_key_enc);
     if (key) siap.push({ id: r.id, jenis: r.provider, label: r.label, model: r.model, key });
-    else await tandaiGagal({ id: r.id, label: r.label }, "API key tidak bisa dibuka (JWT_SECRET berubah?). Isi ulang key.", 3600);
+    else
+      await tandaiGagal(
+        { id: r.id, label: r.label },
+        "API key tidak bisa dibuka (JWT_SECRET berubah?). Isi ulang key.",
+        3600,
+      );
   }
   if (env.GEMINI_API_KEY && Date.now() >= istirahatEnv) {
-    siap.push({ id: null, jenis: "gemini", label: "GEMINI_API_KEY (env)", model: env.GEMINI_MODEL, key: env.GEMINI_API_KEY });
+    siap.push({
+      id: null,
+      jenis: "gemini",
+      label: "GEMINI_API_KEY (env)",
+      model: env.GEMINI_MODEL,
+      key: env.GEMINI_API_KEY,
+    });
   }
   return { siap, ada: rows.length > 0 || !!env.GEMINI_API_KEY };
 }
@@ -158,11 +208,21 @@ export const ai = {
 };
 
 // ---------- admin ----------
-const KOLOM = "id, provider, label, model, key_hint, priority, is_active, last_ok_at, last_error, last_error_at, cooldown_until";
+const KOLOM =
+  "id, provider, label, model, key_hint, priority, is_active, last_ok_at, last_error, last_error_at, cooldown_until";
 // API key tidak pernah keluar: hanya 4 karakter terakhir
 const peta = (r: RowDataPacket) => ({
-  id: r.id, provider: r.provider as Jenis, provider_name: JENIS[r.provider as Jenis].nama, label: r.label, model: r.model, key_hint: r.key_hint,
-  priority: r.priority, is_active: Boolean(r.is_active), last_ok_at: r.last_ok_at, last_error: r.last_error, last_error_at: r.last_error_at,
+  id: r.id,
+  provider: r.provider as Jenis,
+  provider_name: JENIS[r.provider as Jenis].nama,
+  label: r.label,
+  model: r.model,
+  key_hint: r.key_hint,
+  priority: r.priority,
+  is_active: Boolean(r.is_active),
+  last_ok_at: r.last_ok_at,
+  last_error: r.last_error,
+  last_error_at: r.last_error_at,
   cooldown_until: r.cooldown_until,
 });
 const tidakAda = () => new AppError(404, "NOT_FOUND", "Penyedia AI tidak ditemukan.");
@@ -172,7 +232,10 @@ const idSah = (raw: unknown) => {
   return id;
 };
 async function ambil(conn: Pick<Conn, "query">, id: number, kunciBaris = false) {
-  const [[r]] = await conn.query<RowDataPacket[]>(`SELECT ${KOLOM} FROM ai_providers WHERE id = ?${kunciBaris ? " FOR UPDATE" : ""}`, [id]);
+  const [[r]] = await conn.query<RowDataPacket[]>(
+    `SELECT ${KOLOM} FROM ai_providers WHERE id = ?${kunciBaris ? " FOR UPDATE" : ""}`,
+    [id],
+  );
   if (!r) throw tidakAda();
   return peta(r);
 }
@@ -182,44 +245,67 @@ export async function daftarAi() {
   return { providers: rows.map(peta), env_gemini: env.GEMINI_API_KEY ? { model: env.GEMINI_MODEL } : null };
 }
 
-export const buatAi = (adminId: number, input: AiInput) => dalamTransaksi(async (conn) => {
-  const [r] = await conn.query<ResultSetHeader>(
-    "INSERT INTO ai_providers (provider, label, model, api_key_enc, key_hint, priority, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [input.provider, input.label, input.model, enkripsi(input.api_key), input.api_key.slice(-4), input.priority, input.is_active],
-  );
-  const baru = await ambil(conn, r.insertId);
-  await catat(conn, { adminId, action: "ai.create", targetType: "ai_provider", targetId: r.insertId, after: baru });
-  return baru;
-});
+export const buatAi = (adminId: number, input: AiInput) =>
+  dalamTransaksi(async (conn) => {
+    const [r] = await conn.query<ResultSetHeader>(
+      "INSERT INTO ai_providers (provider, label, model, api_key_enc, key_hint, priority, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        input.provider,
+        input.label,
+        input.model,
+        enkripsi(input.api_key),
+        input.api_key.slice(-4),
+        input.priority,
+        input.is_active,
+      ],
+    );
+    const baru = await ambil(conn, r.insertId);
+    await catat(conn, { adminId, action: "ai.create", targetType: "ai_provider", targetId: r.insertId, after: baru });
+    return baru;
+  });
 
-export const ubahAi = (adminId: number, idRaw: unknown, input: UbahAiInput) => dalamTransaksi(async (conn) => {
-  const id = idSah(idRaw);
-  const sebelum = await ambil(conn, id, true);
-  const sets: string[] = [];
-  const args: unknown[] = [];
-  for (const k of ["label", "model", "priority", "is_active"] as const) {
-    if (input[k] !== undefined) sets.push(`${k} = ?`), args.push(input[k]);
-  }
-  if (input.api_key !== undefined) sets.push("api_key_enc = ?", "key_hint = ?"), args.push(enkripsi(input.api_key), input.api_key.slice(-4));
-  // key/model baru atau diaktifkan lagi = mulai bersih, tidak menunggu istirahat lama
-  if (input.api_key !== undefined || input.model !== undefined || input.is_active) sets.push("cooldown_until = NULL", "last_error = NULL", "last_error_at = NULL");
-  await conn.query(`UPDATE ai_providers SET ${sets.join(", ")} WHERE id = ?`, [...args, id]);
-  const sesudah = await ambil(conn, id);
-  await catat(conn, { adminId, action: "ai.update", targetType: "ai_provider", targetId: id, before: sebelum, after: sesudah });
-  return sesudah;
-});
+export const ubahAi = (adminId: number, idRaw: unknown, input: UbahAiInput) =>
+  dalamTransaksi(async (conn) => {
+    const id = idSah(idRaw);
+    const sebelum = await ambil(conn, id, true);
+    const sets: string[] = [];
+    const args: unknown[] = [];
+    for (const k of ["label", "model", "priority", "is_active"] as const) {
+      if (input[k] !== undefined) (sets.push(`${k} = ?`), args.push(input[k]));
+    }
+    if (input.api_key !== undefined)
+      (sets.push("api_key_enc = ?", "key_hint = ?"), args.push(enkripsi(input.api_key), input.api_key.slice(-4)));
+    // key/model baru atau diaktifkan lagi = mulai bersih, tidak menunggu istirahat lama
+    if (input.api_key !== undefined || input.model !== undefined || input.is_active)
+      sets.push("cooldown_until = NULL", "last_error = NULL", "last_error_at = NULL");
+    await conn.query(`UPDATE ai_providers SET ${sets.join(", ")} WHERE id = ?`, [...args, id]);
+    const sesudah = await ambil(conn, id);
+    await catat(conn, {
+      adminId,
+      action: "ai.update",
+      targetType: "ai_provider",
+      targetId: id,
+      before: sebelum,
+      after: sesudah,
+    });
+    return sesudah;
+  });
 
-export const hapusAi = (adminId: number, idRaw: unknown) => dalamTransaksi(async (conn) => {
-  const id = idSah(idRaw);
-  const sebelum = await ambil(conn, id, true);
-  await conn.query("DELETE FROM ai_providers WHERE id = ?", [id]);
-  await catat(conn, { adminId, action: "ai.delete", targetType: "ai_provider", targetId: id, before: sebelum });
-});
+export const hapusAi = (adminId: number, idRaw: unknown) =>
+  dalamTransaksi(async (conn) => {
+    const id = idSah(idRaw);
+    const sebelum = await ambil(conn, id, true);
+    await conn.query("DELETE FROM ai_providers WHERE id = ?", [id]);
+    await catat(conn, { adminId, action: "ai.delete", targetType: "ai_provider", targetId: id, before: sebelum });
+  });
 
 /** Uji koneksi satu penyedia dengan pertanyaan kecil; status penyedia ikut diperbarui. */
 export async function ujiAi(idRaw: unknown) {
   const id = idSah(idRaw);
-  const [[r]] = await db.query<RowDataPacket[]>("SELECT id, provider, label, model, api_key_enc FROM ai_providers WHERE id = ?", [id]);
+  const [[r]] = await db.query<RowDataPacket[]>(
+    "SELECT id, provider, label, model, api_key_enc FROM ai_providers WHERE id = ?",
+    [id],
+  );
   if (!r) throw tidakAda();
   const key = dekripsi(r.api_key_enc);
   const p: Penyedia = { id: r.id, jenis: r.provider, label: r.label, model: r.model, key: key ?? "" };
@@ -250,7 +336,9 @@ const RATA = "ROUND(AVG(CASE WHEN ok THEN latency_ms END)) AS rata_ms";
 /** Ringkasan `hari` hari terakhir (WIB, termasuk hari ini): total, per penyedia, per fitur, per hari, 10 gagal terakhir. */
 export async function pemakaianAi(hari: number) {
   const nol = Date.parse(`${hariIniWib()}T00:00:00Z`);
-  const tanggal = Array.from({ length: hari }, (_, i) => new Date(nol - (hari - 1 - i) * 86400e3).toISOString().slice(0, 10));
+  const tanggal = Array.from({ length: hari }, (_, i) =>
+    new Date(nol - (hari - 1 - i) * 86400e3).toISOString().slice(0, 10),
+  );
   const dari = new Date(Date.parse(`${tanggal[0]}T00:00:00+07:00`));
   const q = (sql: string) => db.query<RowDataPacket[]>(sql, [dari]).then(([rows]) => rows);
   const [[r], prov, fitur, harian, gagal] = await Promise.all([
@@ -259,25 +347,46 @@ export async function pemakaianAi(hari: number) {
     q(`SELECT provider_id, provider, label, model, ${HITUNG}, ${RATA}, MAX(created_at) AS terakhir FROM ai_usage WHERE created_at >= ?
        GROUP BY provider_id, provider, label, model ORDER BY token DESC, panggilan DESC`),
     q(`SELECT fitur, ${HITUNG} FROM ai_usage WHERE created_at >= ? GROUP BY fitur ORDER BY token DESC, panggilan DESC`),
-    q(`SELECT DATE_FORMAT(DATE_ADD(created_at, INTERVAL 7 HOUR), '%Y-%m-%d') AS tanggal, ${HITUNG} FROM ai_usage WHERE created_at >= ? GROUP BY tanggal`),
-    q("SELECT created_at, label, model, fitur, error FROM ai_usage WHERE created_at >= ? AND NOT ok ORDER BY created_at DESC, id DESC LIMIT 10"),
+    q(
+      `SELECT DATE_FORMAT(DATE_ADD(created_at, INTERVAL 7 HOUR), '%Y-%m-%d') AS tanggal, ${HITUNG} FROM ai_usage WHERE created_at >= ? GROUP BY tanggal`,
+    ),
+    q(
+      "SELECT created_at, label, model, fitur, error FROM ai_usage WHERE created_at >= ? AND NOT ok ORDER BY created_at DESC, id DESC LIMIT 10",
+    ),
   ]);
   const perTanggal = new Map(harian.map((h) => [String(h.tanggal), h]));
   return {
     hari,
     ringkas: {
-      panggilan: n(r.panggilan), gagal: n(r.gagal), token: n(r.token), token_masuk: n(r.token_masuk), token_keluar: n(r.token_keluar),
+      panggilan: n(r.panggilan),
+      gagal: n(r.gagal),
+      token: n(r.token),
+      token_masuk: n(r.token_masuk),
+      token_keluar: n(r.token_keluar),
       rata_ms: msAtauNull(r.rata_ms),
     },
     per_penyedia: prov.map((p) => ({
-      provider_id: p.provider_id, provider: p.provider as Jenis, label: p.label, model: p.model,
-      panggilan: n(p.panggilan), gagal: n(p.gagal), token: n(p.token), rata_ms: msAtauNull(p.rata_ms), terakhir: p.terakhir,
+      provider_id: p.provider_id,
+      provider: p.provider as Jenis,
+      label: p.label,
+      model: p.model,
+      panggilan: n(p.panggilan),
+      gagal: n(p.gagal),
+      token: n(p.token),
+      rata_ms: msAtauNull(p.rata_ms),
+      terakhir: p.terakhir,
     })),
     per_fitur: fitur.map((f) => ({ fitur: f.fitur, panggilan: n(f.panggilan), gagal: n(f.gagal), token: n(f.token) })),
     per_hari: tanggal.map((t) => {
       const h = perTanggal.get(t);
       return { tanggal: t, panggilan: n(h?.panggilan), gagal: n(h?.gagal), token: n(h?.token) };
     }),
-    gagal_terakhir: gagal.map((g) => ({ created_at: g.created_at, label: g.label, model: g.model, fitur: g.fitur, error: g.error })),
+    gagal_terakhir: gagal.map((g) => ({
+      created_at: g.created_at,
+      label: g.label,
+      model: g.model,
+      fitur: g.fitur,
+      error: g.error,
+    })),
   };
 }

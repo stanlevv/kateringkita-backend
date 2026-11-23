@@ -21,7 +21,10 @@ describe("migrasi 003_checkout", () => {
 
   test("order_idempotency: kunci unik per (pengguna, kunci)", async () => {
     const sisip = (uid: number) =>
-      db.query("INSERT INTO order_idempotency (customer_id, idem_key, request_hash) VALUES (?, 'k1', ?)", [uid, "a".repeat(64)]);
+      db.query("INSERT INTO order_idempotency (customer_id, idem_key, request_hash) VALUES (?, 'k1', ?)", [
+        uid,
+        "a".repeat(64),
+      ]);
     await sisip(budi);
     await expect(sisip(budi)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
     await expect(sisip(siti)).resolves.toBeDefined();

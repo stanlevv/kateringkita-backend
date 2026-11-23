@@ -10,11 +10,18 @@ import { voucherToko } from "./voucher.service";
 // Katalog publik (C-05, C-06). Hanya SELECT: tidak ada UPDATE/FOR UPDATE di modul ini (R-12).
 
 export type MenuCard = {
-  id: number; name: string; image_url: string | null; price: number; unit_label: string;
+  id: number;
+  name: string;
+  image_url: string | null;
+  price: number;
+  unit_label: string;
   category: { id: number; name: string; slug: string };
   merchant: { id: number; slug: string; business_name: string; is_open: boolean };
-  available: number; badge: "sold_out" | "preorder" | "low_stock" | "available";
-  rating_avg: number; rating_count: number; is_favorite: boolean;
+  available: number;
+  badge: "sold_out" | "preorder" | "low_stock" | "available";
+  rating_avg: number;
+  rating_count: number;
+  is_favorite: boolean;
 };
 
 // Satu sumber "sekarang" untuk jam buka & tanggal stok; test menggantinya agar tidak bergantung jam nyata
@@ -47,17 +54,25 @@ export const JOIN_FAVORIT = "LEFT JOIN favorites f ON f.menu_id = x.id AND f.use
 const badge = (available: number, preorder: boolean): MenuCard["badge"] =>
   available <= 0 ? "sold_out" : preorder ? "preorder" : available <= 10 ? "low_stock" : "available";
 
-export const tokoBuka = (r: RowDataPacket, ms: number) => Boolean(r.is_open) && sedangBuka(ms, String(r.open_time), String(r.close_time));
+export const tokoBuka = (r: RowDataPacket, ms: number) =>
+  Boolean(r.is_open) && sedangBuka(ms, String(r.open_time), String(r.close_time));
 
 // Mapper publik D6: daftar kunci eksplisit, tidak pernah `...row` (R-11)
 export function kartu(r: RowDataPacket, ms: number): MenuCard {
   const available = Number(r.available);
   return {
-    id: r.id, name: r.name, image_url: r.image_url, price: r.price, unit_label: r.unit_label,
+    id: r.id,
+    name: r.name,
+    image_url: r.image_url,
+    price: r.price,
+    unit_label: r.unit_label,
     category: { id: r.c_id, name: r.c_name, slug: r.c_slug },
     merchant: { id: r.m_id, slug: r.m_slug, business_name: r.business_name, is_open: tokoBuka(r, ms) },
-    available, badge: badge(available, Boolean(r.is_preorder)),
-    rating_avg: Number(r.rating_avg), rating_count: r.rating_count, is_favorite: Boolean(r.fav),
+    available,
+    badge: badge(available, Boolean(r.is_preorder)),
+    rating_avg: Number(r.rating_avg),
+    rating_count: r.rating_count,
+    is_favorite: Boolean(r.fav),
   };
 }
 
@@ -123,7 +138,8 @@ export async function titikTemuToko(ids: number[]): Promise<Map<number, TitikTem
   return peta;
 }
 
-export const titikTemu = async (merchantId: number): Promise<TitikTemu[]> => (await titikTemuToko([merchantId])).get(merchantId) ?? [];
+export const titikTemu = async (merchantId: number): Promise<TitikTemu[]> =>
+  (await titikTemuToko([merchantId])).get(merchantId) ?? [];
 
 // D7: TAMPIL tanpa BUKA (toko tutup tetap 200, D3); 3 kueri: menu, opsi aktif, titik temu
 export async function detailMenu(idRaw: unknown, userId: number | null) {
@@ -137,15 +153,29 @@ export async function detailMenu(idRaw: unknown, userId: number | null) {
   const r = rows[0];
   if (!r) throw menuTidakAda();
   const [[ops], pickup_points] = await Promise.all([
-    db.query<RowDataPacket[]>("SELECT id, name, extra_price FROM menu_options WHERE menu_id = ? AND is_active ORDER BY id", [id]),
+    db.query<RowDataPacket[]>(
+      "SELECT id, name, extra_price FROM menu_options WHERE menu_id = ? AND is_active ORDER BY id",
+      [id],
+    ),
     titikTemu(r.m_id),
   ]);
   const k = kartu(r, ms);
   return {
-    ...k, description: r.description, gallery: galeri(r.gallery),
+    ...k,
+    description: r.description,
+    gallery: galeri(r.gallery),
     options: ops.map((o) => ({ id: o.id, name: o.name, extra_price: o.extra_price })),
-    min_order_qty: r.min_order_qty, prep_minutes: r.prep_minutes, is_preorder: Boolean(r.is_preorder), preorder_days: r.preorder_days,
-    merchant: { ...k.merchant, logo_url: r.logo_url, open_time: hhmm(r.open_time), close_time: hhmm(r.close_time), pickup_points },
+    min_order_qty: r.min_order_qty,
+    prep_minutes: r.prep_minutes,
+    is_preorder: Boolean(r.is_preorder),
+    preorder_days: r.preorder_days,
+    merchant: {
+      ...k.merchant,
+      logo_url: r.logo_url,
+      open_time: hhmm(r.open_time),
+      close_time: hhmm(r.close_time),
+      pickup_points,
+    },
   };
 }
 
@@ -160,11 +190,16 @@ export async function ulasanMenu(idRaw: unknown, h: Halaman) {
     [id, h.limit, (h.page - 1) * h.limit],
   );
   // F19: ulasan yang disembunyikan admin tidak tampil
-  const [c] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM reviews WHERE menu_id = ? AND hidden_at IS NULL", [id]);
+  const [c] = await db.query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS total FROM reviews WHERE menu_id = ? AND hidden_at IS NULL",
+    [id],
+  );
   return {
     data: rows.map((r) => ({
-      rating: r.rating, comment: r.comment,
-      customer_name: `${Array.from(String(r.full_name).trim()).slice(0, 2).join("")}***`, created_at: r.created_at,
+      rating: r.rating,
+      comment: r.comment,
+      customer_name: `${Array.from(String(r.full_name).trim()).slice(0, 2).join("")}***`,
+      created_at: r.created_at,
     })),
     meta: { page: h.page, limit: h.limit, total: Number(c[0].total) },
   };
@@ -179,7 +214,8 @@ export const tokoId = (idRaw: unknown): number => {
   return Number(s);
 };
 
-export const DARI_TOKO = "merchants m JOIN users u ON u.id = m.user_id JOIN merchant_types t ON t.id = m.merchant_type_id";
+export const DARI_TOKO =
+  "merchants m JOIN users u ON u.id = m.user_id JOIN merchant_types t ON t.id = m.merchant_type_id";
 
 // Kolom profil toko + is_favorite; parameter: userId (LEFT JOIN merchant_favorites; null = tidak pernah cocok, D14)
 export const KOLOM_TOKO = `m.id, m.slug, m.business_name, m.description, m.logo_url, m.cover_url, m.is_open, m.open_time, m.close_time, m.rating_avg,
@@ -190,10 +226,20 @@ export const JOIN_FAVORIT_TOKO = "LEFT JOIN merchant_favorites mf ON mf.merchant
 // Satu bentuk untuk GET /merchants/:slug dan kartu favorit toko.
 export function profilPublik(m: RowDataPacket, ms: number, pickup_points: TitikTemu[]) {
   return {
-    id: m.id, slug: m.slug, business_name: m.business_name, description: m.description, logo_url: m.logo_url, cover_url: m.cover_url,
-    merchant_type: { id: m.t_id, name: m.t_name }, is_open: tokoBuka(m, ms),
-    open_time: hhmm(m.open_time), close_time: hhmm(m.close_time), rating_avg: Number(m.rating_avg), rating_count: m.rating_count,
-    pickup_points, is_favorite: Boolean(m.fav),
+    id: m.id,
+    slug: m.slug,
+    business_name: m.business_name,
+    description: m.description,
+    logo_url: m.logo_url,
+    cover_url: m.cover_url,
+    merchant_type: { id: m.t_id, name: m.t_name },
+    is_open: tokoBuka(m, ms),
+    open_time: hhmm(m.open_time),
+    close_time: hhmm(m.close_time),
+    rating_avg: Number(m.rating_avg),
+    rating_count: m.rating_count,
+    pickup_points,
+    is_favorite: Boolean(m.fav),
   };
 }
 

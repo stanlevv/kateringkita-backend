@@ -35,7 +35,9 @@ describe("seed demo (F18)", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     expect(await jalankan({ DEMO_PASSWORD: "rahasia123" })).toBe(0);
     log.mockRestore();
-    const rows = await query("SELECT verification_status s, verification_note n, suspended_reason r FROM merchants ORDER BY id");
+    const rows = await query(
+      "SELECT verification_status s, verification_note n, suspended_reason r FROM merchants ORDER BY id",
+    );
     expect(rows.map((r) => r.s)).toEqual(["pending", "needs_fix", "verified", "suspended"]);
     expect(rows[1].n).toBeTruthy();
     expect(rows[3].r).toBeTruthy();

@@ -16,17 +16,32 @@ const KEMBALI = "http://localhost:3000/meja/pesanan/x";
 
 const toko = (path: string, t = s.tA) => ({
   get: () => request(app).get(`/api/v1/merchant${path}`).set("Authorization", `Bearer ${t}`),
-  post: (b: unknown) => request(app).post(`/api/v1/merchant${path}`).set("Authorization", `Bearer ${t}`).send(b as object),
-  patch: (b: unknown) => request(app).patch(`/api/v1/merchant${path}`).set("Authorization", `Bearer ${t}`).send(b as object),
+  post: (b: unknown) =>
+    request(app)
+      .post(`/api/v1/merchant${path}`)
+      .set("Authorization", `Bearer ${t}`)
+      .send(b as object),
+  patch: (b: unknown) =>
+    request(app)
+      .patch(`/api/v1/merchant${path}`)
+      .set("Authorization", `Bearer ${t}`)
+      .send(b as object),
 });
-const pesan = (body: Record<string, unknown> = {}, tk = token) => request(app).post(`/api/v1/tables/${tk}/orders`)
-  .send({ items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju] }], customer_name: "Andi", ...body });
-const status = (code: string, tamu: string) => request(app).get(`/api/v1/guest/orders/${code}`).set("X-Guest-Token", tamu);
+const pesan = (body: Record<string, unknown> = {}, tk = token) =>
+  request(app)
+    .post(`/api/v1/tables/${tk}/orders`)
+    .send({ items: [{ menu_id: s.menu, qty: 2, option_ids: [s.keju] }], customer_name: "Andi", ...body });
+const status = (code: string, tamu: string) =>
+  request(app).get(`/api/v1/guest/orders/${code}`).set("X-Guest-Token", tamu);
 const bayar = (code: string, tamu: string, kembali = KEMBALI) =>
   request(app).post(`/api/v1/guest/orders/${code}/pay`).set("X-Guest-Token", tamu).send({ kembali });
 const notif = (o: Record<string, string>) =>
-  kirimNotif({ status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: "trx-meja", ...o }, KEY);
-const pesanan = async (code: string) => ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
+  kirimNotif(
+    { status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: "trx-meja", ...o },
+    KEY,
+  );
+const pesanan = async (code: string) =>
+  ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 
 beforeAll(async () => {
   s = await siapCheckout();
@@ -52,14 +67,19 @@ describe("penjual mengelola meja", () => {
     const r = await toko("/tables").post({ label: "  2 " }).expect(201);
     expect(r.body.data).toMatchObject({ label: "2", is_active: true });
     expect(r.body.data.token).toMatch(/^[0-9a-f]{32}$/);
-    expect((await toko("/tables").post({ label: "2" }).expect(409)).body.error.fields.label).toEqual(["Nama meja sudah dipakai."]);
+    expect((await toko("/tables").post({ label: "2" }).expect(409)).body.error.fields.label).toEqual([
+      "Nama meja sudah dipakai.",
+    ]);
     const lama = r.body.data.token;
     const baru = (await toko(`/tables/${r.body.data.id}`).patch({ ganti_token: true }).expect(200)).body.data.token;
     expect(baru).not.toBe(lama);
     await request(app).get(`/api/v1/tables/${lama}`).expect(404);
     await request(app).get(`/api/v1/tables/${baru}`).expect(200);
     await toko(`/tables/${r.body.data.id}`, s.tB).patch({ is_active: false }).expect(404);
-    expect((await toko("/tables").get().expect(200)).body.data.map((m: { label: string }) => m.label)).toEqual(["1", "2"]);
+    expect((await toko("/tables").get().expect(200)).body.data.map((m: { label: string }) => m.label)).toEqual([
+      "1",
+      "2",
+    ]);
   });
 });
 
@@ -83,7 +103,10 @@ describe("menu meja (tanpa login)", () => {
 describe("pesanan tamu", () => {
   // AUD-45: token bukan 32-hex (mis. 4096 karakter) ditolak sebelum masuk Map limiter
   test("token meja berformat salah → 404 tanpa menambah isi limiter", async () => {
-    const r = await request(app).post(`/api/v1/tables/${"a".repeat(4096)}/orders`).send({}).expect(404);
+    const r = await request(app)
+      .post(`/api/v1/tables/${"a".repeat(4096)}/orders`)
+      .send({})
+      .expect(404);
     expect(r.body.error.message).toBe("Meja tidak ditemukan atau tidak aktif.");
     expect(mejaLimiter.ukuran()).toBe(0);
   });
@@ -91,13 +114,25 @@ describe("pesanan tamu", () => {
   test("holding tanpa akun & titik temu, stok ditahan; status lewat token tamu; penjual melihat meja", async () => {
     const r = await pesan().expect(201);
     const { code, guest_token: tamu } = r.body.data;
-    expect(r.body.data).toMatchObject({ status: "holding", payment_status: "unpaid", table: { label: "1" }, customer_name: "Andi", total: 36000, payment_url: null });
+    expect(r.body.data).toMatchObject({
+      status: "holding",
+      payment_status: "unpaid",
+      table: { label: "1" },
+      customer_name: "Andi",
+      total: 36000,
+      payment_url: null,
+    });
     expect(await pesanan(code)).toMatchObject({ customer_id: null, pickup_point_id: null, payment_method: "online" });
     expect((await menuRow(s.menu)).held_today).toBe(2);
     expect((await status(code, tamu).expect(200)).body.data.code).toBe(code);
     await status(code, "salah").expect(404);
     const m = (await toko(`/orders/${code}`).get().expect(200)).body.data;
-    expect(m).toMatchObject({ table: { label: "1" }, pickup_point: null, customer_name: "Andi", payment_method: "online" });
+    expect(m).toMatchObject({
+      table: { label: "1" },
+      pickup_point: null,
+      customer_name: "Andi",
+      payment_method: "online",
+    });
     expect((await pesan({ items: [{ menu_id: s.menu, qty: 99 }] }).expect(409)).body.error.code).toBe("OUT_OF_STOCK");
   });
 
@@ -110,28 +145,36 @@ describe("pesanan tamu", () => {
     expect((await bayar(code, tamu).expect(200)).body.data.payment_url).toBe(SNAP);
     const [url, init] = fetch.mock.calls[0];
     expect(url).toBe("https://app.sandbox.midtrans.com/snap/v1/transactions");
-    expect(JSON.parse(init.body)).toMatchObject({ transaction_details: { order_id: code, gross_amount: total }, callbacks: { finish: KEMBALI } });
+    expect(JSON.parse(init.body)).toMatchObject({
+      transaction_details: { order_id: code, gross_amount: total },
+      callbacks: { finish: KEMBALI },
+    });
     expect((await bayar(code, tamu).expect(200)).body.data.payment_url).toBe(SNAP);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect((await status(code, tamu)).body.data).toMatchObject({ payment_status: "pending", payment_url: SNAP });
     await notif({ order_id: code, gross_amount: `${total}.00` }).expect(200);
     expect(await pesanan(code)).toMatchObject({ status: "confirmed", payment_status: "paid" });
-    const [p] = (await db.query<any[]>("SELECT p.* FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?", [code]))[0] as any[];
+    const [p] = (
+      await db.query<any[]>("SELECT p.* FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?", [code])
+    )[0] as any[];
     expect(p).toMatchObject({ method: "online", status: "paid", provider_ref: "trx-meja" });
     expect((await status(code, tamu)).body.data).toMatchObject({ status: "confirmed", payment_url: null });
   });
 
   test("maksimal 5 pesanan menunggu per meja", async () => {
     for (let i = 0; i < 5; i++) await pesan({ items: [{ menu_id: s.menu2, qty: 1 }] }).expect(201);
-    expect((await pesan({ items: [{ menu_id: s.menu2, qty: 1 }] }).expect(409)).body.error.message).toMatch(/menunggu pembayaran/);
+    expect((await pesan({ items: [{ menu_id: s.menu2, qty: 1 }] }).expect(409)).body.error.message).toMatch(
+      /menunggu pembayaran/,
+    );
   });
 
   // AUD-32: tamu anonim tanpa bayar dulu tidak boleh menahan seluruh sisa stok lewat satu meja
   test("maksimal 30 porsi menunggu per meja", async () => {
     const besar = await sisipMenu(s.idA, { name: "Nasi Kotak", daily_quota: 100, quota_today: 100 });
     await pesan({ items: [{ menu_id: besar, qty: 25 }] }).expect(201);
-    expect((await pesan({ items: [{ menu_id: besar, qty: 6 }] }).expect(409)).body.error.message)
-      .toBe("Maksimal 30 porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.");
+    expect((await pesan({ items: [{ menu_id: besar, qty: 6 }] }).expect(409)).body.error.message).toBe(
+      "Maksimal 30 porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.",
+    );
     await pesan({ items: [{ menu_id: besar, qty: 5 }] }).expect(201); // tepat 30 masih boleh
   });
 });

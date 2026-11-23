@@ -22,7 +22,9 @@ describe("admin:create (A-05)", () => {
   });
 
   test("nomor sudah dipakai → galat", async () => {
-    await expect(createAdmin({ phone: "081300000001", fullName: "Dua", password: "rahasia123" })).rejects.toThrow("Nomor sudah terdaftar.");
+    await expect(createAdmin({ phone: "081300000001", fullName: "Dua", password: "rahasia123" })).rejects.toThrow(
+      "Nomor sudah terdaftar.",
+    );
   });
 
   test.each(["pendek1", "hurufsajaa", "12345678"])("sandi lemah %s → galat", async (password) => {
@@ -44,7 +46,9 @@ describe("admin:create (A-05)", () => {
 
   test("CLI sukses → kode 0, sandi tidak dicetak", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const code = await jalankan(["--phone", "081300000005", "--name", "Admin Lima"], { ADMIN_INITIAL_PASSWORD: "rahasia123" });
+    const code = await jalankan(["--phone", "081300000005", "--name", "Admin Lima"], {
+      ADMIN_INITIAL_PASSWORD: "rahasia123",
+    });
     expect(code).toBe(0);
     expect(JSON.stringify(log.mock.calls)).not.toContain("rahasia123");
     log.mockRestore();

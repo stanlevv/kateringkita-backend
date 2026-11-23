@@ -1,12 +1,26 @@
 import { Router } from "express";
 import {
-  changePasswordSchema, forgotPasswordSchema, loginSchema, registerCustomerSchema, registerMerchantSchema, resetPasswordSchema, updateMeSchema,
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  registerCustomerSchema,
+  registerMerchantSchema,
+  resetPasswordSchema,
+  updateMeSchema,
   verifyOtpSchema,
 } from "../dto/auth.dto";
 import { uploadSchema } from "../dto/upload.dto";
 import {
-  changePasswordHandler, forgotPasswordHandler, getMeHandler, loginHandler, logoutHandler, registerCustomerHandler, registerMerchantHandler,
-  resetPasswordHandler, updateMeHandler, verifyOtpHandler,
+  changePasswordHandler,
+  forgotPasswordHandler,
+  getMeHandler,
+  loginHandler,
+  logoutHandler,
+  registerCustomerHandler,
+  registerMerchantHandler,
+  resetPasswordHandler,
+  updateMeHandler,
+  verifyOtpHandler,
   uploadAvatarHandler,
 } from "../handlers/auth.handler";
 import { requireAuth } from "../middleware/auth";

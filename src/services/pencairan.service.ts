@@ -8,19 +8,37 @@ import { catat, dalamTransaksi } from "./admin-audit.service";
 // F26 pencairan dana. Pembayaran non-tunai (VA, online) masuk akun Midtrans platform. Bagian penjual per pesanan selesai
 // = subtotal − potongan voucher toko (merchant_discount, migrasi 014), sama dengan merchant_net rekap F20: biaya layanan dan
 // voucher platform milik platform, biaya Midtrans ditanggung platform. Pesanan tunai dibayar langsung ke penjual, jadi tidak ikut.
-const LAYAK = "o.status = 'completed' AND o.payment_method IN ('va', 'online') AND o.payment_status = 'paid' AND o.payout_id IS NULL";
+const LAYAK =
+  "o.status = 'completed' AND o.payment_method IN ('va', 'online') AND o.payment_status = 'paid' AND o.payout_id IS NULL";
 const BAGIAN = "o.subtotal - o.merchant_discount";
 const DARI = "orders o";
 const LIMIT = 20;
 
 const konflik = (pesan: string) => new AppError(409, "CONFLICT", pesan);
-const rekening = (m: RowDataPacket) => (m.payout_bank
-  ? { bank: m.payout_bank, bank_name: namaBank(m.payout_bank), account_number: m.payout_account_number, account_name: m.payout_account_name, updated_at: m.payout_updated_at }
-  : null);
+const rekening = (m: RowDataPacket) =>
+  m.payout_bank
+    ? {
+        bank: m.payout_bank,
+        bank_name: namaBank(m.payout_bank),
+        account_number: m.payout_account_number,
+        account_name: m.payout_account_name,
+        updated_at: m.payout_updated_at,
+      }
+    : null;
 const petaPencairan = (p: RowDataPacket) => ({
-  id: p.id, merchant_id: p.merchant_id, business_name: p.business_name, amount: p.amount, orders_count: p.orders_count,
-  bank: p.bank, bank_name: namaBank(p.bank), account_number: p.account_number, account_name: p.account_name,
-  reference: p.reference, note: p.note, admin_name: p.admin_name ?? null, created_at: p.created_at,
+  id: p.id,
+  merchant_id: p.merchant_id,
+  business_name: p.business_name,
+  amount: p.amount,
+  orders_count: p.orders_count,
+  bank: p.bank,
+  bank_name: namaBank(p.bank),
+  account_number: p.account_number,
+  account_name: p.account_name,
+  reference: p.reference,
+  note: p.note,
+  admin_name: p.admin_name ?? null,
+  created_at: p.created_at,
 });
 const RIWAYAT = `SELECT p.id, p.merchant_id, m.business_name, p.amount, p.orders_count, p.bank, p.account_number, p.account_name,
     p.reference, p.note, u.full_name AS admin_name, p.created_at
@@ -29,14 +47,18 @@ const RIWAYAT = `SELECT p.id, p.merchant_id, m.business_name, p.amount, p.orders
 // ---------- penjual ----------
 export async function pencairanSaya(userId: number) {
   const [[m]] = await db.query<RowDataPacket[]>(
-    "SELECT id, payout_bank, payout_account_number, payout_account_name, payout_updated_at FROM merchants WHERE user_id = ?", [userId],
+    "SELECT id, payout_bank, payout_account_number, payout_account_name, payout_updated_at FROM merchants WHERE user_id = ?",
+    [userId],
   );
   if (!m) throw new AppError(404, "NOT_FOUND", "Toko tidak ditemukan.");
   const [[s]] = await db.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS orders, COALESCE(SUM(${BAGIAN}), 0) AS amount, MIN(o.completed_at) AS since FROM ${DARI} WHERE o.merchant_id = ? AND ${LAYAK}`,
     [m.id],
   );
-  const [riwayat] = await db.query<RowDataPacket[]>(`${RIWAYAT} WHERE p.merchant_id = ? ORDER BY p.created_at DESC, p.id DESC LIMIT ?`, [m.id, LIMIT]);
+  const [riwayat] = await db.query<RowDataPacket[]>(
+    `${RIWAYAT} WHERE p.merchant_id = ? ORDER BY p.created_at DESC, p.id DESC LIMIT ?`,
+    [m.id, LIMIT],
+  );
   return {
     banks: Object.entries(BANK_PENCAIRAN).map(([code, name]) => ({ code, name })),
     account: rekening(m),
@@ -74,9 +96,14 @@ export async function daftarSaldo() {
   return {
     as_of: w.now,
     rows: rows.map((r) => ({
-      merchant_id: r.merchant_id, business_name: r.business_name, account: rekening(r),
+      merchant_id: r.merchant_id,
+      business_name: r.business_name,
+      account: rekening(r),
       // AUD-25: batas voucher platform per akun bisa dipanen penjual lewat akun palsu; porsi besar = periksa dulu sebelum transfer
-      amount: Number(r.amount), orders: Number(r.orders), platform_discount: Number(r.platform_discount), since: r.since,
+      amount: Number(r.amount),
+      orders: Number(r.orders),
+      platform_discount: Number(r.platform_discount),
+      since: r.since,
     })),
   };
 }
@@ -98,21 +125,37 @@ export async function catatPencairan(adminId: number, input: PencairanInput) {
     }
     // hanya baris orders yang dikunci (tanpa join): pencatatan kembar menunggu di sini, lalu melihat payout_id terisi → 409
     const [os] = await conn.query<RowDataPacket[]>(
-      `SELECT o.id FROM orders o WHERE o.merchant_id = ? AND ${LAYAK} AND o.completed_at <= ? FOR UPDATE`, [m.id, new Date(input.until)],
+      `SELECT o.id FROM orders o WHERE o.merchant_id = ? AND ${LAYAK} AND o.completed_at <= ? FOR UPDATE`,
+      [m.id, new Date(input.until)],
     );
     const ids = os.map((o) => o.id as number);
     if (!ids.length) throw konflik("Tidak ada saldo untuk dicairkan.");
-    const [[t]] = await conn.query<RowDataPacket[]>(`SELECT SUM(${BAGIAN}) AS amount FROM ${DARI} WHERE o.id IN (?)`, [ids]);
+    const [[t]] = await conn.query<RowDataPacket[]>(`SELECT SUM(${BAGIAN}) AS amount FROM ${DARI} WHERE o.id IN (?)`, [
+      ids,
+    ]);
     if (Number(t.amount) !== input.amount) throw konflik("Saldo penjual berubah. Muat ulang lalu periksa lagi.");
     const [r] = await conn.query<ResultSetHeader>(
       `INSERT INTO payouts (merchant_id, amount, orders_count, bank, account_number, account_name, reference, note, admin_user_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [m.id, input.amount, ids.length, m.payout_bank, m.payout_account_number, m.payout_account_name, input.reference, input.note, adminId],
+      [
+        m.id,
+        input.amount,
+        ids.length,
+        m.payout_bank,
+        m.payout_account_number,
+        m.payout_account_name,
+        input.reference,
+        input.note,
+        adminId,
+      ],
     );
     // updated_at tidak digeser: pesanan tidak berubah bagi pembeli/penjual (sinkron updated_since)
     await conn.query("UPDATE orders SET payout_id = ?, updated_at = updated_at WHERE id IN (?)", [r.insertId, ids]);
     await catat(conn, {
-      adminId, action: "payout.create", targetType: "merchant", targetId: m.id,
+      adminId,
+      action: "payout.create",
+      targetType: "merchant",
+      targetId: m.id,
       after: { payout_id: r.insertId, amount: input.amount, orders: ids.length, reference: input.reference },
     });
     const [[p]] = await conn.query<RowDataPacket[]>(`${RIWAYAT} WHERE p.id = ?`, [r.insertId]);
@@ -121,7 +164,10 @@ export async function catatPencairan(adminId: number, input: PencairanInput) {
 }
 
 export async function riwayatPencairan(page: number) {
-  const [rows] = await db.query<RowDataPacket[]>(`${RIWAYAT} ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`, [LIMIT, (page - 1) * LIMIT]);
+  const [rows] = await db.query<RowDataPacket[]>(`${RIWAYAT} ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`, [
+    LIMIT,
+    (page - 1) * LIMIT,
+  ]);
   const [[n]] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM payouts");
   return { data: rows.map(petaPencairan), meta: { page, limit: LIMIT, total: Number(n.n) } };
 }
@@ -129,7 +175,8 @@ export async function riwayatPencairan(page: number) {
 // Dana Midtrans yang harus dikembalikan ke pembeli: lunas tetapi pesanan batal/kedaluwarsa (ditolak penjual, atau dibayar
 // setelah batas waktu habis). Pengembalian dilakukan admin di luar aplikasi (dashboard Midtrans / transfer), lalu ditandai di sini.
 // refunded_at IS NULL (AUD-24): pembayaran yang pernah ditandai refund tidak masuk antrian lagi walau statusnya berubah
-const REFUND = "p.provider = 'midtrans' AND p.status = 'paid' AND p.refunded_at IS NULL AND o.status IN ('cancelled', 'expired')";
+const REFUND =
+  "p.provider = 'midtrans' AND p.status = 'paid' AND p.refunded_at IS NULL AND o.status IN ('cancelled', 'expired')";
 
 export async function daftarRefund() {
   const [rows] = await db.query<RowDataPacket[]>(
@@ -139,21 +186,40 @@ export async function daftarRefund() {
      WHERE ${REFUND} ORDER BY p.paid_at, p.id LIMIT 100`,
   );
   return rows.map((r) => ({
-    code: r.code, status: r.status, customer_name: r.customer_name, customer_phone: r.customer_phone, business_name: r.business_name,
-    dine_in: r.table_id !== null, method: r.method, amount: r.amount, paid_at: r.paid_at,
-    cancelled_at: r.cancelled_at, cancelled_by: r.cancelled_by, cancel_reason: r.cancel_reason,
+    code: r.code,
+    status: r.status,
+    customer_name: r.customer_name,
+    customer_phone: r.customer_phone,
+    business_name: r.business_name,
+    dine_in: r.table_id !== null,
+    method: r.method,
+    amount: r.amount,
+    paid_at: r.paid_at,
+    cancelled_at: r.cancelled_at,
+    cancelled_by: r.cancelled_by,
+    cancel_reason: r.cancel_reason,
   }));
 }
 
 export async function tandaiRefund(adminId: number, code: string, input: RefundInput) {
   return dalamTransaksi(async (conn) => {
     const [[x]] = await conn.query<RowDataPacket[]>(
-      `SELECT p.id, p.order_id, p.amount FROM payments p JOIN orders o ON o.id = p.order_id WHERE ${REFUND} AND o.code = ? FOR UPDATE`, [code],
+      `SELECT p.id, p.order_id, p.amount FROM payments p JOIN orders o ON o.id = p.order_id WHERE ${REFUND} AND o.code = ? FOR UPDATE`,
+      [code],
     );
     if (!x) throw new AppError(404, "NOT_FOUND", "Tidak ada dana yang perlu dikembalikan untuk pesanan ini.");
-    await conn.query("UPDATE payments SET status = 'refunded', refunded_at = UTC_TIMESTAMP(), refund_ref = ? WHERE id = ?", [input.reference, x.id]);
+    await conn.query(
+      "UPDATE payments SET status = 'refunded', refunded_at = UTC_TIMESTAMP(), refund_ref = ? WHERE id = ?",
+      [input.reference, x.id],
+    );
     await conn.query("UPDATE orders SET payment_status = 'refunded' WHERE id = ?", [x.order_id]);
-    await catat(conn, { adminId, action: "refund.mark", targetType: "order", targetId: code, after: { amount: x.amount, reference: input.reference } });
+    await catat(conn, {
+      adminId,
+      action: "refund.mark",
+      targetType: "order",
+      targetId: code,
+      after: { amount: x.amount, reference: input.reference },
+    });
     return { code, amount: x.amount as number, reference: input.reference };
   });
 }

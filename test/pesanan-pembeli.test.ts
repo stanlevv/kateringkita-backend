@@ -11,15 +11,37 @@ let tLain: string;
 const k: Record<string, string> = {};
 
 const KUNCI_DAFTAR = [
-  "can_cancel", "can_complete", "can_review", "cancel_reason", "cancelled_by", "code", "created_at", "discount", "hold_until", "items", "merchant", "note",
-  "payment_method", "payment_status", "pickup_at", "pickup_point", "seconds_left", "service_fee", "status", "subtotal", "total", "updated_at",
+  "can_cancel",
+  "can_complete",
+  "can_review",
+  "cancel_reason",
+  "cancelled_by",
+  "code",
+  "created_at",
+  "discount",
+  "hold_until",
+  "items",
+  "merchant",
+  "note",
+  "payment_method",
+  "payment_status",
+  "pickup_at",
+  "pickup_point",
+  "seconds_left",
+  "service_fee",
+  "status",
+  "subtotal",
+  "total",
+  "updated_at",
 ];
-const daftar = (qs = "", token = s.tCust) => request(app).get(`/api/v1/me/orders${qs}`).set("Authorization", `Bearer ${token}`);
+const daftar = (qs = "", token = s.tCust) =>
+  request(app).get(`/api/v1/me/orders${qs}`).set("Authorization", `Bearer ${token}`);
 const aksi = (code: string, a: "cancel" | "complete", body?: unknown, token = s.tCust) => {
   const r = request(app).post(`/api/v1/orders/${code}/${a}`).set("Authorization", `Bearer ${token}`);
   return body === undefined ? r : r.send(body as object);
 };
-const status = async (code: string) => ((await db.query<any[]>("SELECT status FROM orders WHERE code = ?", [code]))[0] as any[])[0].status;
+const status = async (code: string) =>
+  ((await db.query<any[]>("SELECT status FROM orders WHERE code = ?", [code]))[0] as any[])[0].status;
 const atur = (code: string, o: Record<string, unknown>) => db.query("UPDATE orders SET ? WHERE code = ?", [o, code]);
 // pesanan berstatus tertentu, created_at berurutan per detik agar urutan pasti
 let detik = 0;
@@ -50,7 +72,12 @@ describe("GET /me/orders", () => {
     expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 2 });
     expect(Object.keys(r.body.data[0]).sort()).toEqual(KUNCI_DAFTAR);
     expect(JSON.stringify(r.body)).not.toContain('"hpp"');
-    expect(r.body.data[0]).toMatchObject({ status: "cooking", hold_until: null, seconds_left: null, can_cancel: false });
+    expect(r.body.data[0]).toMatchObject({
+      status: "cooking",
+      hold_until: null,
+      seconds_left: null,
+      can_cancel: false,
+    });
     expect(r.body.data[1]).toMatchObject({ status: "holding", can_cancel: true });
     expect(r.body.data[1].seconds_left).toBeGreaterThan(0);
     expect(kodeDari(await daftar().expect(200))).toEqual([k.cooking, k.holding]);
@@ -64,7 +91,9 @@ describe("GET /me/orders", () => {
   });
 
   test("q: kode sebagian huruf kecil, nama menu, % di-escape", async () => {
-    expect(kodeDari(await daftar(`?tab=active&q=${k.holding.slice(-6).toLowerCase()}`).expect(200))).toEqual([k.holding]);
+    expect(kodeDari(await daftar(`?tab=active&q=${k.holding.slice(-6).toLowerCase()}`).expect(200))).toEqual([
+      k.holding,
+    ]);
     expect(kodeDari(await daftar("?tab=active&q=teh").expect(200))).toEqual([k.cooking]);
     expect(kodeDari(await daftar("?tab=active&q=nasi").expect(200))).toEqual([k.holding]);
     expect((await daftar("?tab=active&q=%25").expect(200)).body.data).toEqual([]);
@@ -112,9 +141,18 @@ describe("POST /orders/:code/cancel", () => {
     const code = await pesanDulu(s.tCust, s.menu, 2);
     const held = (await menuRow(s.menu)).held_today;
     const r = await aksi(code, "cancel", { reason: "Salah pesan" }).expect(200);
-    expect(r.body.data).toMatchObject({ code, status: "cancelled", can_cancel: false, hold_until: null, payment: { method: "cod" } });
+    expect(r.body.data).toMatchObject({
+      code,
+      status: "cancelled",
+      can_cancel: false,
+      hold_until: null,
+      payment: { method: "cod" },
+    });
     expect((await menuRow(s.menu)).held_today).toBe(held - 2);
-    expect((await aksi(code, "cancel").expect(409)).body.error).toMatchObject({ code: "CONFLICT", message: "Pesanan sudah berubah status." });
+    expect((await aksi(code, "cancel").expect(409)).body.error).toMatchObject({
+      code: "CONFLICT",
+      message: "Pesanan sudah berubah status.",
+    });
   });
 
   test("dari confirmed tunai → 200 tanpa body; cooking → 409; lewat waktu → 409 habis", async () => {
@@ -125,8 +163,10 @@ describe("POST /orders/:code/cancel", () => {
     await aksi(b, "cancel", {}).expect(409);
     const c = await pesanDulu(s.tCust, s.menu);
     await db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [c]);
-    expect((await request(app).get(`/api/v1/orders/${c}`).set("Authorization", `Bearer ${s.tCust}`).expect(200)).body.data.can_cancel)
-      .toBe(false);
+    expect(
+      (await request(app).get(`/api/v1/orders/${c}`).set("Authorization", `Bearer ${s.tCust}`).expect(200)).body.data
+        .can_cancel,
+    ).toBe(false);
     expect((await aksi(c, "cancel", {}).expect(409)).body.error.message).toBe("Batas waktu pesanan sudah habis.");
     await atur(c, { status: "expired" });
   });
@@ -143,14 +183,21 @@ describe("POST /orders/:code/complete", () => {
   test("dari ready → 200 paid, can_review; dari cooking → 409", async () => {
     const code = await buat("ready");
     const r = await aksi(code, "complete").expect(200);
-    expect(r.body.data).toMatchObject({ status: "completed", payment: { status: "paid" }, can_review: true, can_complete: false });
+    expect(r.body.data).toMatchObject({
+      status: "completed",
+      payment: { status: "paid" },
+      can_review: true,
+      can_complete: false,
+    });
     await aksi(await buat("cooking"), "complete").expect(409);
   });
 });
 
 describe("penjaga", () => {
   test.each([
-    ["get", "/api/v1/me/orders"], ["post", "/api/v1/orders/KK-1/cancel"], ["post", "/api/v1/orders/KK-1/complete"],
+    ["get", "/api/v1/me/orders"],
+    ["post", "/api/v1/orders/KK-1/cancel"],
+    ["post", "/api/v1/orders/KK-1/complete"],
   ] as const)("%s %s: tanpa token 401, penjual 403", async (m, url) => {
     await request(app)[m](url).expect(401);
     await request(app)[m](url).set("Authorization", `Bearer ${s.tA}`).expect(403);
@@ -162,7 +209,10 @@ describe("D5: checkout & batal pembeli yang sama berbarengan", () => {
     const code = await pesanDulu(s.tCust, s.menu);
     const [c, p] = await Promise.all([
       aksi(code, "cancel"),
-      request(app).post("/api/v1/orders").set("Authorization", `Bearer ${s.tCust}`).set("Idempotency-Key", randomUUID())
+      request(app)
+        .post("/api/v1/orders")
+        .set("Authorization", `Bearer ${s.tCust}`)
+        .set("Idempotency-Key", randomUUID())
         .send({ items: [{ menu_id: s.menu, qty: 1 }], pickup_point_id: 1, payment_method: "cod" }),
     ]);
     expect([c.status, p.status]).toEqual([200, 201]);
@@ -185,9 +235,13 @@ describe("review", () => {
 
   test("Order pembeli memuat cancel_reason & cancelled_by penolakan penjual", async () => {
     const code = await pesanDulu(s.tCust, s.menu);
-    await request(app).post(`/api/v1/merchant/orders/${code}/reject`).set("Authorization", `Bearer ${s.tA}`)
-      .send({ reason: "Stok habis" }).expect(200);
-    const d = (await request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${s.tCust}`).expect(200)).body.data;
+    await request(app)
+      .post(`/api/v1/merchant/orders/${code}/reject`)
+      .set("Authorization", `Bearer ${s.tA}`)
+      .send({ reason: "Stok habis" })
+      .expect(200);
+    const d = (await request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${s.tCust}`).expect(200))
+      .body.data;
     expect(d).toMatchObject({ cancel_reason: "Stok habis", cancelled_by: "merchant" });
     const l = (await daftar("?tab=cancelled").expect(200)).body.data.find((o: any) => o.code === code);
     expect(l).toMatchObject({ cancel_reason: "Stok habis", cancelled_by: "merchant" });

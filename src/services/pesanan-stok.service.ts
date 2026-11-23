@@ -6,7 +6,11 @@ import { PoolConnection } from "mysql2/promise";
 // Pemanggil (F07 konfirmasi/batal, F08 kadaluarsa) mengunci baris `orders` dulu, lalu fungsi ini mengunci menu urut id.
 // Penghitung harian hanya disentuh bila tanggal stok menu = tanggal stok pesanan (hold kemarin tidak mengurangi hari ini);
 // orders.stock_date NULL (sebelum F06) tidak pernah cocok. Tanpa filter deleted_at/is_active agar menu terhapus tetap dilepas.
-export async function lepasStok(conn: Pick<PoolConnection, "query">, orderId: number, jadi: "terjual" | "kembali" | "batal"): Promise<void> {
+export async function lepasStok(
+  conn: Pick<PoolConnection, "query">,
+  orderId: number,
+  jadi: "terjual" | "kembali" | "batal",
+): Promise<void> {
   const [rows] = await conn.query<RowDataPacket[]>(
     `SELECT DATE_FORMAT(o.stock_date, '%Y-%m-%d') AS stock_date, i.menu_id, SUM(i.qty) AS qty FROM orders o JOIN order_items i ON i.order_id = o.id
      WHERE o.id = ? GROUP BY o.stock_date, i.menu_id ORDER BY i.menu_id`,

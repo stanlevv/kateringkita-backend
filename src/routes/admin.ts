@@ -1,26 +1,81 @@
 import { RequestHandler, Router } from "express";
-import { buatAdminSchema, hapusFotoSchema, kontakCsSchema, levelAdminSchema, pemeliharaanSchema, pengumumanSchema, reasonBody } from "../dto/admin.dto";
 import {
-  aksiPenjualHandler, ambilBiayaHandler, antrianVerifikasiHandler, buatMasterHandler, buatPromoHandler, daftarLogHandler,
-  daftarMasterHandler, daftarPenjualHandler, daftarPromoHandler, detailPenjualHandler, idParam, ringkasanHandler,
-  setAktifMasterHandler, setAktifPromoHandler, ubahBiayaHandler, ubahMasterHandler, ubahPromoHandler,
-  daftarMenuAdminHandler, daftarUlasanAdminHandler, hapusFotoMenuHandler, kirimPengumumanHandler, moderasiMenuHandler, moderasiUlasanHandler, rekapKeuanganHandler,
-  ubahKontakCsHandler, ubahPemeliharaanHandler, daftarAdminHandler, buatAdminHandler, ubahLevelAdminHandler, setAktifAdminHandler, resetSandiAdminHandler,
+  buatAdminSchema,
+  hapusFotoSchema,
+  kontakCsSchema,
+  levelAdminSchema,
+  pemeliharaanSchema,
+  pengumumanSchema,
+  reasonBody,
+} from "../dto/admin.dto";
+import {
+  aksiPenjualHandler,
+  ambilBiayaHandler,
+  antrianVerifikasiHandler,
+  buatMasterHandler,
+  buatPromoHandler,
+  daftarLogHandler,
+  daftarMasterHandler,
+  daftarPenjualHandler,
+  daftarPromoHandler,
+  detailPenjualHandler,
+  idParam,
+  ringkasanHandler,
+  setAktifMasterHandler,
+  setAktifPromoHandler,
+  ubahBiayaHandler,
+  ubahMasterHandler,
+  ubahPromoHandler,
+  daftarMenuAdminHandler,
+  daftarUlasanAdminHandler,
+  hapusFotoMenuHandler,
+  kirimPengumumanHandler,
+  moderasiMenuHandler,
+  moderasiUlasanHandler,
+  rekapKeuanganHandler,
+  ubahKontakCsHandler,
+  ubahPemeliharaanHandler,
+  daftarAdminHandler,
+  buatAdminHandler,
+  ubahLevelAdminHandler,
+  setAktifAdminHandler,
+  resetSandiAdminHandler,
 } from "../handlers/admin.handler";
 import { aiSchema, ubahAiSchema } from "../dto/ai.dto";
 import { verifikasiAiSchema } from "../dto/hasil-ai.dto";
 import { adminUploadSchema } from "../dto/upload.dto";
-import { buatBannerAdminHandler, daftarBannerAdminHandler, tinjauBannerHandler, uploadAdminHandler } from "../handlers/banner.handler";
+import {
+  buatBannerAdminHandler,
+  daftarBannerAdminHandler,
+  tinjauBannerHandler,
+  uploadAdminHandler,
+} from "../handlers/banner.handler";
 import { buatPopupHandler, daftarPopupHandler, ubahPopupHandler } from "../handlers/popup.handler";
 import { uploadLimiter } from "../middleware/rateLimiter";
 import { daftarHasilAiHandler, verifikasiHasilAiHandler } from "../handlers/hasil-ai.handler";
-import { buatAiHandler, daftarAiHandler, hapusAiHandler, pemakaianAiHandler, ubahAiHandler, ujiAiHandler } from "../handlers/ai.handler";
+import {
+  buatAiHandler,
+  daftarAiHandler,
+  hapusAiHandler,
+  pemakaianAiHandler,
+  ubahAiHandler,
+  ujiAiHandler,
+} from "../handlers/ai.handler";
 import { daftarLogServerHandler, statusServerHandler } from "../handlers/log-server.handler";
 import { pencairanSchema, refundSchema } from "../dto/pencairan.dto";
 import {
-  catatPencairanHandler, daftarRefundHandler, daftarSaldoHandler, riwayatPencairanHandler, tandaiRefundHandler,
+  catatPencairanHandler,
+  daftarRefundHandler,
+  daftarSaldoHandler,
+  riwayatPencairanHandler,
+  tandaiRefundHandler,
 } from "../handlers/pencairan.handler";
-import { balasTiketAdminHandler, daftarTiketAdminHandler, detailTiketAdminHandler, tutupTiketAdminHandler } from "../handlers/tiket.handler";
+import {
+  balasTiketAdminHandler,
+  daftarTiketAdminHandler,
+  detailTiketAdminHandler,
+  tutupTiketAdminHandler,
+} from "../handlers/tiket.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
@@ -30,7 +85,10 @@ export const admin = Router();
 
 // POST <path>/activate dan <path>/deactivate
 const toggle = (path: string, handler: (aktif: boolean) => RequestHandler) => {
-  for (const [aksi, aktif] of [["activate", true], ["deactivate", false]] as const) {
+  for (const [aksi, aktif] of [
+    ["activate", true],
+    ["deactivate", false],
+  ] as const) {
     admin.post(`${path}/${aksi}`, handler(aktif));
   }
 };

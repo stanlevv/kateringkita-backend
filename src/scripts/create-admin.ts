@@ -7,12 +7,21 @@ import { simpanAdmin } from "../services/admin-akun.service";
 
 const adminSchema = z.object({ fullName, phone, password });
 
-export async function createAdmin(input: { phone: string; fullName: string; password: string }): Promise<{ id: number }> {
+export async function createAdmin(input: {
+  phone: string;
+  fullName: string;
+  password: string;
+}): Promise<{ id: number }> {
   const parsed = adminSchema.safeParse(input);
   if (!parsed.success) throw new Error(parsed.error.issues[0].message);
   // bootstrap: admin super, sandi dipilih operator lewat env jadi tidak wajib diganti
   const id = await dalamTransaksi((conn) =>
-    simpanAdmin(conn, { full_name: parsed.data.fullName, phone: parsed.data.phone, password: parsed.data.password }, "super", false),
+    simpanAdmin(
+      conn,
+      { full_name: parsed.data.fullName, phone: parsed.data.phone, password: parsed.data.password },
+      "super",
+      false,
+    ),
   );
   return { id };
 }

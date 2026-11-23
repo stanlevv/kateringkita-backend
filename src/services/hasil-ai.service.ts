@@ -8,7 +8,11 @@ export type FiturHasil = "asisten" | "rekomendasi";
 
 /** Simpan keluaran AI; gagal menyimpan dicatat di log dan tidak menggagalkan jawaban ke pengguna (pola catatPakai). */
 export async function simpanHasil(h: {
-  fitur: FiturHasil; userId: number | null; merchantId?: number | null; input: string; output: unknown;
+  fitur: FiturHasil;
+  userId: number | null;
+  merchantId?: number | null;
+  input: string;
+  output: unknown;
 }): Promise<number | null> {
   try {
     const [r] = await db.query<ResultSetHeader>(
@@ -28,10 +32,15 @@ const DARI = `FROM ai_results r LEFT JOIN users u ON u.id = r.user_id LEFT JOIN 
   LEFT JOIN users v ON v.id = r.verified_by`;
 
 const peta = (r: RowDataPacket) => ({
-  id: Number(r.id), fitur: r.fitur as FiturHasil, input_text: r.input_text as string,
+  id: Number(r.id),
+  fitur: r.fitur as FiturHasil,
+  input_text: r.input_text as string,
   // mysql2 mengurai kolom JSON; TiDB kadang mengirim string
   output: typeof r.output_json === "string" ? JSON.parse(r.output_json) : r.output_json,
-  status: r.status as string, catatan: (r.catatan as string | null) ?? null, created_at: r.created_at, verified_at: r.verified_at,
+  status: r.status as string,
+  catatan: (r.catatan as string | null) ?? null,
+  created_at: r.created_at,
+  verified_at: r.verified_at,
   verified_by: r.verified_by ? { id: r.verified_by as number, name: r.verifier_name as string } : null,
   user: r.user_id ? { id: r.user_id as number, name: r.user_name as string } : null,
   merchant: r.merchant_id ? { id: r.merchant_id as number, business_name: r.business_name as string } : null,
@@ -40,12 +49,13 @@ const peta = (r: RowDataPacket) => ({
 export async function daftarHasilAi(f: DaftarHasilAi) {
   const where: string[] = [];
   const args: unknown[] = [];
-  if (f.status) where.push("r.status = ?"), args.push(f.status);
-  if (f.fitur) where.push("r.fitur = ?"), args.push(f.fitur);
+  if (f.status) (where.push("r.status = ?"), args.push(f.status));
+  if (f.fitur) (where.push("r.fitur = ?"), args.push(f.fitur));
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const [[n]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM ai_results r ${w}`, args);
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${KOLOM} ${DARI} ${w} ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`, [...args, f.limit, (f.page - 1) * f.limit],
+    `SELECT ${KOLOM} ${DARI} ${w} ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?`,
+    [...args, f.limit, (f.page - 1) * f.limit],
   );
   return { data: rows.map(peta), meta: { page: f.page, limit: f.limit, total: Number(n.n) } };
 }
@@ -55,11 +65,17 @@ export async function verifikasiHasilAi(adminId: number, idRaw: unknown, input: 
   const id = await dalamTransaksi(async (conn) => {
     const r = await kunci(conn, "ai_results", idRaw, { notFound: "Hasil AI tidak ditemukan." });
     const catatan = input.catatan ?? null;
-    await conn.query("UPDATE ai_results SET status = ?, catatan = ?, verified_by = ?, verified_at = UTC_TIMESTAMP() WHERE id = ?",
-      [input.status, catatan, adminId, r.id]);
+    await conn.query(
+      "UPDATE ai_results SET status = ?, catatan = ?, verified_by = ?, verified_at = UTC_TIMESTAMP() WHERE id = ?",
+      [input.status, catatan, adminId, r.id],
+    );
     await catat(conn, {
-      adminId, action: "ai_result.verify", targetType: "ai_result", targetId: r.id,
-      before: { status: r.status, catatan: r.catatan ?? null }, after: { status: input.status, catatan },
+      adminId,
+      action: "ai_result.verify",
+      targetType: "ai_result",
+      targetId: r.id,
+      before: { status: r.status, catatan: r.catatan ?? null },
+      after: { status: input.status, catatan },
     });
     return r.id as number;
   });

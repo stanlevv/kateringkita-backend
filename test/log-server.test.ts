@@ -48,12 +48,24 @@ beforeAll(async () => {
 describe("pencatatan", () => {
   test("500 & 502 tercatat dengan request ID, path tanpa query, pesan; 404 tidak", async () => {
     await request(uji).get("/rusak?token=rahasia").set("X-Request-Id", "uji-500").expect(500);
-    expect(await tungguLog("uji-500")).toMatchObject({ level: "error", method: "GET", path: "/rusak", status: 500, message: "kode pesanan bentrok" });
+    expect(await tungguLog("uji-500")).toMatchObject({
+      level: "error",
+      method: "GET",
+      path: "/rusak",
+      status: 500,
+      message: "kode pesanan bentrok",
+    });
     await request(uji).get("/upstream").set("X-Request-Id", "uji-502").expect(502);
-    expect(await tungguLog("uji-502")).toMatchObject({ level: "error", status: 502, message: "BAD_GATEWAY: Penyedia tidak menjawab." });
+    expect(await tungguLog("uji-502")).toMatchObject({
+      level: "error",
+      status: 502,
+      message: "BAD_GATEWAY: Penyedia tidak menjawab.",
+    });
     await request(uji).get("/tidak-ada").set("X-Request-Id", "uji-404").expect(404);
     await new Promise((x) => setTimeout(x, 300));
-    expect(await db.query<any[]>("SELECT id FROM server_logs WHERE request_id = 'uji-404'").then(([r]) => r)).toHaveLength(0);
+    expect(
+      await db.query<any[]>("SELECT id FROM server_logs WHERE request_id = 'uji-404'").then(([r]) => r),
+    ).toHaveLength(0);
   });
 
   test("request lebih dari 2 detik tercatat sebagai lambat", async () => {
@@ -74,12 +86,15 @@ describe("pencatatan", () => {
 
 describe("dashboard admin", () => {
   test("daftar + cari request ID/path + filter level; status server 24 jam; penjual 403", async () => {
-    const cari = (qs: string) => request(app).get(`/api/v1/admin/server-logs?${qs}`).set("Authorization", `Bearer ${tAdmin}`).expect(200);
+    const cari = (qs: string) =>
+      request(app).get(`/api/v1/admin/server-logs?${qs}`).set("Authorization", `Bearer ${tAdmin}`).expect(200);
     expect((await cari("q=uji-500")).body.data.map((r: { request_id: string }) => r.request_id)).toEqual(["uji-500"]);
     expect((await cari("q=lamb")).body.data[0].request_id).toBe("uji-lambat");
     expect((await cari("level=slow")).body.data.every((r: { level: string }) => r.level === "slow")).toBe(true);
     await request(app).get("/api/v1/admin/server-logs?level=info").set("Authorization", `Bearer ${tAdmin}`).expect(400);
-    const st = (await request(app).get("/api/v1/admin/server-status").set("Authorization", `Bearer ${tAdmin}`).expect(200)).body.data;
+    const st = (
+      await request(app).get("/api/v1/admin/server-status").set("Authorization", `Bearer ${tAdmin}`).expect(200)
+    ).body.data;
     expect(st.db.ok).toBe(true);
     expect(st.db.migrasi_terakhir).toMatch(/^\d{3}_.+\.sql$/);
     expect(st.per_jam).toHaveLength(24);
@@ -90,16 +105,26 @@ describe("dashboard admin", () => {
 
   test("urut waktu terbaru dulu, bukan id (AUTO_INCREMENT TiDB tidak urut antar-node)", async () => {
     const sisip = (rid: string, menit: number) =>
-      db.query("INSERT INTO server_logs (request_id, level, method, path, status, duration_ms, created_at) VALUES (?, 'slow', 'GET', '/urut-uji', 200, 2500, UTC_TIMESTAMP() - INTERVAL ? MINUTE)", [rid, menit]);
+      db.query(
+        "INSERT INTO server_logs (request_id, level, method, path, status, duration_ms, created_at) VALUES (?, 'slow', 'GET', '/urut-uji', 200, 2500, UTC_TIMESTAMP() - INTERVAL ? MINUTE)",
+        [rid, menit],
+      );
     await sisip("urut-baru", 5);
     await sisip("urut-lama", 180); // id lebih besar, waktu lebih tua
-    const res = await request(app).get("/api/v1/admin/server-logs?q=/urut-uji").set("Authorization", `Bearer ${tAdmin}`).expect(200);
+    const res = await request(app)
+      .get("/api/v1/admin/server-logs?q=/urut-uji")
+      .set("Authorization", `Bearer ${tAdmin}`)
+      .expect(200);
     expect(res.body.data.map((r: { request_id: string }) => r.request_id)).toEqual(["urut-baru", "urut-lama"]);
   });
 
   test("pembersihan menghapus log lebih dari 30 hari saja", async () => {
-    await db.query("INSERT INTO server_logs (request_id, level, method, path, status, duration_ms, created_at) VALUES ('tua', 'error', 'GET', '/x', 500, 1, UTC_TIMESTAMP() - INTERVAL 31 DAY)");
+    await db.query(
+      "INSERT INTO server_logs (request_id, level, method, path, status, duration_ms, created_at) VALUES ('tua', 'error', 'GET', '/x', 500, 1, UTC_TIMESTAMP() - INTERVAL 31 DAY)",
+    );
     await bersihkanLog();
-    expect((await db.query<any[]>("SELECT request_id FROM server_logs WHERE request_id IN ('tua', 'uji-500')"))[0]).toEqual([{ request_id: "uji-500" }]);
+    expect(
+      (await db.query<any[]>("SELECT request_id FROM server_logs WHERE request_id IN ('tua', 'uji-500')"))[0],
+    ).toEqual([{ request_id: "uji-500" }]);
   });
 });

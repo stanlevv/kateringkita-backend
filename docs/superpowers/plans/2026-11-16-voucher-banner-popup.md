@@ -11,6 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-11-16-voucher-banner-popup-design.md` (K1–K9, C1–C3)
 
 **Repo & path:**
+
 - BE = `be-snap` worktree (`stanlevv/kateringkita-backend`), branch `feat/voucher` dari `origin/main` 228c0fa
 - WEB = `fe-meja` worktree (`stanlevv/kateringkita-frontend`), branch baru dari `origin/main` da84bb4
 - MO = `C:/PROJECT/kk-wt-fitur2` (branch `feat/tiket-bantuan`, commit lokal; push mobile butuh akses rohanrifqii)
@@ -45,27 +46,31 @@
 ### Task 1: Migrasi voucher + backfill potongan pesanan (BE)
 
 **Files:**
+
 - Create: `database/migrations/014_voucher.sql`
 - Modify: `test/migrate.test.ts` (jumlah tabel 32 → 33, komentar "014 promo_claims")
 - Test: `test/voucher-migrasi.test.ts`
 
 **Interfaces:**
+
 - Produces: `promos.is_public BOOLEAN NOT NULL DEFAULT TRUE`; tabel `promo_claims(id BIGINT PK, promo_id INT FK promos ON DELETE CASCADE, user_id INT FK users ON DELETE CASCADE, claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(promo_id,user_id), INDEX(user_id))`; `orders.merchant_promo_id INT NULL FK`, `orders.merchant_discount INT NOT NULL DEFAULT 0`, `orders.platform_promo_id INT NULL FK`, `orders.platform_discount INT NOT NULL DEFAULT 0`.
 
 - [ ] **Step 1: Tes gagal** `test/voucher-migrasi.test.ts`: sisipkan (lewat SQL setelah `migrate` hanya sampai 013 tidak praktis) → cukup uji backfill dengan fungsi SQL yang sama: buat pesanan berpromo toko & berpromo platform lewat `pesanDulu`-gaya checkout, `UPDATE orders SET merchant_promo_id=NULL, merchant_discount=0, platform_promo_id=NULL, platform_discount=0`, jalankan ulang isi bagian backfill (`database/migrations/014_voucher.sql` bagian `-- backfill` diekspor sebagai string dari berkas), lalu `expect(row).toMatchObject({ merchant_promo_id: <id toko>, merchant_discount: <discount> })` dan sebaliknya untuk platform.
 - [ ] **Step 2:** Jalankan `TEST_DATABASE_URL=mysql://root:root@127.0.0.1:3307/kateringkita_test npx vitest run test/voucher-migrasi.test.ts test/migrate.test.ts` → GAGAL (kolom belum ada / 32≠33).
 - [ ] **Step 3:** Tulis migrasi: `ALTER TABLE promos ADD COLUMN is_public …`; `CREATE TABLE promo_claims …`; `ALTER TABLE orders ADD …` 4 kolom + FK; backfill:
-  `UPDATE orders o JOIN promos p ON p.id = o.promo_id SET o.merchant_promo_id = IF(p.merchant_id IS NULL, NULL, p.id), o.merchant_discount = IF(p.merchant_id IS NULL, 0, o.discount), o.platform_promo_id = IF(p.merchant_id IS NULL, p.id, NULL), o.platform_discount = IF(p.merchant_id IS NULL, o.discount, 0);`
+      `UPDATE orders o JOIN promos p ON p.id = o.promo_id SET o.merchant_promo_id = IF(p.merchant_id IS NULL, NULL, p.id), o.merchant_discount = IF(p.merchant_id IS NULL, 0, o.discount), o.platform_promo_id = IF(p.merchant_id IS NULL, p.id, NULL), o.platform_discount = IF(p.merchant_id IS NULL, o.discount, 0);`
 - [ ] **Step 4:** Tes lulus.
 - [ ] **Step 5:** Commit `feat(voucher): migrasi 014 is_public, promo_claims, potongan toko/platform per pesanan`.
 
 ### Task 2: Dua voucher di quote & checkout + pengembalian kuota (BE)
 
 **Files:**
+
 - Modify: `src/dto/pesanan.dto.ts` (quoteSchema), `src/services/pesanan-keranjang.service.ts` (`Hasil`, `periksa`, ganti `terapkanPromo` → `terapkanVoucher`, `tolakPromo`), `src/services/pesanan.service.ts` (quote, buatPesanan), `src/services/pesanan-status.service.ts:51-79`, `src/services/meja.service.ts:132` (`promo_codes: []`)
 - Test: `test/voucher-checkout.test.ts`; sesuaikan `test/checkout-*.test.ts` hanya bila bentuk galat berubah
 
 **Interfaces:**
+
 - Produces:
   - DTO: `promo_codes: string[]` (trim, upper, unik, maks 2, tiap 1–30) — `promo_code` lama digabung ke `promo_codes` di `transform`.
   - `type Hasil` + `merchant_discount: number; platform_discount: number` (0 dari `periksa`).
@@ -94,10 +99,12 @@
 ### Task 3: Pencairan & keuangan memakai potongan terpisah (BE)
 
 **Files:**
+
 - Modify: `src/services/pencairan.service.ts:12-13`, `src/services/admin-keuangan.service.ts:16-22`
 - Test: `test/pencairan.test.ts`, `test/admin-keuangan.test.ts` (tambah kasus dua voucher)
 
 **Interfaces:**
+
 - Consumes: kolom Task 1, pesanan dua voucher dari Task 2.
 - Produces: `BAGIAN = "o.subtotal - o.merchant_discount"` (tanpa JOIN promos); keuangan `discount_merchant = SUM(o.merchant_discount)`, `discount_platform = SUM(o.platform_discount)`.
 
@@ -108,11 +115,13 @@
 ### Task 4: Klaim & daftar voucher; is_public; larangan free_service_fee toko (BE)
 
 **Files:**
+
 - Create: `src/services/voucher.service.ts`, `src/handlers/voucher.handler.ts`, `src/dto/voucher.dto.ts`
 - Modify: `src/routes/katalog.ts`, `src/services/katalog.service.ts` (`profilToko` + `vouchers`), `src/services/admin-promo.service.ts` (`FIELD`/`skema` + `is_public`), `src/services/merchant-promo.service.ts` (tolak `free_service_fee` saat buat & saat ubah jenis), `docs/` (`docs/voucher.md` kontrak singkat), `README.md` tabel endpoint
 - Test: `test/voucher.test.ts`, `test/merchant-promo*.test.ts` / `test/admin-promos.test.ts` (is_public)
 
 **Interfaces:**
+
 - Produces:
   - `type VoucherKartu = { id: number; code: string; description: string | null; type: "percent" | "fixed" | "free_service_fee"; value: number; max_discount: number | null; min_subtotal: number; starts_at: Date; ends_at: Date; slot: "toko" | "platform"; merchant: { id: number; slug: string; business_name: string } | null; sold_out: boolean; claimed: boolean }`
   - `voucherToko(merchantId: number, userId: number | null, ms: number): Promise<VoucherKartu[]>` — `is_public AND is_active AND starts_at ≤ now < ends_at`, urut `ends_at`.
@@ -127,6 +136,7 @@
 ### Task 5: Web — sakelar "Tampilkan di halaman toko", form promo toko tanpa gratis biaya layanan (WEB)
 
 **Files:**
+
 - Modify: `types/promo.ts` (+ `is_public: boolean`), `lib/schemas.ts:149-180`, `app/components/promo/PromoForm.tsx`, `app/components/promo/PromoList.tsx` (lencana "Tersembunyi"), `lib/fixtures/promos.ts`
 - Test: `app/components/promo/PromoForm.test.tsx`, `PromoList.test.tsx`
 
@@ -139,11 +149,13 @@
 ### Task 6: Mobile — model & repositori voucher (MO)
 
 **Files:**
+
 - Create: `lib/models/voucher.dart`, `lib/data/voucher_repository.dart`
 - Modify: `lib/models/order_api_model.dart` (`Quote` + `merchantDiscount`, `platformDiscount`, `vouchersApplied`), `lib/models/` model profil toko (+ `vouchers`), `lib/main.dart` (Provider `VoucherRepository`)
 - Test: `test/models/voucher_test.dart`, `test/data/voucher_repository_test.dart`
 
 **Interfaces:**
+
 - Produces: `enum VoucherSlot { toko, platform }`; `class Voucher { int id; String code; String? description; String type; int value; int? maxDiscount; int minSubtotal; DateTime endsAt; VoucherSlot slot; VoucherMerchant? merchant; bool soldOut; bool claimed; bool? usable; String? reason; String get label /* "Diskon 10% s.d. Rp 5.000", "Potongan Rp 3.000", "Gratis biaya layanan" */ }`; `VoucherRepository(ApiClient)`: `Future<Voucher> claim(int id)`, `Future<List<Voucher>> mine({int? merchantId, int? subtotal, String? paymentMethod})`, `Future<List<Voucher>> platform()`.
 - [ ] **Step 1–5:** tes parse (label 3 jenis, `usable/reason` opsional) & jalur HTTP (`POST /me/vouchers/7/claim`, `GET /me/vouchers?merchant_id=1&subtotal=30000&payment_method=online`, `GET /vouchers/platform`) → GAGAL → implementasi → `flutter test test/models/voucher_test.dart test/data/voucher_repository_test.dart` lulus → commit.
 
@@ -174,11 +186,13 @@
 ### Task 10: Banner backend + unggah gambar (BE)
 
 **Files:**
+
 - Create: `database/migrations/015_banner.sql`, `src/services/banner.service.ts`, `src/dto/banner.dto.ts`, `src/handlers/banner.handler.ts`
 - Modify: `src/routes/merchant.ts`, `src/routes/admin.ts`, `src/routes/katalog.ts`, `src/dto/upload.dto.ts` (`purpose` + `"banner"`; `adminUploadSchema` purpose `"banner" | "popup"`), `test/migrate.test.ts` (34 tabel)
 - Test: `test/banner.test.ts`
 
 **Interfaces:**
+
 - Produces: tabel `banners` (spec 5.4); `type BannerPublik = { id: number; title: string; image_url: string; target: "promo" | "merchant" | "none"; promo: VoucherKartu | null; merchant: { id: number; slug: string; business_name: string } | null }`.
   - Penjual `GET/POST /merchant/banners`, `PATCH/DELETE /merchant/banners/:id` (target hanya tokonya/promo tokonya; ubah → status `menunggu`; >1 banner aktif → 409 "Toko ini sudah punya banner aktif.").
   - Admin `GET /admin/banners?status=`, `POST /admin/banners` (langsung `disetujui`), `PATCH /admin/banners/:id` `{ status?: "disetujui"|"ditolak"|"nonaktif", catatan?, sort_order?, title?, image_url?, … }` (tolak wajib catatan 3–300; diaudit `banner.*`), `POST /admin/uploads` (prefix `platform/<purpose>/`).

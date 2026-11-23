@@ -37,19 +37,39 @@ beforeAll(async () => {
   await migrate(await resetTestDatabase());
   loginLimiter.reset();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
-  token = (await request(app).post("/api/v1/auth/login").send({ identifier: "081300000009", password: "rahasia123", client: "web" })).body.data.token;
+  token = (
+    await request(app)
+      .post("/api/v1/auth/login")
+      .send({ identifier: "081300000009", password: "rahasia123", client: "web" })
+  ).body.data.token;
   for (const [i, n] of ["Siti", "Andi", "Budi"].entries()) {
-    await request(app).post("/api/v1/auth/merchant/register").send({
-      full_name: n, email: `${n}@mail.com`, phone: `08121111222${i}`, password: "rahasia123",
-      business_name: `Dapur ${n}`, merchant_type_id: 1, address: "Jl. Mawar 1",
-    }).expect(201);
+    await request(app)
+      .post("/api/v1/auth/merchant/register")
+      .send({
+        full_name: n,
+        email: `${n}@mail.com`,
+        phone: `08121111222${i}`,
+        password: "rahasia123",
+        business_name: `Dapur ${n}`,
+        merchant_type_id: 1,
+        address: "Jl. Mawar 1",
+      })
+      .expect(201);
   }
   merchantIds = ((await db.query<any[]>("SELECT id FROM merchants ORDER BY id"))[0] as any[]).map((r) => r.id);
   // jam buka lebar; waktu ringkasan dibekukan (T) sehingga tidak bergantung jam uji
-  await db.query("UPDATE merchants SET verification_status='verified', open_time='00:00:00', close_time='23:59:00', is_open=1 WHERE id=?", [merchantIds[0]]);
-  await db.query("UPDATE merchants SET verification_status='suspended', open_time='00:00:00', close_time='23:59:00', is_open=1 WHERE id=?", [merchantIds[1]]);
+  await db.query(
+    "UPDATE merchants SET verification_status='verified', open_time='00:00:00', close_time='23:59:00', is_open=1 WHERE id=?",
+    [merchantIds[0]],
+  );
+  await db.query(
+    "UPDATE merchants SET verification_status='suspended', open_time='00:00:00', close_time='23:59:00', is_open=1 WHERE id=?",
+    [merchantIds[1]],
+  );
   // Budi tetap pending
-  const [cust] = await db.query<any>("INSERT INTO users (role, full_name, phone, password_hash) VALUES ('customer','Pembeli','081355550000','x')");
+  const [cust] = await db.query<any>(
+    "INSERT INTO users (role, full_name, phone, password_hash) VALUES ('customer','Pembeli','081355550000','x')",
+  );
   const cid = cust.insertId;
   const o = async (code: string, status: string, total: number, createdAt: Date, holdUntil: Date) =>
     db.query(
@@ -68,10 +88,20 @@ beforeAll(async () => {
 });
 
 test("ringkasan", async () => {
-  await db.query("INSERT INTO admin_audit_logs (admin_user_id, action, target_type, target_id) SELECT id, 'x.y', 'merchant', '1' FROM users WHERE role='admin'");
+  await db.query(
+    "INSERT INTO admin_audit_logs (admin_user_id, action, target_type, target_id) SELECT id, 'x.y', 'merchant', '1' FROM users WHERE role='admin'",
+  );
   await request(app).get("/api/v1/admin/summary").set(A()).expect(200);
   const r = JSON.parse(JSON.stringify(await ringkasan(T)));
-  expect(r.orders_today).toEqual({ holding: 3, confirmed: 0, cooking: 0, ready: 0, completed: 2, cancelled: 1, expired: 0 });
+  expect(r.orders_today).toEqual({
+    holding: 3,
+    confirmed: 0,
+    cooking: 0,
+    ready: 0,
+    completed: 2,
+    cancelled: 1,
+    expired: 0,
+  });
   expect(r.revenue_today).toBe(50000);
   expect(r.merchants).toEqual({ pending: 1, needs_fix: 0, verified: 1, suspended: 1, open_now: 1 });
   expect(r.holding_expiring_soon).toBe(1);

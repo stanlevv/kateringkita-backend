@@ -65,7 +65,12 @@ export const loginLimiter: RequestHandler & { reset: () => void } = Object.assig
     });
     next();
   }) as RequestHandler,
-  { reset: () => { perIp.hits.clear(); perAccount.hits.clear(); } },
+  {
+    reset: () => {
+      perIp.hits.clear();
+      perAccount.hits.clear();
+    },
+  },
 );
 
 // Ganti kata sandi: 5 kata sandi lama salah (400) per pengguna per menit; pola jatah sama dengan loginLimiter
@@ -140,7 +145,12 @@ export const otpLimiter: RequestHandler & { reset: () => void } = Object.assign(
     hit(otpIp, ip, now);
     next();
   }) as RequestHandler,
-  { reset: () => { otpEmail.hits.clear(); otpIp.hits.clear(); } },
+  {
+    reset: () => {
+      otpEmail.hits.clear();
+      otpIp.hits.clear();
+    },
+  },
 );
 
 // F17 asisten AI: setiap panggilan Gemini berbayar → 10 pertanyaan per toko per 10 menit
@@ -168,9 +178,12 @@ export const mejaLimiter: RequestHandler & { reset: () => void; ukuran: () => nu
     const now = Date.now();
     const key = String(req.params.token);
     // AUD-45: format token (32 hex) dicek sebelum masuk Map, sama dengan pesan mejaAktif
-    if (!/^[0-9a-f]{32}$/.test(key)) return next(new AppError(404, "NOT_FOUND", "Meja tidak ditemukan atau tidak aktif."));
+    if (!/^[0-9a-f]{32}$/.test(key))
+      return next(new AppError(404, "NOT_FOUND", "Meja tidak ditemukan atau tidak aktif."));
     if (full(perMeja, key, now)) {
-      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak pesanan dari meja ini. Coba lagi beberapa menit lagi."));
+      return next(
+        new AppError(429, "RATE_LIMITED", "Terlalu banyak pesanan dari meja ini. Coba lagi beberapa menit lagi."),
+      );
     }
     hit(perMeja, key, now);
     next();

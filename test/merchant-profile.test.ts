@@ -11,13 +11,24 @@ let tA: string;
 let idA: number, idB: number;
 
 const login = async (identifier: string) =>
-  (await request(app).post("/api/v1/auth/login").send({ identifier, password: "rahasia123", client: "web" })).body.data.token as string;
+  (await request(app).post("/api/v1/auth/login").send({ identifier, password: "rahasia123", client: "web" })).body.data
+    .token as string;
 const regMerchant = (name: string, phone: string, email: string) =>
-  request(app).post("/api/v1/auth/merchant/register").send({
-    full_name: name, email, phone, password: "rahasia123", business_name: `Dapur ${name}`, merchant_type_id: 1, address: "Jl. Mawar 1",
-  }).expect(201);
+  request(app)
+    .post("/api/v1/auth/merchant/register")
+    .send({
+      full_name: name,
+      email,
+      phone,
+      password: "rahasia123",
+      business_name: `Dapur ${name}`,
+      merchant_type_id: 1,
+      address: "Jl. Mawar 1",
+    })
+    .expect(201);
 const row = async (id: number) => ((await db.query<any[]>("SELECT * FROM merchants WHERE id=?", [id]))[0] as any[])[0];
-const patch = (b: object) => request(app).patch("/api/v1/merchant/profile").set("Authorization", `Bearer ${tA}`).send(b);
+const patch = (b: object) =>
+  request(app).patch("/api/v1/merchant/profile").set("Authorization", `Bearer ${tA}`).send(b);
 const getProfile = () => request(app).get("/api/v1/merchant/profile").set("Authorization", `Bearer ${tA}`);
 
 beforeEach(async () => {
@@ -33,12 +44,28 @@ beforeEach(async () => {
 
 test("ubah semua field valid: respons dirapikan dan sama dengan GET", async () => {
   const r = await patch({
-    business_name: "  Dapur Baru ", description: "", address: " Jl. Melati 2 ", wa_number: "081355556666", service_mode: "daily",
-    open_time: "06:00", close_time: "17:30", hold_minutes: 10, daily_revenue_target: 500000, wa_template: "Halo {nama}, {kode}",
+    business_name: "  Dapur Baru ",
+    description: "",
+    address: " Jl. Melati 2 ",
+    wa_number: "081355556666",
+    service_mode: "daily",
+    open_time: "06:00",
+    close_time: "17:30",
+    hold_minutes: 10,
+    daily_revenue_target: 500000,
+    wa_template: "Halo {nama}, {kode}",
   }).expect(200);
   expect(r.body.data).toMatchObject({
-    business_name: "Dapur Baru", description: null, address: "Jl. Melati 2", wa_number: "081355556666", service_mode: "daily",
-    open_time: "06:00", close_time: "17:30", hold_minutes: 10, daily_revenue_target: 500000, wa_template: "Halo {nama}, {kode}",
+    business_name: "Dapur Baru",
+    description: null,
+    address: "Jl. Melati 2",
+    wa_number: "081355556666",
+    service_mode: "daily",
+    open_time: "06:00",
+    close_time: "17:30",
+    hold_minutes: 10,
+    daily_revenue_target: 500000,
+    wa_template: "Halo {nama}, {kode}",
   });
   expect((await getProfile()).body.data).toEqual(r.body.data);
 });
@@ -46,11 +73,23 @@ test("ubah semua field valid: respons dirapikan dan sama dengan GET", async () =
 test("mass assignment & toko lain tidak tersentuh", async () => {
   const before = await row(idB);
   await patch({
-    business_name: "X", verification_status: "verified", is_open: false, slug: "x", rating_avg: 5, user_id: before.user_id,
+    business_name: "X",
+    verification_status: "verified",
+    is_open: false,
+    slug: "x",
+    rating_avg: 5,
+    user_id: before.user_id,
     merchant_type_id: 2,
   }).expect(200);
   const a = await row(idA);
-  expect(a).toMatchObject({ business_name: "X", verification_status: "pending", is_open: 1, merchant_type_id: 1, logo_url: null, qris_image_url: null });
+  expect(a).toMatchObject({
+    business_name: "X",
+    verification_status: "pending",
+    is_open: 1,
+    merchant_type_id: 1,
+    logo_url: null,
+    qris_image_url: null,
+  });
   expect(a.slug).not.toBe("x");
   expect(a.rating_avg).toBe("0.00");
   expect(a.user_id).not.toBe(before.user_id);
@@ -83,9 +122,14 @@ test("jam: simpan apa adanya, close harus setelah open", async () => {
 });
 
 test("validasi angka & pilihan", async () => {
-  for (const v of [0, 31, 2.5]) expect((await patch({ hold_minutes: v }).expect(400)).body.error.fields.hold_minutes).toBeDefined();
-  expect((await patch({ wa_number: "6281234567890" }).expect(400)).body.error.fields.wa_number).toEqual(["Nomor WA harus diawali 08 dan 10–13 digit."]);
-  expect((await patch({ service_mode: "x" }).expect(400)).body.error.fields.service_mode).toEqual(["Pilih mode layanan."]);
+  for (const v of [0, 31, 2.5])
+    expect((await patch({ hold_minutes: v }).expect(400)).body.error.fields.hold_minutes).toBeDefined();
+  expect((await patch({ wa_number: "6281234567890" }).expect(400)).body.error.fields.wa_number).toEqual([
+    "Nomor WA harus diawali 08 dan 10–13 digit.",
+  ]);
+  expect((await patch({ service_mode: "x" }).expect(400)).body.error.fields.service_mode).toEqual([
+    "Pilih mode layanan.",
+  ]);
   expect((await patch({ daily_revenue_target: -1 }).expect(400)).body.error.fields.daily_revenue_target).toBeDefined();
   expect((await patch({ business_name: "   " }).expect(400)).body.error.fields.business_name).toBeDefined();
 });
@@ -93,9 +137,15 @@ test("validasi angka & pilihan", async () => {
 test("templat WA", async () => {
   await patch({ wa_template: "Halo {nama}, {kode}" }).expect(200);
   expect((await row(idA)).wa_template).toBe("Halo {nama}, {kode}");
-  expect((await patch({ wa_template: "   " }).expect(400)).body.error.fields.wa_template).toEqual(["Templat tidak boleh kosong."]);
-  expect((await patch({ wa_template: "a".repeat(1001) }).expect(400)).body.error.fields.wa_template).toEqual(["Templat maksimal 1.000 karakter."]);
-  expect((await patch({ wa_template: "{harga} {diskon}" }).expect(400)).body.error.fields.wa_template).toEqual(["Kata kunci {harga}, {diskon} tidak dikenal."]);
+  expect((await patch({ wa_template: "   " }).expect(400)).body.error.fields.wa_template).toEqual([
+    "Templat tidak boleh kosong.",
+  ]);
+  expect((await patch({ wa_template: "a".repeat(1001) }).expect(400)).body.error.fields.wa_template).toEqual([
+    "Templat maksimal 1.000 karakter.",
+  ]);
+  expect((await patch({ wa_template: "{harga} {diskon}" }).expect(400)).body.error.fields.wa_template).toEqual([
+    "Kata kunci {harga}, {diskon} tidak dikenal.",
+  ]);
 });
 
 // F04 D10/D15: logo hanya dari unggahan milik toko sendiri (dulu diabaikan, F03 D4 dicabut). F26: QRIS toko dihapus.
@@ -124,11 +174,13 @@ test("logo_url: URL unggahan sendiri diterima, null mengosongkan, selain itu 400
     expect(x.body.error.fields.logo_url).toEqual(["Foto tidak valid. Unggah ulang foto."]);
   }
   // field dibuang zod: tidak ada yang diubah
-  expect((await patch({ qris_image_url: "https://evil.example/q.png" }).expect(400)).body.error.message).toBe("Tidak ada data yang diubah.");
+  expect((await patch({ qris_image_url: "https://evil.example/q.png" }).expect(400)).body.error.message).toBe(
+    "Tidak ada data yang diubah.",
+  );
   expect(await row(idA)).toEqual(before);
 });
 
-test("logo_url \"\" mengosongkan seperti null", async () => {
+test('logo_url "" mengosongkan seperti null', async () => {
   await db.query("UPDATE merchants SET logo_url = '/logo/lama.png' WHERE id = ?", [idA]);
   const r = await patch({ logo_url: "" }).expect(200);
   expect(r.body.data).toMatchObject({ logo_url: null });
@@ -137,8 +189,12 @@ test("logo_url \"\" mengosongkan seperti null", async () => {
 test("logo_url saat unggah belum tersedia: hanya null atau nilai tersimpan", async () => {
   await db.query("UPDATE merchants SET logo_url = '/logo/lama.png' WHERE id = ?", [idA]);
   await patch({ logo_url: "/logo/lama.png", business_name: "Tetap" }).expect(200);
-  expect((await patch({ logo_url: "https://foto.test/merchants/1/logo/x.png" }).expect(400)).body.error.fields.logo_url).toBeDefined();
+  expect(
+    (await patch({ logo_url: "https://foto.test/merchants/1/logo/x.png" }).expect(400)).body.error.fields.logo_url,
+  ).toBeDefined();
   expect((await patch({ logo_url: null }).expect(200)).body.data.logo_url).toBeNull();
 });
 
-afterEach(() => { isiR2(false); });
+afterEach(() => {
+  isiR2(false);
+});

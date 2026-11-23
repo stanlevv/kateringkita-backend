@@ -12,12 +12,14 @@ let s: Awaited<ReturnType<typeof siapCheckout>>;
 let budi: number;
 let menuB: number;
 
-const pesanan = async (code: string) => ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
+const pesanan = async (code: string) =>
+  ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 const n = async (sql: string, args: unknown[] = []) => Number(((await db.query<any[]>(sql, args))[0] as any[])[0].n);
 const lewat = (code: string, menit = 1) =>
   db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL ? MINUTE WHERE code = ?", [menit, code]);
 const asli = (code: string) => dalamTransaksi((c) => transisi(c, code, "expire", SISTEM));
-const notifKedaluwarsa = () => n("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND title = 'Pesanan kedaluwarsa'", [budi]);
+const notifKedaluwarsa = () =>
+  n("SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND title = 'Pesanan kedaluwarsa'", [budi]);
 
 beforeAll(async () => {
   s = await siapCheckout();
@@ -39,13 +41,21 @@ afterAll(() => {
 
 describe("kadaluarsakan (D1, D4, D5)", () => {
   test("kriteria backlog: lewat waktu → expired, stok kembali, notifikasi; panggilan kedua idempoten", async () => {
-    const [a, b, c] = [await pesanDulu(s.tCust, s.menu, 2), await pesanDulu(s.tCust, s.menu, 2), await pesanDulu(s.tCust, s.menu, 2)];
+    const [a, b, c] = [
+      await pesanDulu(s.tCust, s.menu, 2),
+      await pesanDulu(s.tCust, s.menu, 2),
+      await pesanDulu(s.tCust, s.menu, 2),
+    ];
     expect((await menuRow(s.menu)).held_today).toBe(6);
     await lewat(a);
     await lewat(b);
     expect(await kadaluarsakan()).toBe(2);
     for (const code of [a, b]) {
-      expect(await pesanan(code)).toMatchObject({ status: "expired", cancelled_by: "system", cancel_reason: "Tidak dikonfirmasi tepat waktu." });
+      expect(await pesanan(code)).toMatchObject({
+        status: "expired",
+        cancelled_by: "system",
+        cancel_reason: "Tidak dikonfirmasi tepat waktu.",
+      });
     }
     expect((await pesanan(c)).status).toBe("holding");
     expect((await menuRow(s.menu)).held_today).toBe(2);
@@ -57,7 +67,11 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
   });
 
   test("batch & urutan hold_until terlama dulu", async () => {
-    const codes = [await pesanDulu(s.tCust, s.menu), await pesanDulu(s.tCust, s.menu), await pesanDulu(s.tCust, s.menu)];
+    const codes = [
+      await pesanDulu(s.tCust, s.menu),
+      await pesanDulu(s.tCust, s.menu),
+      await pesanDulu(s.tCust, s.menu),
+    ];
     await lewat(codes[0], 1);
     await lewat(codes[1], 3);
     await lewat(codes[2], 2);
@@ -70,7 +84,11 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
   });
 
   test("satu gagal tidak menghentikan sisanya; log tanpa data pembeli", async () => {
-    const codes = [await pesanDulu(s.tCust, s.menu), await pesanDulu(s.tCust, s.menu), await pesanDulu(s.tCust, s.menu)];
+    const codes = [
+      await pesanDulu(s.tCust, s.menu),
+      await pesanDulu(s.tCust, s.menu),
+      await pesanDulu(s.tCust, s.menu),
+    ];
     await lewat(codes[0], 3);
     await lewat(codes[1], 2);
     await lewat(codes[2], 1);
@@ -97,7 +115,11 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
   });
 
   test("dua sapuan paralel → tiap pesanan expired tepat sekali (D3)", async () => {
-    const codes = [await pesanDulu(s.tCust, s.menu, 2), await pesanDulu(s.tCust, s.menu, 2), await pesanDulu(s.tCust, s.menu, 2)];
+    const codes = [
+      await pesanDulu(s.tCust, s.menu, 2),
+      await pesanDulu(s.tCust, s.menu, 2),
+      await pesanDulu(s.tCust, s.menu, 2),
+    ];
     for (const c of codes) await lewat(c);
     const err = vi.spyOn(console, "error");
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -105,10 +127,12 @@ describe("kadaluarsakan (D1, D4, D5)", () => {
     expect(x + y).toBe(3);
     expect((await menuRow(s.menu)).held_today).toBe(0);
     expect(await notifKedaluwarsa()).toBe(3);
-    expect(await n(
-      "SELECT COUNT(*) n FROM order_status_logs l JOIN orders o ON o.id = l.order_id WHERE l.from_status = 'holding' AND l.to_status = 'expired' AND o.code IN (?)",
-      [codes],
-    )).toBe(3);
+    expect(
+      await n(
+        "SELECT COUNT(*) n FROM order_status_logs l JOIN orders o ON o.id = l.order_id WHERE l.from_status = 'holding' AND l.to_status = 'expired' AND o.code IN (?)",
+        [codes],
+      ),
+    ).toBe(3);
     expect(err).not.toHaveBeenCalled();
   });
 

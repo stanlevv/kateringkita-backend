@@ -15,7 +15,11 @@ export const sandiSementara = () => crypto.randomBytes(9).toString("base64url").
 const PILIH = `SELECT u.id, u.full_name, u.phone, u.email, u.admin_level, u.is_active, u.must_change_password, u.created_at,
   (SELECT MAX(s.created_at) FROM auth_sessions s WHERE s.user_id = u.id) AS last_login_at
   FROM users u WHERE u.role = 'admin'`;
-const peta = (r: RowDataPacket) => ({ ...r, is_active: Boolean(r.is_active), must_change_password: Boolean(r.must_change_password) });
+const peta = (r: RowDataPacket) => ({
+  ...r,
+  is_active: Boolean(r.is_active),
+  must_change_password: Boolean(r.must_change_password),
+});
 
 export async function daftarAdmin() {
   const [rows] = await db.query<RowDataPacket[]>(`${PILIH} ORDER BY u.is_active DESC, u.id`);
@@ -35,9 +39,18 @@ const dupe = (e: unknown): never => {
 };
 
 // Dipakai juga oleh CLI admin:create (bootstrap, level super, sandi dari env).
-export async function simpanAdmin(conn: Conn, input: { full_name: string; phone: string; password: string }, level: AdminLevel, wajibGanti: boolean) {
+export async function simpanAdmin(
+  conn: Conn,
+  input: { full_name: string; phone: string; password: string },
+  level: AdminLevel,
+  wajibGanti: boolean,
+) {
   const user = await insertUser(conn, "admin", input).catch(dupe);
-  await conn.query("UPDATE users SET admin_level = ?, must_change_password = ? WHERE id = ?", [level, wajibGanti, user.id]);
+  await conn.query("UPDATE users SET admin_level = ?, must_change_password = ? WHERE id = ?", [
+    level,
+    wajibGanti,
+    user.id,
+  ]);
   return user.id;
 }
 
@@ -45,7 +58,12 @@ export async function simpanAdmin(conn: Conn, input: { full_name: string; phone:
 export async function buatAdmin(actorId: number, input: { full_name: string; phone: string; admin_level: AdminLevel }) {
   const password = sandiSementara();
   return dalamTransaksi(async (conn) => {
-    const id = await simpanAdmin(conn, { full_name: input.full_name, phone: input.phone, password }, input.admin_level, true);
+    const id = await simpanAdmin(
+      conn,
+      { full_name: input.full_name, phone: input.phone, password },
+      input.admin_level,
+      true,
+    );
     const after = await satu(conn, id);
     await catat(conn, { adminId: actorId, action: "admin.create", targetType: "admin", targetId: id, after });
     return { admin: after, temp_password: password };
@@ -61,7 +79,13 @@ const jagaSuperTerakhir = async (conn: Conn, target: RowDataPacket) => {
   if (rows.length <= 1) throw new AppError(409, "CONFLICT", "Harus ada minimal satu admin super yang aktif.");
 };
 
-const ubah = (actorId: number, idRaw: unknown, action: string, fn: (conn: Conn, target: RowDataPacket) => Promise<void>, reason?: string) =>
+const ubah = (
+  actorId: number,
+  idRaw: unknown,
+  action: string,
+  fn: (conn: Conn, target: RowDataPacket) => Promise<void>,
+  reason?: string,
+) =>
   dalamTransaksi(async (conn) => {
     const target = await kunci(conn, "users", idRaw, { where: "role = 'admin'", notFound: "Admin tidak ditemukan." });
     if (target.id === actorId) throw new AppError(409, "CONFLICT", "Tidak bisa mengubah akun sendiri di sini.");
@@ -83,7 +107,11 @@ export const setAktifAdmin = (actorId: number, id: unknown, aktif: boolean) =>
     if (!aktif) await jagaSuperTerakhir(conn, t);
     await conn.query("UPDATE users SET is_active = ? WHERE id = ?", [aktif, t.id]);
     // bacaSesi sudah menolak user nonaktif; sesi tetap dicabut agar tidak hidup lagi saat diaktifkan ulang
-    if (!aktif) await conn.query("UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL", [t.id]);
+    if (!aktif)
+      await conn.query(
+        "UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL",
+        [t.id],
+      );
   });
 
 // Admin lupa sandi: sandi sementara baru, semua sesinya dicabut, wajib ganti saat masuk.
@@ -92,7 +120,9 @@ export async function resetSandiAdmin(actorId: number, id: unknown) {
   const hash = await bcrypt.hash(password, 10);
   const admin = await ubah(actorId, id, "admin.reset-password", async (conn, t) => {
     await conn.query("UPDATE users SET password_hash = ?, must_change_password = TRUE WHERE id = ?", [hash, t.id]);
-    await conn.query("UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL", [t.id]);
+    await conn.query("UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL", [
+      t.id,
+    ]);
   });
   return { admin, temp_password: password };
 }

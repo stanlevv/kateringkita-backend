@@ -3,13 +3,28 @@ import { AuthedRequest } from "../middleware/auth";
 import { daftarLog, filterLog } from "../services/admin-audit.service";
 import { buatMaster, daftarMaster, setAktif, ubahMaster } from "../services/admin-master.service";
 import { antrianVerifikasi, daftarPenjual, detailPenjual, jalankanAksi } from "../services/admin-merchant.service";
-import { ambilBiaya, ambilKontakCs, buatPromo, daftarPromo, setAktifPromo, ubahBiaya, ubahKontakCs, ubahPromo } from "../services/admin-promo.service";
+import {
+  ambilBiaya,
+  ambilKontakCs,
+  buatPromo,
+  daftarPromo,
+  setAktifPromo,
+  ubahBiaya,
+  ubahKontakCs,
+  ubahPromo,
+} from "../services/admin-promo.service";
 import { kirimPengumuman } from "../services/admin-pengumuman.service";
 import { ringkasan } from "../services/admin-summary.service";
 import { rekapKeuangan } from "../services/admin-keuangan.service";
 import { rentangAdminSchema } from "../dto/merchant-laporan.dto";
 import { parse } from "../middleware/validate";
-import { daftarMenuAdmin, daftarUlasanAdmin, hapusFotoMenu, moderasiMenu, moderasiUlasan } from "../services/admin-moderasi.service";
+import {
+  daftarMenuAdmin,
+  daftarUlasanAdmin,
+  hapusFotoMenu,
+  moderasiMenu,
+  moderasiUlasan,
+} from "../services/admin-moderasi.service";
 import { buatAdmin, daftarAdmin, resetSandiAdmin, setAktifAdmin, ubahLevel } from "../services/admin-akun.service";
 import { AppError } from "../utils/errors";
 import { ambilPemeliharaan, ubahPemeliharaan } from "../services/pemeliharaan.service";
@@ -32,10 +47,15 @@ export const daftarLogHandler: RequestHandler = async (req, res) => {
 
 export const daftarPenjualHandler: RequestHandler = async (req, res) => {
   const { q, status, open } = req.query;
-  res.json(await daftarPenjual({
-    q: str(q)?.trim(), status: str(status), open: str(open),
-    page: angka(req.query.page, 1, 1e6), limit: angka(req.query.limit, 20, 100),
-  }));
+  res.json(
+    await daftarPenjual({
+      q: str(q)?.trim(),
+      status: str(status),
+      open: str(open),
+      page: angka(req.query.page, 1, 1e6),
+      limit: angka(req.query.limit, 20, 100),
+    }),
+  );
 };
 
 export const antrianVerifikasiHandler: RequestHandler = async (_req, res) => {
@@ -47,9 +67,11 @@ export const detailPenjualHandler: RequestHandler = async (req, res) => {
 };
 
 // POST /merchants/:id/<name>, satu route per ACTION_NAMES
-export const aksiPenjualHandler = (name: string): RequestHandler => async (req, res) => {
-  res.json({ data: await jalankanAksi(adminId(req), idParam(req.params.id), name, req.body?.reason) });
-};
+export const aksiPenjualHandler =
+  (name: string): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await jalankanAksi(adminId(req), idParam(req.params.id), name, req.body?.reason) });
+  };
 
 // Tipe params sama dengan yang diturunkan Express dari path "/master/:kind" dan "/master/:kind/:id"
 export const daftarMasterHandler: RequestHandler<{ kind: string }> = async (req, res) => {
@@ -62,9 +84,11 @@ export const ubahMasterHandler: RequestHandler<{ kind: string; id: string }> = a
   res.json({ data: await ubahMaster(adminId(req), req.params.kind, req.params.id, req.body) });
 };
 // POST .../activate (aktif = true) dan .../deactivate (aktif = false)
-export const setAktifMasterHandler = (aktif: boolean): RequestHandler => async (req, res) => {
-  res.json({ data: await setAktif(adminId(req), String(req.params.kind), req.params.id, aktif) });
-};
+export const setAktifMasterHandler =
+  (aktif: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await setAktif(adminId(req), String(req.params.kind), req.params.id, aktif) });
+  };
 
 export const daftarPromoHandler: RequestHandler = async (_req, res) => {
   res.json({ data: await daftarPromo() });
@@ -76,11 +100,19 @@ export const ubahPromoHandler: RequestHandler = async (req, res) => {
   res.json({ data: await ubahPromo(adminId(req), req.params.id, req.body) });
 };
 // POST .../activate (aktif = true) dan .../deactivate (aktif = false)
-export const setAktifPromoHandler = (aktif: boolean): RequestHandler => async (req, res) => {
-  res.json({ data: await setAktifPromo(adminId(req), req.params.id, aktif) });
-};
+export const setAktifPromoHandler =
+  (aktif: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await setAktifPromo(adminId(req), req.params.id, aktif) });
+  };
 export const ambilBiayaHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: { service_fee: await ambilBiaya(), cs_whatsapp: await ambilKontakCs(), maintenance: await ambilPemeliharaan() } });
+  res.json({
+    data: {
+      service_fee: await ambilBiaya(),
+      cs_whatsapp: await ambilKontakCs(),
+      maintenance: await ambilPemeliharaan(),
+    },
+  });
 };
 // F27 (body divalidasi pemeliharaanSchema)
 export const ubahPemeliharaanHandler: RequestHandler = async (req, res) => {
@@ -95,20 +127,27 @@ export const ringkasanHandler: RequestHandler = async (_req, res) => {
 
 // F19 moderasi: ?q=&status=active|moderated&page&limit; alasan wajib untuk hide/takedown (reasonBody di rute)
 const filterModerasi = (q: Record<string, unknown>) => ({
-  q: str(q.q)?.trim() || undefined, status: str(q.status), page: angka(q.page, 1, 1e6), limit: angka(q.limit, 20, 100),
+  q: str(q.q)?.trim() || undefined,
+  status: str(q.status),
+  page: angka(q.page, 1, 1e6),
+  limit: angka(q.limit, 20, 100),
 });
 export const daftarUlasanAdminHandler: RequestHandler = async (req, res) => {
   res.json(await daftarUlasanAdmin(filterModerasi(req.query)));
 };
-export const moderasiUlasanHandler = (sembunyi: boolean): RequestHandler => async (req, res) => {
-  res.json({ data: await moderasiUlasan(adminId(req), req.params.id, sembunyi, sembunyi ? req.body.reason : null) });
-};
+export const moderasiUlasanHandler =
+  (sembunyi: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await moderasiUlasan(adminId(req), req.params.id, sembunyi, sembunyi ? req.body.reason : null) });
+  };
 export const daftarMenuAdminHandler: RequestHandler = async (req, res) => {
   res.json(await daftarMenuAdmin(filterModerasi(req.query)));
 };
-export const moderasiMenuHandler = (turun: boolean): RequestHandler => async (req, res) => {
-  res.json({ data: await moderasiMenu(adminId(req), req.params.id, turun, turun ? req.body.reason : null) });
-};
+export const moderasiMenuHandler =
+  (turun: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await moderasiMenu(adminId(req), req.params.id, turun, turun ? req.body.reason : null) });
+  };
 export const hapusFotoMenuHandler: RequestHandler = async (req, res) => {
   res.json({ data: await hapusFotoMenu(adminId(req), req.params.id, req.body.url, req.body.reason) });
 };
@@ -136,9 +175,11 @@ export const buatAdminHandler: RequestHandler = async (req, res) => {
 export const ubahLevelAdminHandler: RequestHandler = async (req, res) => {
   res.json({ data: await ubahLevel(adminId(req), req.params.id, req.body.admin_level) });
 };
-export const setAktifAdminHandler = (aktif: boolean): RequestHandler => async (req, res) => {
-  res.json({ data: await setAktifAdmin(adminId(req), req.params.id, aktif) });
-};
+export const setAktifAdminHandler =
+  (aktif: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await setAktifAdmin(adminId(req), req.params.id, aktif) });
+  };
 export const resetSandiAdminHandler: RequestHandler = async (req, res) => {
   res.json({ data: await resetSandiAdmin(adminId(req), req.params.id) });
 };

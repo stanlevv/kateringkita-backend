@@ -12,13 +12,27 @@ let s: Awaited<ReturnType<typeof siapCheckout>>;
 const KEY = "SB-Mid-server-uji";
 const SNAP = "https://app.sandbox.midtrans.com/snap/v4/redirection/pre-order";
 
-const pesan = (payment_method: string, token = s.tCust) => request(app).post("/api/v1/orders").set("Authorization", `Bearer ${token}`)
-  .set("Idempotency-Key", randomUUID()).send({ items: [{ menu_id: s.menu, qty: 2 }], pickup_point_id: 1, payment_method });
+const pesan = (payment_method: string, token = s.tCust) =>
+  request(app)
+    .post("/api/v1/orders")
+    .set("Authorization", `Bearer ${token}`)
+    .set("Idempotency-Key", randomUUID())
+    .send({ items: [{ menu_id: s.menu, qty: 2 }], pickup_point_id: 1, payment_method });
 const bayar = (code: string, body?: object, token = s.tCust) =>
   request(app).post(`/api/v1/orders/${code}/online`).set("Authorization", `Bearer ${token}`).send(body);
 const notif = (o: Record<string, string>) =>
-  kirimNotif({ status_code: "200", transaction_status: "settlement", payment_type: "qris", transaction_id: `trx-${o.order_id}`, ...o }, KEY);
-const pesanan = async (code: string) => ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
+  kirimNotif(
+    {
+      status_code: "200",
+      transaction_status: "settlement",
+      payment_type: "qris",
+      transaction_id: `trx-${o.order_id}`,
+      ...o,
+    },
+    KEY,
+  );
+const pesanan = async (code: string) =>
+  ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 const stubSnap = () => {
   const f = vi.fn().mockResolvedValue(new Response(JSON.stringify({ token: "snap-uji", redirect_url: SNAP })));
   vi.stubGlobal("fetch", f);
@@ -44,7 +58,9 @@ afterAll(() => {
 
 describe("checkout", () => {
   test("QRIS toko tidak diterima lagi → 400; online tanpa server key → 409 tanpa pesanan", async () => {
-    expect((await pesan("qris").expect(400)).body.error.fields.payment_method).toEqual(["Pilih bayar tunai, Virtual Account, atau bayar online."]);
+    expect((await pesan("qris").expect(400)).body.error.fields.payment_method).toEqual([
+      "Pilih bayar tunai, Virtual Account, atau bayar online.",
+    ]);
     const r = await pesan("online").expect(409);
     expect(r.body.error).toEqual({ code: "CONFLICT", message: "Pembayaran online belum tersedia. Pilih metode lain." });
     expect((await menuRow(s.menu)).held_today).toBe(0);
@@ -54,7 +70,13 @@ describe("checkout", () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const r = await pesan("online").expect(201);
     expect(r.body.data).toMatchObject({ status: "holding", payment_method: "online", payment_status: "unpaid" });
-    expect(r.body.data.payment).toEqual({ method: "online", status: "unpaid", amount: 30000, payment_url: null, qris: null });
+    expect(r.body.data.payment).toEqual({
+      method: "online",
+      status: "unpaid",
+      amount: 30000,
+      payment_url: null,
+      qris: null,
+    });
     expect(r.body.data.merchant).not.toHaveProperty("qris_image_url");
   });
 });
@@ -83,7 +105,9 @@ describe("POST /orders/:code/online", () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const code = (await pesan("online").expect(201)).body.data.code;
     const f = stubSnap();
-    expect((await bayar(code, { kembali: "https://jahat.example/x" }).expect(400)).body.error.fields.kembali).toEqual(["Alamat kembali tidak diizinkan."]);
+    expect((await bayar(code, { kembali: "https://jahat.example/x" }).expect(400)).body.error.fields.kembali).toEqual([
+      "Alamat kembali tidak diizinkan.",
+    ]);
     await bayar(code, { kembali: "http://localhost:3000/pesanan/x" }).expect(200);
     expect(JSON.parse(f.mock.calls[0][1].body).callbacks).toEqual({ finish: "http://localhost:3000/pesanan/x" });
     const cod = await pesanDulu(s.tCust, s.menu2);
@@ -96,15 +120,22 @@ describe("POST /orders/:code/online", () => {
 // QRIS langsung di aplikasi: charge Core API payment_type qris → qr_string digambar sendiri oleh aplikasi (tanpa halaman Snap)
 describe("POST /orders/:code/qris", () => {
   const QR_URL = (id: string) => `https://api.sandbox.midtrans.com/v2/qris/${id}/qr-code`;
-  const qris = (code: string, token = s.tCust) => request(app).post(`/api/v1/orders/${code}/qris`).set("Authorization", `Bearer ${token}`).send();
+  const qris = (code: string, token = s.tCust) =>
+    request(app).post(`/api/v1/orders/${code}/qris`).set("Authorization", `Bearer ${token}`).send();
   const stubCharge = (balas: Record<string, unknown>) => {
     const f = vi.fn().mockImplementation(async () => new Response(JSON.stringify(balas)));
     vi.stubGlobal("fetch", f);
     return f;
   };
   const chargeQris = (code: string, total: number) => ({
-    status_code: "201", status_message: "QRIS transaction is created", transaction_id: `trx-${code}`, order_id: code,
-    gross_amount: `${total}.00`, payment_type: "qris", transaction_status: "pending", qr_string: `00020101021226QR-${code}`,
+    status_code: "201",
+    status_message: "QRIS transaction is created",
+    transaction_id: `trx-${code}`,
+    order_id: code,
+    gross_amount: `${total}.00`,
+    payment_type: "qris",
+    transaction_status: "pending",
+    qr_string: `00020101021226QR-${code}`,
     actions: [{ name: "generate-qr-code", method: "GET", url: QR_URL(`trx-${code}`) }],
   });
 
@@ -114,15 +145,19 @@ describe("POST /orders/:code/qris", () => {
     const f = stubCharge(chargeQris(code, total));
     const r = await qris(code).expect(200);
     expect(r.body.data.payment).toMatchObject({
-      method: "online", status: "pending", payment_url: null,
+      method: "online",
+      status: "pending",
+      payment_url: null,
       qris: { qr_string: `00020101021226QR-${code}`, qr_url: QR_URL(`trx-${code}`) },
     });
     expect(new Date(r.body.data.payment.qris.expires_at).getTime()).toBeGreaterThan(Date.now());
     const [url, init] = f.mock.calls[0];
     expect(url).toBe("https://api.sandbox.midtrans.com/v2/charge");
     expect(JSON.parse(init.body)).toMatchObject({
-      payment_type: "qris", qris: { acquirer: "gopay" },
-      transaction_details: { order_id: code, gross_amount: total }, custom_expiry: { unit: "minute" },
+      payment_type: "qris",
+      qris: { acquirer: "gopay" },
+      transaction_details: { order_id: code, gross_amount: total },
+      custom_expiry: { unit: "minute" },
     });
     // permintaan ulang memakai QR yang sama, tidak charge lagi
     expect((await qris(code).expect(200)).body.data.payment.qris.qr_string).toBe(`00020101021226QR-${code}`);
@@ -133,7 +168,10 @@ describe("POST /orders/:code/qris", () => {
     await notif({ order_id: code, gross_amount: `${total}.00`, transaction_id: `trx-${code}` }).expect(200);
     expect(await pesanan(code)).toMatchObject({ status: "confirmed", payment_status: "paid" });
     expect((await baca()).body.data.payment).toMatchObject({ status: "paid", qris: null });
-    const [[p]] = await db.query<any[]>("SELECT p.method, p.status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?", [code]);
+    const [[p]] = await db.query<any[]>(
+      "SELECT p.method, p.status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?",
+      [code],
+    );
     expect(p).toMatchObject({ method: "qris", status: "paid" });
     expect((await qris(code).expect(409)).body.error.message).toBe("Pesanan ini tidak menunggu pembayaran.");
   });
@@ -146,18 +184,33 @@ describe("POST /orders/:code/qris", () => {
     stubCharge(chargeQris(code, total));
     await qris(code).expect(200);
     await notif({ order_id: code, gross_amount: `${total}.00`, transaction_id: `trx-${code}` }).expect(200);
-    const [rows] = await db.query<any[]>("SELECT p.method, p.status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ? ORDER BY p.id", [code]);
-    expect(rows).toEqual([{ method: "online", status: "pending" }, { method: "qris", status: "paid" }]);
+    const [rows] = await db.query<any[]>(
+      "SELECT p.method, p.status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ? ORDER BY p.id",
+      [code],
+    );
+    expect(rows).toEqual([
+      { method: "online", status: "pending" },
+      { method: "qris", status: "paid" },
+    ]);
   });
 
   test("order_id sudah dipakai di halaman Midtrans (406) → 409; Midtrans gagal → 502; keduanya tanpa baris QRIS", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const code = (await pesan("online").expect(201)).body.data.code;
-    stubCharge({ status_code: "406", status_message: "The request could not be completed due to a conflict with the current state of the target resource" });
-    expect((await qris(code).expect(409)).body.error.message).toBe("Pembayaran pesanan ini sudah dimulai di halaman Midtrans. Lanjutkan di sana.");
+    stubCharge({
+      status_code: "406",
+      status_message:
+        "The request could not be completed due to a conflict with the current state of the target resource",
+    });
+    expect((await qris(code).expect(409)).body.error.message).toBe(
+      "Pembayaran pesanan ini sudah dimulai di halaman Midtrans. Lanjutkan di sana.",
+    );
     stubCharge({ status_code: "500", status_message: "Internal error" });
     expect((await qris(code).expect(502)).body.error.message).toBe("Gagal membuat QRIS. Coba lagi.");
-    const [[n]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?", [code]);
+    const [[n]] = await db.query<any[]>(
+      "SELECT COUNT(*) AS n FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?",
+      [code],
+    );
     expect(Number(n.n)).toBe(0);
   });
 
@@ -175,7 +228,8 @@ describe("penjual tidak bisa melunasi manual", () => {
   test("POST /merchant/orders/:code/pay → 404; konfirmasi sebelum lunas → 409", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
     const code = (await pesan("online").expect(201)).body.data.code;
-    const aksi = (a: string) => request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set("Authorization", `Bearer ${s.tA}`);
+    const aksi = (a: string) =>
+      request(app).post(`/api/v1/merchant/orders/${code}/${a}`).set("Authorization", `Bearer ${s.tA}`);
     await aksi("pay").expect(404);
     expect((await aksi("confirm").expect(409)).body.error.message).toBe("Pesanan belum dibayar.");
     expect((await pesanan(code)).payment_status).toBe("unpaid");

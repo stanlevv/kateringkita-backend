@@ -14,14 +14,24 @@ let andiId: number;
 const A = () => ({ Authorization: `Bearer ${adminToken}` });
 const get = (u: string) => request(app).get(`/api/v1/admin${u}`).set(A());
 const post = (u: string, b: object = {}) => request(app).post(`/api/v1/admin${u}`).set(A()).send(b);
-const logCount = async () => Number(((await db.query<any[]>("SELECT COUNT(*) n FROM admin_audit_logs"))[0] as any[])[0].n);
-const merchantRow = async (id: number) => ((await db.query<any[]>("SELECT * FROM merchants WHERE id=?", [id]))[0] as any[])[0];
+const logCount = async () =>
+  Number(((await db.query<any[]>("SELECT COUNT(*) n FROM admin_audit_logs"))[0] as any[])[0].n);
+const merchantRow = async (id: number) =>
+  ((await db.query<any[]>("SELECT * FROM merchants WHERE id=?", [id]))[0] as any[])[0];
 
 const register = (name: string, phone: string, email: string) =>
-  request(app).post("/api/v1/auth/merchant/register").send({
-    full_name: name, email, phone, password: "rahasia123",
-    business_name: `Dapur ${name}`, merchant_type_id: 1, address: "Jl. Mawar 1",
-  }).expect(201);
+  request(app)
+    .post("/api/v1/auth/merchant/register")
+    .send({
+      full_name: name,
+      email,
+      phone,
+      password: "rahasia123",
+      business_name: `Dapur ${name}`,
+      merchant_type_id: 1,
+      address: "Jl. Mawar 1",
+    })
+    .expect(201);
 
 beforeAll(async () => {
   await migrate(await resetTestDatabase());
@@ -29,7 +39,11 @@ beforeAll(async () => {
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   await register("Siti", "081298765432", "siti@mail.com");
   await register("Andi", "081211112222", "andi@mail.com");
-  adminToken = (await request(app).post("/api/v1/auth/login").send({ identifier: "081300000009", password: "rahasia123", client: "web" })).body.data.token;
+  adminToken = (
+    await request(app)
+      .post("/api/v1/auth/login")
+      .send({ identifier: "081300000009", password: "rahasia123", client: "web" })
+  ).body.data.token;
   const [rows] = await db.query<any[]>("SELECT id FROM merchants ORDER BY id");
   sitiId = rows[0].id;
   andiId = rows[1].id;
@@ -37,7 +51,12 @@ beforeAll(async () => {
 
 test("checklist penjual baru: tanpa menu & titik temu", async () => {
   const r = await get(`/merchants/${sitiId}`).expect(200);
-  expect(r.body.data.checklist).toMatchObject({ active_menu: false, pickup_point: false, menu_with_photo: false, address: true });
+  expect(r.body.data.checklist).toMatchObject({
+    active_menu: false,
+    pickup_point: false,
+    menu_with_photo: false,
+    address: true,
+  });
   expect(typeof r.body.data.checklist.wa_valid).toBe("boolean");
   expect(r.body.data.owner).toMatchObject({ full_name: "Siti", phone: "081298765432", email: "siti@mail.com" });
   expect(r.body.data.recent_logs).toEqual([]);
@@ -45,10 +64,20 @@ test("checklist penjual baru: tanpa menu & titik temu", async () => {
 
 test("checklist terisi setelah ada menu berfoto & titik temu; wa_valid regex", async () => {
   await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [sitiId]);
-  await db.query("INSERT INTO menus (merchant_id, category_id, name, image_url, price, hpp) VALUES (?, 1, 'Nasi', 'http://x/y.jpg', 10000, 5000)", [sitiId]);
+  await db.query(
+    "INSERT INTO menus (merchant_id, category_id, name, image_url, price, hpp) VALUES (?, 1, 'Nasi', 'http://x/y.jpg', 10000, 5000)",
+    [sitiId],
+  );
   await db.query("UPDATE merchants SET wa_number='08123456789' WHERE id=?", [sitiId]);
   let c = (await get(`/merchants/${sitiId}`).expect(200)).body.data.checklist;
-  expect(c).toEqual({ wa_valid: true, address: true, pickup_point: true, active_menu: true, menu_with_photo: true, opening_hours: true });
+  expect(c).toEqual({
+    wa_valid: true,
+    address: true,
+    pickup_point: true,
+    active_menu: true,
+    menu_with_photo: true,
+    opening_hours: true,
+  });
   await db.query("UPDATE merchants SET wa_number='+6281' WHERE id=?", [sitiId]);
   c = (await get(`/merchants/${sitiId}`).expect(200)).body.data.checklist;
   expect(c.wa_valid).toBe(false);
@@ -104,7 +133,11 @@ test("transisi tidak sah → 409, tanpa log & tanpa perubahan (Review Focus 3)",
 
 test("suspend mengisi kolom & reactivate mengosongkannya", async () => {
   const row = await merchantRow(sitiId);
-  expect(row).toMatchObject({ verification_status: "suspended", suspended_reason: "Melanggar aturan", verified_at: null });
+  expect(row).toMatchObject({
+    verification_status: "suspended",
+    suspended_reason: "Melanggar aturan",
+    verified_at: null,
+  });
   expect(row.suspended_at).not.toBeNull();
   const r = await post(`/merchants/${sitiId}/reactivate`).expect(200);
   expect(r.body.data.verification_status).toBe("verified");
@@ -136,7 +169,11 @@ test("daftar: filter status, q (nama/WA, wildcard di-escape), open, paginasi", a
   expect(r.body.meta).toEqual({ page: 1, limit: 20, total: 1 });
   r = await get("/merchants").expect(200);
   expect(r.body.meta.total).toBe(2);
-  expect(r.body.data.find((m: any) => m.id === sitiId)).toMatchObject({ owner_name: "Siti", menu_count: 1, verification_status: "verified" });
+  expect(r.body.data.find((m: any) => m.id === sitiId)).toMatchObject({
+    owner_name: "Siti",
+    menu_count: 1,
+    verification_status: "verified",
+  });
   expect((await get("/merchants?q=Dapur Siti")).body.data).toHaveLength(1);
   expect((await get("/merchants?q=08123456789")).body.data).toHaveLength(1);
   expect((await get("/merchants?q=%25")).body.data).toHaveLength(0);
@@ -159,9 +196,13 @@ test("detail: alamat asli tetap ada & checklist.address benar", async () => {
 
 test("aksi tanpa reason mengabaikan body; suspend 500 karakter utuh; recent_logs maks 10", async () => {
   await register("Dewi", "081233334444", "dewi@mail.com");
-  const dewiId = ((await db.query<any[]>("SELECT id FROM merchants WHERE business_name='Dapur Dewi'"))[0] as any[])[0].id;
+  const dewiId = ((await db.query<any[]>("SELECT id FROM merchants WHERE business_name='Dapur Dewi'"))[0] as any[])[0]
+    .id;
   await post(`/merchants/${dewiId}/verify`, { reason: "x".repeat(600) }).expect(200);
-  const [logs] = await db.query<any[]>("SELECT reason FROM admin_audit_logs WHERE action='merchant.verify' AND target_id=?", [String(dewiId)]);
+  const [logs] = await db.query<any[]>(
+    "SELECT reason FROM admin_audit_logs WHERE action='merchant.verify' AND target_id=?",
+    [String(dewiId)],
+  );
   expect(logs[0].reason).toBeNull();
 
   const long = "a".repeat(500);
@@ -182,7 +223,10 @@ test("q dengan _ dicocokkan apa adanya", async () => {
 
 // AUD-26: rekening pencairan hanya untuk admin super lewat /payouts; detail penjual terbuka untuk semua tier admin
 test("detail penjual tidak membawa rekening pencairan", async () => {
-  await db.query("UPDATE merchants SET payout_bank = 'bca', payout_account_number = '0123456789', payout_account_name = 'Siti' WHERE id = ?", [sitiId]);
+  await db.query(
+    "UPDATE merchants SET payout_bank = 'bca', payout_account_number = '0123456789', payout_account_name = 'Siti' WHERE id = ?",
+    [sitiId],
+  );
   const d = (await get(`/merchants/${sitiId}`).expect(200)).body.data;
   expect(Object.keys(d).filter((k) => k.startsWith("payout_"))).toEqual([]);
   expect(JSON.stringify(d)).not.toContain("0123456789");
@@ -200,7 +244,12 @@ test("/me penjual ditangguhkan mengembalikan suspended_reason", async () => {
   await register("Rina", "081255556666", "rina@mail.com");
   const id = (await db.query<any[]>("SELECT id FROM merchants WHERE business_name = 'Dapur Rina'"))[0][0].id;
   await post(`/merchants/${id}/suspend`, { reason: "Menu palsu" }).expect(200);
-  const token = (await request(app).post("/api/v1/auth/login").send({ identifier: "rina@mail.com", password: "rahasia123", client: "web" }).expect(200)).body.data.token;
+  const token = (
+    await request(app)
+      .post("/api/v1/auth/login")
+      .send({ identifier: "rina@mail.com", password: "rahasia123", client: "web" })
+      .expect(200)
+  ).body.data.token;
   const me = (await request(app).get("/api/v1/me").set("Authorization", `Bearer ${token}`).expect(200)).body.data;
   expect(me.merchant).toMatchObject({ verification_status: "suspended", suspended_reason: "Menu palsu" });
 });

@@ -6,10 +6,16 @@ import { fieldsDari, parse } from "../middleware/validate";
 import { Conn, catat, dalamTransaksi, kunci, withBool } from "./admin-audit.service";
 
 const bulat = (label: string, min: number) =>
-  z.number({ error: `${label} wajib diisi.` }).int(`${label} harus bilangan bulat.`).min(min, `${label} minimal ${min}.`);
+  z
+    .number({ error: `${label} wajib diisi.` })
+    .int(`${label} harus bilangan bulat.`)
+    .min(min, `${label} minimal ${min}.`);
 // ISO 8601 dengan "Z" atau offset eksplisit; string longgar ("1", "March 7") ditolak.
 const waktu = (pesan: string) =>
-  z.string({ error: pesan }).pipe(z.iso.datetime({ offset: true, error: pesan })).transform((s) => new Date(s));
+  z
+    .string({ error: pesan })
+    .pipe(z.iso.datetime({ offset: true, error: pesan }))
+    .transform((s) => new Date(s));
 
 // Aturan sama dengan fe/lib/schemas.ts cekPromo/bersihkanPromo; backend sumber kebenaran.
 const skema = (terpakai: number) =>
@@ -31,12 +37,27 @@ const skema = (terpakai: number) =>
         if (d.value < 1) err("value", "Nilai minimal 1.");
         else if (d.type === "percent" && d.value > 100) err("value", "Persen maksimal 100.");
       }
-      if (d.quota != null && d.quota < terpakai) err("quota", `Kuota tidak boleh di bawah yang sudah terpakai (${terpakai}).`);
+      if (d.quota != null && d.quota < terpakai)
+        err("quota", `Kuota tidak boleh di bawah yang sudah terpakai (${terpakai}).`);
       if (d.ends_at <= d.starts_at) err("ends_at", "Waktu selesai harus setelah waktu mulai.");
     });
 
-export const kodeSkema = z.string({ error: "Kode wajib diisi." }).trim().toUpperCase().regex(/^[A-Z0-9]{3,30}$/, "Kode 3–30 huruf besar atau angka.");
-export const FIELD = ["description", "type", "value", "max_discount", "min_subtotal", "quota", "per_user_limit", "starts_at", "ends_at"] as const;
+export const kodeSkema = z
+  .string({ error: "Kode wajib diisi." })
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9]{3,30}$/, "Kode 3–30 huruf besar atau angka.");
+export const FIELD = [
+  "description",
+  "type",
+  "value",
+  "max_discount",
+  "min_subtotal",
+  "quota",
+  "per_user_limit",
+  "starts_at",
+  "ends_at",
+] as const;
 
 // F12: dipakai juga promo toko (merchant-promo.service)
 export function rapikan(input: unknown, terpakai: number, cekKode = false) {
@@ -46,11 +67,13 @@ export function rapikan(input: unknown, terpakai: number, cekKode = false) {
   let kode: string | undefined;
   if (cekKode) {
     const c = kodeSkema.safeParse(body.code);
-    if (c.success) kode = c.data; else fields.code = c.error.issues.map((i) => i.message);
+    if (c.success) kode = c.data;
+    else fields.code = c.error.issues.map((i) => i.message);
   }
   const r = skema(terpakai).safeParse(pick);
   if (!r.success) Object.assign(fields, fieldsDari(r.error.issues));
-  if (Object.keys(fields).length || !r.success) throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
+  if (Object.keys(fields).length || !r.success)
+    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
   const d = r.data;
   return {
     code: kode,
@@ -58,7 +81,7 @@ export function rapikan(input: unknown, terpakai: number, cekKode = false) {
       description: d.description || null,
       type: d.type,
       value: d.type === "free_service_fee" ? 0 : d.value,
-      max_discount: d.type === "percent" ? d.max_discount ?? null : null,
+      max_discount: d.type === "percent" ? (d.max_discount ?? null) : null,
       min_subtotal: d.min_subtotal,
       quota: d.quota ?? null,
       per_user_limit: d.per_user_limit,
@@ -68,14 +91,16 @@ export function rapikan(input: unknown, terpakai: number, cekKode = false) {
   };
 }
 
-export const nilai = (v: unknown) => (v instanceof Date ? v.getTime() : v ?? null);
+export const nilai = (v: unknown) => (v instanceof Date ? v.getTime() : (v ?? null));
 
 /** is_public (voucher tampil & bisa diklaim): undefined bila tidak dikirim; selain boolean → 400. */
 export function publikDari(body: unknown): boolean | undefined {
   const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
   if (!("is_public" in b)) return undefined;
   if (typeof b.is_public !== "boolean") {
-    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { is_public: ["Pilihan tampil di halaman toko tidak valid."] });
+    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
+      is_public: ["Pilihan tampil di halaman toko tidak valid."],
+    });
   }
   return b.is_public;
 }
@@ -93,10 +118,28 @@ export async function buatPromo(adminId: number, body: unknown) {
     return await dalamTransaksi(async (conn) => {
       const [ins] = await conn.query<any>(
         "INSERT INTO promos (merchant_id, code, description, type, value, max_discount, min_subtotal, quota, per_user_limit, starts_at, ends_at, is_public) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [code, data.description, data.type, data.value, data.max_discount, data.min_subtotal, data.quota, data.per_user_limit, data.starts_at, data.ends_at, publik],
+        [
+          code,
+          data.description,
+          data.type,
+          data.value,
+          data.max_discount,
+          data.min_subtotal,
+          data.quota,
+          data.per_user_limit,
+          data.starts_at,
+          data.ends_at,
+          publik,
+        ],
       );
       const [row] = await conn.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [ins.insertId]);
-      await catat(conn, { adminId, action: "promo.create", targetType: "promo", targetId: ins.insertId, after: withBool(row[0]) });
+      await catat(conn, {
+        adminId,
+        action: "promo.create",
+        targetType: "promo",
+        targetId: ins.insertId,
+        after: withBool(row[0]),
+      });
       return withBool(row[0]);
     });
   } catch (e) {
@@ -113,15 +156,35 @@ export async function ubahPromo(adminId: number, idRaw: unknown, body: unknown) 
   return dalamTransaksi(async (conn) => {
     const before = await kunciPromo(conn, idRaw);
     const patch = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
-    const merged = { ...Object.fromEntries(FIELD.map((k) => [k, before[k] instanceof Date ? (before[k] as Date).toISOString() : before[k]])), ...Object.fromEntries(FIELD.filter((k) => k in patch).map((k) => [k, patch[k]])) };
+    const merged = {
+      ...Object.fromEntries(
+        FIELD.map((k) => [k, before[k] instanceof Date ? (before[k] as Date).toISOString() : before[k]]),
+      ),
+      ...Object.fromEntries(FIELD.filter((k) => k in patch).map((k) => [k, patch[k]])),
+    };
     const publik = publikDari(patch);
-    const data: Record<string, unknown> = { ...rapikan(merged, before.used_count).data, ...(publik === undefined ? {} : { is_public: publik }) };
-    const cols = [...FIELD, "is_public" as const].filter((c) => c in data && nilai(data[c]) !== nilai(c === "is_public" ? Boolean(before[c]) : before[c]));
+    const data: Record<string, unknown> = {
+      ...rapikan(merged, before.used_count).data,
+      ...(publik === undefined ? {} : { is_public: publik }),
+    };
+    const cols = [...FIELD, "is_public" as const].filter(
+      (c) => c in data && nilai(data[c]) !== nilai(c === "is_public" ? Boolean(before[c]) : before[c]),
+    );
     if (!cols.length) return withBool(before); // tidak ada perubahan: tanpa log
-    await conn.query(`UPDATE promos SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [...cols.map((c) => data[c]), before.id]);
+    await conn.query(`UPDATE promos SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [
+      ...cols.map((c) => data[c]),
+      before.id,
+    ]);
     const [after] = await conn.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [before.id]);
     const pick = (r: Record<string, unknown>) => Object.fromEntries(cols.map((c) => [c, r[c]]));
-    await catat(conn, { adminId, action: "promo.update", targetType: "promo", targetId: before.id, before: pick(before), after: pick(after[0]) });
+    await catat(conn, {
+      adminId,
+      action: "promo.update",
+      targetType: "promo",
+      targetId: before.id,
+      before: pick(before),
+      after: pick(after[0]),
+    });
     return withBool(after[0]);
   });
 }
@@ -132,18 +195,31 @@ export async function setAktifPromo(adminId: number, idRaw: unknown, aktif: bool
     const row = await kunciPromo(conn, idRaw);
     if (Boolean(row.is_active) === aktif) return withBool(row);
     await conn.query("UPDATE promos SET is_active = ? WHERE id = ?", [aktif, row.id]);
-    await catat(conn, { adminId, action: `promo.${aktif ? "activate" : "deactivate"}`, targetType: "promo", targetId: row.id, before: { is_active: !aktif }, after: { is_active: aktif } });
+    await catat(conn, {
+      adminId,
+      action: `promo.${aktif ? "activate" : "deactivate"}`,
+      targetType: "promo",
+      targetId: row.id,
+      before: { is_active: !aktif },
+      after: { is_active: aktif },
+    });
     return withBool({ ...row, is_active: aktif } as RowDataPacket);
   });
 }
 
 // --- Biaya layanan (app_settings.service_fee) ---
 const biaya = z.object({
-  value: z.number({ error: "Biaya wajib diisi." }).int("Biaya harus bilangan bulat.").min(0, "Biaya tidak boleh negatif.").max(100000, "Biaya maksimal 100.000."),
+  value: z
+    .number({ error: "Biaya wajib diisi." })
+    .int("Biaya harus bilangan bulat.")
+    .min(0, "Biaya tidak boleh negatif.")
+    .max(100000, "Biaya maksimal 100.000."),
 });
 
 export async function ambilBiaya(conn: Pick<typeof db, "query"> = db): Promise<number> {
-  const [rows] = await conn.query<RowDataPacket[]>("SELECT setting_value FROM app_settings WHERE setting_key = 'service_fee'");
+  const [rows] = await conn.query<RowDataPacket[]>(
+    "SELECT setting_value FROM app_settings WHERE setting_key = 'service_fee'",
+  );
   const n = parseInt(rows[0]?.setting_value ?? "0", 10);
   return Number.isFinite(n) ? n : 0;
 }
@@ -156,26 +232,44 @@ export async function ubahBiaya(adminId: number, body: unknown) {
     const lama = await ambilBiaya(conn);
     if (lama === value) return { service_fee: lama };
     await conn.query("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'service_fee'", [String(value)]);
-    await catat(conn, { adminId, action: "settings.service_fee", targetType: "settings", targetId: "service_fee", before: { value: lama }, after: { value } });
+    await catat(conn, {
+      adminId,
+      action: "settings.service_fee",
+      targetType: "settings",
+      targetId: "service_fee",
+      before: { value: lama },
+      after: { value },
+    });
     return { service_fee: value };
   });
 }
 
 // --- Kontak CS (app_settings.cs_whatsapp); "" = belum diatur ---
 export async function ambilKontakCs(): Promise<string | null> {
-  const [rows] = await db.query<RowDataPacket[]>("SELECT setting_value FROM app_settings WHERE setting_key = 'cs_whatsapp'");
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT setting_value FROM app_settings WHERE setting_key = 'cs_whatsapp'",
+  );
   return rows[0]?.setting_value || null;
 }
 
 export async function ubahKontakCs(adminId: number, wa: string) {
   return dalamTransaksi(async (conn) => {
     await conn.query("INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES ('cs_whatsapp', '')");
-    const [[r]] = await conn.query<RowDataPacket[]>("SELECT setting_value FROM app_settings WHERE setting_key = 'cs_whatsapp' FOR UPDATE");
+    const [[r]] = await conn.query<RowDataPacket[]>(
+      "SELECT setting_value FROM app_settings WHERE setting_key = 'cs_whatsapp' FOR UPDATE",
+    );
     const lama = r.setting_value || null;
     const baru = wa || null;
     if (lama === baru) return { cs_whatsapp: lama };
     await conn.query("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'cs_whatsapp'", [wa]);
-    await catat(conn, { adminId, action: "settings.cs_whatsapp", targetType: "settings", targetId: "cs_whatsapp", before: { value: lama }, after: { value: baru } });
+    await catat(conn, {
+      adminId,
+      action: "settings.cs_whatsapp",
+      targetType: "settings",
+      targetId: "cs_whatsapp",
+      before: { value: lama },
+      after: { value: baru },
+    });
     return { cs_whatsapp: baru };
   });
 }

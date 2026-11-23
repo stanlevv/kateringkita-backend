@@ -29,10 +29,12 @@ export async function hitungUlangRating(conn: Pick<Conn, "query">, menuIds: numb
 export async function kirimUlasan(userId: number, code: string, data: UlasanInput) {
   return dalamTransaksi(async (conn) => {
     const [[o]] = await conn.query<RowDataPacket[]>(
-      "SELECT id, merchant_id, status FROM orders WHERE code = ? AND customer_id = ? FOR UPDATE", [code, userId],
+      "SELECT id, merchant_id, status FROM orders WHERE code = ? AND customer_id = ? FOR UPDATE",
+      [code, userId],
     );
     if (!o) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
-    if (o.status !== "completed") throw new AppError(409, "CONFLICT", "Ulasan hanya bisa untuk pesanan yang sudah selesai.");
+    if (o.status !== "completed")
+      throw new AppError(409, "CONFLICT", "Ulasan hanya bisa untuk pesanan yang sudah selesai.");
     const [items] = await conn.query<RowDataPacket[]>(
       `SELECT DISTINCT i.menu_id, r.id AS sudah FROM order_items i LEFT JOIN reviews r ON r.order_id = i.order_id AND r.menu_id = i.menu_id
        WHERE i.order_id = ?`,
@@ -46,10 +48,16 @@ export async function kirimUlasan(userId: number, code: string, data: UlasanInpu
       else if (peta.get(it.menu_id) || dilihat.has(it.menu_id)) f[`items.${i}.menu_id`] = ["Menu ini sudah diulas."];
       dilihat.add(it.menu_id);
     });
-    if (Object.keys(f).length) throw new AppError(409, "CONFLICT", "Sebagian menu sudah diulas atau tidak ada di pesanan ini.", f);
-    await conn.query("INSERT INTO reviews (order_id, menu_id, customer_id, rating, comment) VALUES ?",
-      [data.items.map((it) => [o.id, it.menu_id, userId, it.rating, it.comment])]);
-    await hitungUlangRating(conn, data.items.map((it) => it.menu_id), o.merchant_id);
+    if (Object.keys(f).length)
+      throw new AppError(409, "CONFLICT", "Sebagian menu sudah diulas atau tidak ada di pesanan ini.", f);
+    await conn.query("INSERT INTO reviews (order_id, menu_id, customer_id, rating, comment) VALUES ?", [
+      data.items.map((it) => [o.id, it.menu_id, userId, it.rating, it.comment]),
+    ]);
+    await hitungUlangRating(
+      conn,
+      data.items.map((it) => it.menu_id),
+      o.merchant_id,
+    );
     return { order_code: code, reviewed_menu_ids: data.items.map((it) => it.menu_id) };
   });
 }
@@ -64,6 +72,12 @@ export async function daftarUlasanToko(userId: number) {
     [await idToko(userId)],
   );
   return rows.map((r) => ({
-    id: r.id, menu_id: r.menu_id, menu_name: r.menu_name, customer_name: r.customer_name, rating: r.rating, comment: r.comment, created_at: r.created_at,
+    id: r.id,
+    menu_id: r.menu_id,
+    menu_name: r.menu_name,
+    customer_name: r.customer_name,
+    rating: r.rating,
+    comment: r.comment,
+    created_at: r.created_at,
   }));
 }

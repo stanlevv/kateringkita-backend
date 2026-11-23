@@ -29,6 +29,7 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
   if (db?.sql !== undefined) console.error(`[${rid}] Galat DB ${db.code}: ${db.message}`);
   else console.error(`[${rid}]`, err);
   // F23: ringkasan galat untuk server_logs (tanpa SQL/parameter yang bisa memuat data pembeli)
-  res.locals.galat = db?.sql !== undefined ? `Galat DB ${db.code}` : String((err as Error)?.message ?? err).slice(0, 500);
+  res.locals.galat =
+    db?.sql !== undefined ? `Galat DB ${db.code}` : String((err as Error)?.message ?? err).slice(0, 500);
   res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Terjadi kesalahan pada server." } });
 };

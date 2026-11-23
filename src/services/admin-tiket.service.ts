@@ -3,7 +3,16 @@ import db from "../config/db";
 import { DaftarTiketAdmin } from "../dto/tiket.dto";
 import { catat, Conn, dalamTransaksi } from "./admin-audit.service";
 import { pola } from "./pesanan.service";
-import { KOLOM_RINGKAS, NAMA_TIM, bacaTiket, detail, kunciTiket, ringkas, tambahPesan, tiketDitutup } from "./tiket.service";
+import {
+  KOLOM_RINGKAS,
+  NAMA_TIM,
+  bacaTiket,
+  detail,
+  kunciTiket,
+  ringkas,
+  tambahPesan,
+  tiketDitutup,
+} from "./tiket.service";
 
 // Tiket bantuan (CS) sisi admin; semua tingkat admin boleh baca & balas (middleware/admin-akses.ts). Pembeli: tiket.service.ts.
 
@@ -16,7 +25,9 @@ export async function daftarTiketAdmin(f: DaftarTiketAdmin) {
     args.push(f.status);
   }
   if (f.q) {
-    where.push("(LOWER(t.code) LIKE LOWER(?) OR LOWER(t.subject) LIKE LOWER(?) OR LOWER(u.full_name) LIKE LOWER(?) OR u.phone LIKE ?)");
+    where.push(
+      "(LOWER(t.code) LIKE LOWER(?) OR LOWER(t.subject) LIKE LOWER(?) OR LOWER(u.full_name) LIKE LOWER(?) OR u.phone LIKE ?)",
+    );
     const p = pola(f.q);
     args.push(p, p, p, p);
   }
@@ -29,7 +40,10 @@ export async function daftarTiketAdmin(f: DaftarTiketAdmin) {
      ${w} ORDER BY t.last_message_at ${arah}, t.id ${arah} LIMIT ? OFFSET ?`,
     [...args, f.limit, (f.page - 1) * f.limit],
   );
-  const [[n]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM support_tickets t JOIN users u ON u.id = t.user_id ${w}`, args);
+  const [[n]] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS n FROM support_tickets t JOIN users u ON u.id = t.user_id ${w}`,
+    args,
+  );
   // counts = angka di tab: seluruh tiket per status, tidak terpengaruh filter/pencarian/halaman (seperti unread_count notifikasi, D13)
   const [per] = await db.query<RowDataPacket[]>("SELECT status, COUNT(*) AS n FROM support_tickets GROUP BY status");
   const counts = { open: 0, answered: 0, closed: 0 };
@@ -48,7 +62,13 @@ export async function detailTiketAdmin(code: string) {
     ...detail(b, (m) => m.nama ?? (m.sender_role === "admin" ? NAMA_TIM : null)),
     customer: { id: t.u_id, full_name: t.u_name, phone: t.u_phone, email: t.u_email },
     order: t.order_code
-      ? { code: t.order_code, status: t.o_status, total: t.o_total, merchant_name: t.o_merchant, created_at: t.o_created_at }
+      ? {
+          code: t.order_code,
+          status: t.o_status,
+          total: t.o_total,
+          merchant_name: t.o_merchant,
+          created_at: t.o_created_at,
+        }
       : null,
   };
 }
@@ -66,12 +86,18 @@ export async function balasTiketAdmin(adminId: number, code: string, body: strin
   await dalamTransaksi(async (conn) => {
     const t = await kunciTiket(conn, code);
     if (t.status === "closed") throw tiketDitutup();
-    await conn.query("UPDATE support_tickets SET status = 'answered', last_message_at = UTC_TIMESTAMP() WHERE id = ?", [t.id]);
+    await conn.query("UPDATE support_tickets SET status = 'answered', last_message_at = UTC_TIMESTAMP() WHERE id = ?", [
+      t.id,
+    ]);
     const messageId = await tambahPesan(conn, t.id, "admin", adminId, body);
     await kabari(conn, t, `Balasan tiket ${t.code}`, `${NAMA_TIM} membalas "${t.subject}".`);
     await catat(conn, {
-      adminId, action: "ticket.reply", targetType: "ticket", targetId: t.code,
-      before: { status: t.status }, after: { status: "answered", message_id: messageId },
+      adminId,
+      action: "ticket.reply",
+      targetType: "ticket",
+      targetId: t.code,
+      before: { status: t.status },
+      after: { status: "answered", message_id: messageId },
     });
   });
   return detailTiketAdmin(code);
@@ -82,10 +108,18 @@ export async function tutupTiketAdmin(adminId: number, code: string) {
   await dalamTransaksi(async (conn) => {
     const t = await kunciTiket(conn, code);
     if (t.status === "closed") return;
-    await conn.query("UPDATE support_tickets SET status = 'closed', closed_at = UTC_TIMESTAMP(), closed_by = 'admin' WHERE id = ?", [t.id]);
+    await conn.query(
+      "UPDATE support_tickets SET status = 'closed', closed_at = UTC_TIMESTAMP(), closed_by = 'admin' WHERE id = ?",
+      [t.id],
+    );
     await kabari(conn, t, `Tiket ${t.code} ditutup`, `Tiket "${t.subject}" ditutup oleh ${NAMA_TIM}.`);
     await catat(conn, {
-      adminId, action: "ticket.close", targetType: "ticket", targetId: t.code, before: { status: t.status }, after: { status: "closed" },
+      adminId,
+      action: "ticket.close",
+      targetType: "ticket",
+      targetId: t.code,
+      before: { status: t.status },
+      after: { status: "closed" },
     });
   });
   return detailTiketAdmin(code);

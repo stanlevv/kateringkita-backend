@@ -8,7 +8,14 @@ import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
 import { env } from "../config/env";
 import { cekUrlGambar } from "./upload.service";
-import { ChangePasswordInput, LoginInput, normalizeIdentifier, RegisterCustomerInput, RegisterMerchantInput, UpdateMeInput } from "../dto/auth.dto";
+import {
+  ChangePasswordInput,
+  LoginInput,
+  normalizeIdentifier,
+  RegisterCustomerInput,
+  RegisterMerchantInput,
+  UpdateMeInput,
+} from "../dto/auth.dto";
 
 export type PublicUser = {
   id: number;
@@ -51,7 +58,10 @@ export async function insertUser(
   const email = input.email ?? null;
   // AUD-37: nomor/email terdaftar ditolak sebelum bcrypt. Bentuknya sama dengan ER_DUP_ENTRY (yang tetap menjaga race)
   // agar semua penanganan duplikat yang ada (errorHandler, admin-akun) tetap berlaku
-  const [ada] = await conn.query<RowDataPacket[]>("SELECT 1 FROM users WHERE phone = ? OR email = ? LIMIT 1", [input.phone, email]);
+  const [ada] = await conn.query<RowDataPacket[]>("SELECT 1 FROM users WHERE phone = ? OR email = ? LIMIT 1", [
+    input.phone,
+    email,
+  ]);
   if (ada.length) throw Object.assign(new Error("Duplicate entry (dicek sebelum bcrypt)"), { code: "ER_DUP_ENTRY" });
   const hash = await bcrypt.hash(input.password, BCRYPT_COST);
   const [result] = await conn.query<ResultSetHeader>(
@@ -119,7 +129,10 @@ const toPublicUser = (r: RowDataPacket): PublicUser => ({
   phone: r.phone,
   avatar_url: r.avatar_url,
   favorite_pickup_point_id: r.favorite_pickup_point_id,
-  ...(r.role === "admin" && { admin_level: r.admin_level ?? null, must_change_password: Boolean(r.must_change_password) }),
+  ...(r.role === "admin" && {
+    admin_level: r.admin_level ?? null,
+    must_change_password: Boolean(r.must_change_password),
+  }),
 });
 
 export async function getMe(userId: number): Promise<{ user: PublicUser; merchant: PublicMerchant | null }> {
@@ -148,8 +161,11 @@ export async function updateMe(
   }
   // email/nomor adalah pengenal masuk: perubahannya wajib dikonfirmasi dengan kata sandi
   if ("email" in sets || "phone" in sets) {
-    const [rows] = await db.query<RowDataPacket[]>("SELECT email, phone, password_hash FROM users WHERE id = ?", [userId]);
-    const changed = ("email" in sets && sets.email !== rows[0].email) || ("phone" in sets && sets.phone !== rows[0].phone);
+    const [rows] = await db.query<RowDataPacket[]>("SELECT email, phone, password_hash FROM users WHERE id = ?", [
+      userId,
+    ]);
+    const changed =
+      ("email" in sets && sets.email !== rows[0].email) || ("phone" in sets && sets.phone !== rows[0].phone);
     if (changed) {
       if (current_password === undefined) {
         throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
@@ -166,7 +182,9 @@ export async function updateMe(
   }
   if (pickup !== undefined) {
     if (pickup !== null) {
-      const [pts] = await db.query<RowDataPacket[]>("SELECT id FROM pickup_points WHERE id = ? AND is_active", [pickup]);
+      const [pts] = await db.query<RowDataPacket[]>("SELECT id FROM pickup_points WHERE id = ? AND is_active", [
+        pickup,
+      ]);
       if (pts.length === 0) {
         throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", {
           favorite_pickup_point_id: ["Titik temu tidak tersedia."],

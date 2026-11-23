@@ -34,17 +34,26 @@ export async function ringkasan(now = Date.now()) {
     "SELECT status, COUNT(*) AS n, COALESCE(SUM(total), 0) AS omzet FROM orders WHERE created_at >= ? AND created_at < ? GROUP BY status",
     [from, to],
   );
-  const orders_today = Object.fromEntries(STATUS_PESANAN.map((s) => [s, 0])) as Record<(typeof STATUS_PESANAN)[number], number>;
+  const orders_today = Object.fromEntries(STATUS_PESANAN.map((s) => [s, 0])) as Record<
+    (typeof STATUS_PESANAN)[number],
+    number
+  >;
   let revenue_today = 0;
   for (const r of perStatus) {
     orders_today[r.status as keyof typeof orders_today] = Number(r.n);
     if (r.status === "completed") revenue_today = Number(r.omzet);
   }
-  const [toko] = await db.query<RowDataPacket[]>("SELECT verification_status, is_open, open_time, close_time FROM merchants");
-  const merchants = { ...Object.fromEntries(STATUSES.map((s) => [s, 0])), open_now: 0 } as Record<(typeof STATUSES)[number] | "open_now", number>;
+  const [toko] = await db.query<RowDataPacket[]>(
+    "SELECT verification_status, is_open, open_time, close_time FROM merchants",
+  );
+  const merchants = { ...Object.fromEntries(STATUSES.map((s) => [s, 0])), open_now: 0 } as Record<
+    (typeof STATUSES)[number] | "open_now",
+    number
+  >;
   for (const m of toko) {
     merchants[m.verification_status as (typeof STATUSES)[number]]++;
-    if (m.verification_status === "verified" && m.is_open && sedangBuka(now, String(m.open_time), String(m.close_time))) merchants.open_now++;
+    if (m.verification_status === "verified" && m.is_open && sedangBuka(now, String(m.open_time), String(m.close_time)))
+      merchants.open_now++;
   }
   const [hold] = await db.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM orders WHERE status = 'holding' AND hold_until >= ? AND hold_until <= ?",

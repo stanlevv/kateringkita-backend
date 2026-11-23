@@ -5,7 +5,9 @@ test("koneksi pool berzona waktu UTC; CURRENT_TIMESTAMP = UTC_TIMESTAMP()", asyn
   const conns = await Promise.all([db.getConnection(), db.getConnection()]);
   try {
     for (const c of conns) {
-      const [r] = await c.query<any[]>("SELECT @@session.time_zone AS tz, ABS(TIMESTAMPDIFF(SECOND, CURRENT_TIMESTAMP, UTC_TIMESTAMP())) AS d");
+      const [r] = await c.query<any[]>(
+        "SELECT @@session.time_zone AS tz, ABS(TIMESTAMPDIFF(SECOND, CURRENT_TIMESTAMP, UTC_TIMESTAMP())) AS d",
+      );
       expect(r[0].tz).toBe("+00:00");
       expect(Number(r[0].d)).toBeLessThanOrEqual(2);
     }

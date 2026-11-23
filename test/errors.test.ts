@@ -19,7 +19,9 @@ function makeApp() {
   });
   a.get("/sql", () => {
     throw Object.assign(new Error("Check constraint 'menus_chk_2' is violated."), {
-      code: "ER_CHECK_CONSTRAINT_VIOLATED", errno: 3819, sql: "INSERT INTO orders (customer_phone) VALUES ('081234567890')",
+      code: "ER_CHECK_CONSTRAINT_VIOLATED",
+      errno: 3819,
+      sql: "INSERT INTO orders (customer_phone) VALUES ('081234567890')",
     });
   });
   a.post("/echo", (req, res) => {

@@ -7,7 +7,16 @@ import { dalamTransaksi } from "./admin-audit.service";
 import { AppError } from "../utils/errors";
 import { jam, jamWib, SISA } from "./katalog.service";
 import { hariIniWib } from "./merchant-kuota.service";
-import { Hasil, Kurang, kodeVoucher, muatKeranjang, periksa, terapkanVoucher, tolakPromo, voucherTerpakai } from "./pesanan-keranjang.service";
+import {
+  Hasil,
+  Kurang,
+  kodeVoucher,
+  muatKeranjang,
+  periksa,
+  terapkanVoucher,
+  tolakPromo,
+  voucherTerpakai,
+} from "./pesanan-keranjang.service";
 import { DaftarSaya, PesananInput, QuoteInput, quoteSchema } from "../dto/pesanan.dto";
 import { Status, transisi } from "./pesanan-status.service";
 
@@ -21,13 +30,25 @@ export async function quote(userId: number, data: QuoteInput) {
   return {
     // mapper eksplisit (R-11): hpp tidak keluar
     items: h.baris.map((b) => ({
-      menu_id: b.menu_id, menu_name: b.menu_name, qty: b.qty, unit_price: b.unit_price, options: b.options, line_total: b.line_total,
+      menu_id: b.menu_id,
+      menu_name: b.menu_name,
+      qty: b.qty,
+      unit_price: b.unit_price,
+      options: b.options,
+      line_total: b.line_total,
       available: b.available,
     })),
-    subtotal: h.subtotal, discount: h.discount, merchant_discount: h.merchant_discount, platform_discount: h.platform_discount,
-    service_fee: h.service_fee, total: h.total, vouchers_applied: voucherTerpakai(h, v),
+    subtotal: h.subtotal,
+    discount: h.discount,
+    merchant_discount: h.merchant_discount,
+    platform_discount: h.platform_discount,
+    service_fee: h.service_fee,
+    total: h.total,
+    vouchers_applied: voucherTerpakai(h, v),
     warnings: h.kurang.map((k) => ({
-      code: "OUT_OF_STOCK", menu_id: k.menu_id, available: k.available,
+      code: "OUT_OF_STOCK",
+      menu_id: k.menu_id,
+      available: k.available,
       message: `Sisa ${k.menu_name} tinggal ${k.available} ${k.unit_label}.`,
     })),
   };
@@ -46,10 +67,15 @@ export const MAKS_PORSI_PEMBELI = 20;
 export const MAKS_PORSI_MEJA = 30;
 export const totalPorsi = (items: { qty: number }[]) => items.reduce((s, i) => s + i.qty, 0);
 // baca berkunci (FOR UPDATE) seperti hitungan pesanan menunggu: data terbaru, dan pemanggil sudah serial per pembeli/meja
-export async function porsiTertahan(conn: PoolConnection, kolom: "customer_id" | "table_id", id: number): Promise<number> {
+export async function porsiTertahan(
+  conn: PoolConnection,
+  kolom: "customer_id" | "table_id",
+  id: number,
+): Promise<number> {
   const [[r]] = await conn.query<RowDataPacket[]>(
     `SELECT COALESCE(SUM(i.qty), 0) AS porsi FROM orders o JOIN order_items i ON i.order_id = o.id
-     WHERE o.${kolom} = ? AND o.status = 'holding' AND o.hold_until > UTC_TIMESTAMP() FOR UPDATE`, [id],
+     WHERE o.${kolom} = ? AND o.status = 'holding' AND o.hold_until > UTC_TIMESTAMP() FOR UPDATE`,
+    [id],
   );
   return Number(r.porsi);
 }
@@ -57,12 +83,24 @@ export async function porsiTertahan(conn: PoolConnection, kolom: "customer_id" |
 const bentrokKode = (e: unknown) => dup(e) && /for key '(orders\.)?code'/.test(String((e as Error).message));
 const KLAIM_ADA = Symbol("klaim");
 
-export const habis = (kurang: Kurang[]) => new AppError(409, "OUT_OF_STOCK", "Sisa porsi tidak cukup.",
-  Object.fromEntries(kurang.map((k) => [`items.${k.index}.qty`, [`Sisa ${Math.max(k.available, 0)} ${k.unit_label}.`]])));
+export const habis = (kurang: Kurang[]) =>
+  new AppError(
+    409,
+    "OUT_OF_STOCK",
+    "Sisa porsi tidak cukup.",
+    Object.fromEntries(
+      kurang.map((k) => [`items.${k.index}.qty`, [`Sisa ${Math.max(k.available, 0)} ${k.unit_label}.`]]),
+    ),
+  );
 
 // D7: galat duplikat hanya membatalkan pernyataan, bukan transaksi → coba kode baru, maks 5 kali. `nilai(kode)` = parameter INSERT.
 // Dipakai checkout pembeli (F06) dan pesanan meja (F21).
-export async function sisipPesanan(conn: PoolConnection, hari: string, sql: string, nilai: (kode: string) => unknown[]) {
+export async function sisipPesanan(
+  conn: PoolConnection,
+  hari: string,
+  sql: string,
+  nilai: (kode: string) => unknown[],
+) {
   for (let i = 0; ; i++) {
     const code = kodePesanan(hari);
     try {
@@ -89,7 +127,10 @@ export async function tahanStokDanItem(conn: PoolConnection, orderId: number, h:
     );
     if (r.affectedRows === 0) {
       // sisa terbaru untuk pesan galat (baca berkunci = data terbaru, bukan snapshot); seluruh transaksi lalu di-rollback
-      const [[m]] = await conn.query<RowDataPacket[]>(`SELECT ${SISA} AS available FROM menus x WHERE id = ? FOR UPDATE`, [hari, mid]);
+      const [[m]] = await conn.query<RowDataPacket[]>(
+        `SELECT ${SISA} AS available FROM menus x WHERE id = ? FOR UPDATE`,
+        [hari, mid],
+      );
       const i = h.baris.findIndex((x) => x.menu_id === mid);
       throw habis([{ ...h.baris[i], index: i, available: Number(m.available) }]);
     }
@@ -97,7 +138,18 @@ export async function tahanStokDanItem(conn: PoolConnection, orderId: number, h:
   // R-05: salinan nama, harga, hpp, opsi
   await conn.query(
     "INSERT INTO order_items (order_id, menu_id, menu_name, unit_price, hpp, qty, options, line_total) VALUES ?",
-    [h.baris.map((b) => [orderId, b.menu_id, b.menu_name, b.unit_price, b.hpp, b.qty, JSON.stringify(b.options), b.line_total])],
+    [
+      h.baris.map((b) => [
+        orderId,
+        b.menu_id,
+        b.menu_name,
+        b.unit_price,
+        b.hpp,
+        b.qty,
+        JSON.stringify(b.options),
+        b.line_total,
+      ]),
+    ],
   );
 }
 
@@ -112,10 +164,16 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
       // Kunci baris pembeli lebih dulu: checkout satu pembeli jadi serial sehingga batas 3 holding (D11) tidak bisa dilampaui
       // request paralel. Harus sebelum INSERT klaim: FK klaim → users mengambil kunci bersama, dan dua transaksi yang sama-sama
       // memegangnya lalu meminta FOR UPDATE akan deadlock.
-      const [[u]] = await conn.query<RowDataPacket[]>("SELECT full_name, phone FROM users WHERE id = ? FOR UPDATE", [userId]);
+      const [[u]] = await conn.query<RowDataPacket[]>("SELECT full_name, phone FROM users WHERE id = ? FOR UPDATE", [
+        userId,
+      ]);
       // shortcut: order_idempotency tidak dibersihkan; hapus baris > 7 hari di job harian F08 bila tabel > 1 juta baris
       try {
-        await conn.query("INSERT INTO order_idempotency (customer_id, idem_key, request_hash) VALUES (?, ?, ?)", [userId, kunci, hash]);
+        await conn.query("INSERT INTO order_idempotency (customer_id, idem_key, request_hash) VALUES (?, ?, ?)", [
+          userId,
+          kunci,
+          hash,
+        ]);
       } catch (e) {
         if (dup(e)) throw KLAIM_ADA;
         throw e;
@@ -126,7 +184,8 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
         "SELECT COUNT(*) AS n FROM orders WHERE customer_id = ? AND status = 'holding' AND hold_until > UTC_TIMESTAMP() FOR UPDATE",
         [userId],
       );
-      if (Number(n.n) >= 3) throw new AppError(409, "CONFLICT", "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu.");
+      if (Number(n.n) >= 3)
+        throw new AppError(409, "CONFLICT", "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu.");
 
       const ms = jam.sekarang();
       const hari = hariIniWib(new Date(ms));
@@ -134,8 +193,12 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
       if (h.kurang.length) throw habis(h.kurang);
       // AUD-31: batas 3 pesanan saja tidak cukup (satu pesanan bisa berisi ratusan porsi): batasi juga porsi yang tertahan.
       // Setelah cek stok: stok yang memang kurang tetap dijawab OUT_OF_STOCK
-      if (await porsiTertahan(conn, "customer_id", userId) + totalPorsi(data.items) > MAKS_PORSI_PEMBELI) {
-        throw new AppError(409, "CONFLICT", `Maksimal ${MAKS_PORSI_PEMBELI} porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.`);
+      if ((await porsiTertahan(conn, "customer_id", userId)) + totalPorsi(data.items) > MAKS_PORSI_PEMBELI) {
+        throw new AppError(
+          409,
+          "CONFLICT",
+          `Maksimal ${MAKS_PORSI_PEMBELI} porsi menunggu per pembeli. Selesaikan atau batalkan pesanan lain dulu.`,
+        );
       }
       const v = await terapkanVoucher(conn, h, kodeVoucher(data), userId, ms, data.payment_method);
       const dipakai = [v.toko, v.platform].filter((p): p is RowDataPacket => p !== null).sort((a, b) => a.id - b.id);
@@ -145,32 +208,72 @@ export async function buatPesanan(userId: number, kunci: string, data: PesananIn
         // shortcut: reset kuota harian (segarkanKuota, menus) berjalan sebelum ini pada checkout pertama hari itu; deadlock langka bila
         // bersamaan dengan batal berpromo di toko yang sama, coba ulang di klien cukup
         const [r] = await conn.query<ResultSetHeader>(
-          "UPDATE promos SET used_count = used_count + 1 WHERE id = ? AND (quota IS NULL OR used_count < quota)", [p.id],
+          "UPDATE promos SET used_count = used_count + 1 WHERE id = ? AND (quota IS NULL OR used_count < quota)",
+          [p.id],
         );
         if (!r.affectedRows) throw tolakPromo("Kuota promo sudah habis.");
       }
       // F26: semua non-tunai lewat Midtrans
       if (data.payment_method !== "cod" && !env.MIDTRANS_SERVER_KEY) {
-        throw new AppError(409, "CONFLICT", `Pembayaran ${data.payment_method === "va" ? "Virtual Account" : "online"} belum tersedia. Pilih metode lain.`);
+        throw new AppError(
+          409,
+          "CONFLICT",
+          `Pembayaran ${data.payment_method === "va" ? "Virtual Account" : "online"} belum tersedia. Pilih metode lain.`,
+        );
       }
 
-      const { orderId, code: c } = await sisipPesanan(conn, hari,
+      const { orderId, code: c } = await sisipPesanan(
+        conn,
+        hari,
         `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, status, customer_name, customer_phone, note, subtotal,
            discount, merchant_promo_id, merchant_discount, platform_promo_id, platform_discount, service_fee, total, promo_id, payment_method,
            payment_status, hold_until, stock_date, pickup_at)
          VALUES (?, ?, ?, ?, 'holding', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'unpaid', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?, ?)`,
-        (kode) => [kode, userId, h.merchant.id, data.pickup_point_id, data.customer_name ?? u.full_name, data.customer_phone ?? u.phone,
-          data.note, h.subtotal, h.discount, v.toko?.id ?? null, h.merchant_discount, v.platform?.id ?? null, h.platform_discount,
-          h.service_fee, h.total, data.payment_method, h.merchant.hold_minutes, hari, data.pickup_at ? new Date(data.pickup_at) : null],
+        (kode) => [
+          kode,
+          userId,
+          h.merchant.id,
+          data.pickup_point_id,
+          data.customer_name ?? u.full_name,
+          data.customer_phone ?? u.phone,
+          data.note,
+          h.subtotal,
+          h.discount,
+          v.toko?.id ?? null,
+          h.merchant_discount,
+          v.platform?.id ?? null,
+          h.platform_discount,
+          h.service_fee,
+          h.total,
+          data.payment_method,
+          h.merchant.hold_minutes,
+          hari,
+          data.pickup_at ? new Date(data.pickup_at) : null,
+        ],
       );
       await tahanStokDanItem(conn, orderId, h, hari);
       // F12: dikembalikan bila pesanan batal/kedaluwarsa (transisi); satu baris per voucher
-      for (const [p, amount] of [[v.toko, h.merchant_discount], [v.platform, h.platform_discount]] as const) {
-        if (p) await conn.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, ?)", [p.id, orderId, userId, amount]);
+      for (const [p, amount] of [
+        [v.toko, h.merchant_discount],
+        [v.platform, h.platform_discount],
+      ] as const) {
+        if (p)
+          await conn.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, ?)", [
+            p.id,
+            orderId,
+            userId,
+            amount,
+          ]);
       }
-      await conn.query("INSERT INTO order_status_logs (order_id, from_status, to_status, actor_user_id) VALUES (?, NULL, 'holding', ?)",
-        [orderId, userId]);
-      await conn.query("UPDATE order_idempotency SET order_id = ? WHERE customer_id = ? AND idem_key = ?", [orderId, userId, kunci]);
+      await conn.query(
+        "INSERT INTO order_status_logs (order_id, from_status, to_status, actor_user_id) VALUES (?, NULL, 'holding', ?)",
+        [orderId, userId],
+      );
+      await conn.query("UPDATE order_idempotency SET order_id = ? WHERE customer_id = ? AND idem_key = ?", [
+        orderId,
+        userId,
+        kunci,
+      ]);
       return c;
     }, "READ COMMITTED");
   } catch (e) {
@@ -198,18 +301,33 @@ const DARI_PEMBELI = `${KOLOM}, o.merchant_id, m.business_name, m.wa_number,
     (SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.menu_id = i.menu_id)) AS belum_diulas
   FROM orders o JOIN merchants m ON m.id = o.merchant_id JOIN pickup_points p ON p.id = o.pickup_point_id`;
 
-export type Item = { menu_id: number; menu_name: string; qty: number; unit_price: number; options: unknown[]; line_total: number };
+export type Item = {
+  menu_id: number;
+  menu_name: string;
+  qty: number;
+  unit_price: number;
+  options: unknown[];
+  line_total: number;
+};
 
 // Item seluruh halaman dalam satu kueri (tanpa N+1); mapper eksplisit tanpa hpp (R-11)
 export async function muatItem(ids: number[]): Promise<Map<number, Item[]>> {
   const per = new Map<number, Item[]>();
   if (!ids.length) return per;
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT order_id, menu_id, menu_name, qty, unit_price, options, line_total FROM order_items WHERE order_id IN (?) ORDER BY id", [ids],
+    "SELECT order_id, menu_id, menu_name, qty, unit_price, options, line_total FROM order_items WHERE order_id IN (?) ORDER BY id",
+    [ids],
   );
   for (const i of rows) {
     const daftar = per.get(i.order_id) ?? per.set(i.order_id, []).get(i.order_id)!;
-    daftar.push({ menu_id: i.menu_id, menu_name: i.menu_name, qty: i.qty, unit_price: i.unit_price, options: i.options ?? [], line_total: i.line_total });
+    daftar.push({
+      menu_id: i.menu_id,
+      menu_name: i.menu_name,
+      qty: i.qty,
+      unit_price: i.unit_price,
+      options: i.options ?? [],
+      line_total: i.line_total,
+    });
   }
   return per;
 }
@@ -218,11 +336,24 @@ export async function muatItem(ids: number[]): Promise<Map<number, Item[]>> {
 export const dasarPesanan = (o: RowDataPacket, items: Item[]) => {
   const holding = o.status === "holding";
   return {
-    code: o.code, status: o.status, payment_method: o.payment_method, payment_status: o.payment_status,
-    hold_until: holding ? o.hold_until : null, seconds_left: holding ? Number(o.seconds_left) : null,
-    pickup_point: { id: o.pickup_point_id, name: o.p_name }, items,
-    subtotal: o.subtotal, discount: o.discount, service_fee: o.service_fee, total: o.total, note: o.note, pickup_at: o.pickup_at,
-    cancel_reason: o.cancel_reason, cancelled_by: o.cancelled_by, created_at: o.created_at, updated_at: o.updated_at,
+    code: o.code,
+    status: o.status,
+    payment_method: o.payment_method,
+    payment_status: o.payment_status,
+    hold_until: holding ? o.hold_until : null,
+    seconds_left: holding ? Number(o.seconds_left) : null,
+    pickup_point: { id: o.pickup_point_id, name: o.p_name },
+    items,
+    subtotal: o.subtotal,
+    discount: o.discount,
+    service_fee: o.service_fee,
+    total: o.total,
+    note: o.note,
+    pickup_at: o.pickup_at,
+    cancel_reason: o.cancel_reason,
+    cancelled_by: o.cancelled_by,
+    created_at: o.created_at,
+    updated_at: o.updated_at,
   };
 };
 
@@ -230,9 +361,11 @@ export const dasarPesanan = (o: RowDataPacket, items: Item[]) => {
 export const petaPesanan = (o: RowDataPacket, items: Item[]) => ({
   ...dasarPesanan(o, items),
   merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number },
-  can_cancel: (o.status === "holding" && Number(o.seconds_left) > 0) || (o.status === "confirmed" && o.payment_method === "cod"),
+  can_cancel:
+    (o.status === "holding" && Number(o.seconds_left) > 0) || (o.status === "confirmed" && o.payment_method === "cod"),
   // F13: masih ada menu yang belum diulas
-  can_complete: o.status === "ready", can_review: o.status === "completed" && Number(o.belum_diulas) > 0,
+  can_complete: o.status === "ready",
+  can_review: o.status === "completed" && Number(o.belum_diulas) > 0,
 });
 
 // pola LIKE sebagian dengan % _ \ di-escape; pemanggil membandingkan LOWER(kolom) LIKE LOWER(?) karena TiDB bawaan utf8mb4_bin (peka huruf)
@@ -241,21 +374,31 @@ export const pola = (q: string) => `%${q.replace(/[\\%_]/g, "\\$&")}%`;
 // D10–D12: satu COUNT + satu halaman + satu kueri item; urut terbaru. Dengan updated_since urut updated_at naik agar klien yang
 // maju memakai updated_at terbesar halaman sebelumnya tidak melompati perubahan.
 export async function halaman<T>(
-  dari: string, where: string[], args: unknown[], f: { page: number; limit: number; updated_since?: string },
+  dari: string,
+  where: string[],
+  args: unknown[],
+  f: { page: number; limit: number; updated_since?: string },
   peta: (o: RowDataPacket, items: Item[]) => T,
 ) {
   const urut = f.updated_since ? "o.updated_at ASC, o.id ASC" : "o.created_at DESC, o.id DESC";
   const w = where.join(" AND ");
   const [[n]] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM orders o WHERE ${w}`, args);
-  const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${dari} WHERE ${w} ORDER BY ${urut} LIMIT ? OFFSET ?`, [...args, f.limit, (f.page - 1) * f.limit],
-  );
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${dari} WHERE ${w} ORDER BY ${urut} LIMIT ? OFFSET ?`, [
+    ...args,
+    f.limit,
+    (f.page - 1) * f.limit,
+  ]);
   const items = await muatItem(rows.map((o) => o.id));
-  return { data: rows.map((o) => peta(o, items.get(o.id) ?? [])), meta: { page: f.page, limit: f.limit, total: Number(n.n) } };
+  return {
+    data: rows.map((o) => peta(o, items.get(o.id) ?? [])),
+    meta: { page: f.page, limit: f.limit, total: Number(n.n) },
+  };
 }
 
 const TAB: Record<DaftarSaya["tab"], Status[]> = {
-  active: ["holding", "confirmed", "cooking", "ready"], completed: ["completed"], cancelled: ["cancelled", "expired"],
+  active: ["holding", "confirmed", "cooking", "ready"],
+  completed: ["completed"],
+  cancelled: ["cancelled", "expired"],
 };
 
 // C-14 (D10, D11): updated_since mengabaikan tab agar pesanan yang pindah tab tetap terkirim
@@ -270,7 +413,9 @@ export async function daftarPesananSaya(userId: number, f: DaftarSaya) {
     args.push(TAB[f.tab]);
   }
   if (f.q) {
-    where.push("(LOWER(o.code) LIKE LOWER(?) OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND LOWER(i.menu_name) LIKE LOWER(?)))");
+    where.push(
+      "(LOWER(o.code) LIKE LOWER(?) OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND LOWER(i.menu_name) LIKE LOWER(?)))",
+    );
     args.push(pola(f.q), pola(f.q));
   }
   return halaman(DARI_PEMBELI, where, args, f, petaPesanan);
@@ -278,7 +423,10 @@ export async function daftarPesananSaya(userId: number, f: DaftarSaya) {
 
 // D16: Order §1 + payment; R-10 customer_id dari sesi, bukan milik → 404
 export async function bacaPesanan(userId: number, code: string) {
-  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${DARI_PEMBELI} WHERE o.code = ? AND o.customer_id = ?`, [code, userId]);
+  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${DARI_PEMBELI} WHERE o.code = ? AND o.customer_id = ?`, [
+    code,
+    userId,
+  ]);
   if (!o) throw tidakAda();
   const items = await muatItem([o.id]);
   const payment = { method: o.payment_method, status: o.payment_status, amount: o.total };
@@ -286,17 +434,19 @@ export async function bacaPesanan(userId: number, code: string) {
     // F26: halaman bayar Snap; null sampai POST /orders/:code/online, dan setelah lunas/tidak menunggu bayar lagi
     // QRIS di aplikasi: null sampai POST /orders/:code/qris; redirect_url baris qris = gambar QR Midtrans
     const [[p]] = await db.query<RowDataPacket[]>(
-      "SELECT redirect_url FROM payments WHERE order_id = ? AND method = 'online' ORDER BY id DESC LIMIT 1", [o.id],
+      "SELECT redirect_url FROM payments WHERE order_id = ? AND method = 'online' ORDER BY id DESC LIMIT 1",
+      [o.id],
     );
     const [[q]] = await db.query<RowDataPacket[]>(
-      "SELECT qr_string, redirect_url, expires_at FROM payments WHERE order_id = ? AND method = 'qris' ORDER BY id DESC LIMIT 1", [o.id],
+      "SELECT qr_string, redirect_url, expires_at FROM payments WHERE order_id = ? AND method = 'qris' ORDER BY id DESC LIMIT 1",
+      [o.id],
     );
     const menunggu = o.status === "holding" && o.payment_status !== "paid";
     return {
       ...petaPesanan(o, items.get(o.id) ?? []),
       payment: {
         ...payment,
-        payment_url: menunggu ? p?.redirect_url ?? null : null,
+        payment_url: menunggu ? (p?.redirect_url ?? null) : null,
         qris: menunggu && q ? { qr_string: q.qr_string, qr_url: q.redirect_url, expires_at: q.expires_at } : null,
       },
     };
@@ -304,9 +454,13 @@ export async function bacaPesanan(userId: number, code: string) {
   if (o.payment_method !== "va") return { ...petaPesanan(o, items.get(o.id) ?? []), payment };
   // F10: VA null sampai pembeli memilih bank lewat POST /orders/:code/va
   const [[va]] = await db.query<RowDataPacket[]>(
-    "SELECT bank, va_number, expires_at FROM payments WHERE order_id = ? AND method = 'va' ORDER BY id DESC LIMIT 1", [o.id],
+    "SELECT bank, va_number, expires_at FROM payments WHERE order_id = ? AND method = 'va' ORDER BY id DESC LIMIT 1",
+    [o.id],
   );
-  return { ...petaPesanan(o, items.get(o.id) ?? []), payment: { ...payment, va: va ? { bank: va.bank, va_number: va.va_number, expires_at: va.expires_at } : null } };
+  return {
+    ...petaPesanan(o, items.get(o.id) ?? []),
+    payment: { ...payment, va: va ? { bank: va.bank, va_number: va.va_number, expires_at: va.expires_at } : null },
+  };
 }
 
 // C-15, C-16 (D1, D8): transisi lalu bentuk terkini milik pembeli
@@ -314,35 +468,57 @@ const ubahSaya = async (userId: number, code: string, aksi: "cancel" | "complete
   await dalamTransaksi((c) => transisi(c, code, aksi, { jenis: "customer", userId }, reason));
   return bacaPesanan(userId, code);
 };
-export const batalkan = (userId: number, code: string, reason: string | null) => ubahSaya(userId, code, "cancel", reason);
+export const batalkan = (userId: number, code: string, reason: string | null) =>
+  ubahSaya(userId, code, "cancel", reason);
 export const selesaikan = (userId: number, code: string) => ubahSaya(userId, code, "complete");
 
 // D15 (C-13): teks tetap bersuara pembeli; wa_template toko (bersuara penjual) dipakai GET /merchant/orders/:code/whatsapp di F07
-const PESAN_PEMBELI = "Halo {toko}, saya {nama} memesan lewat KateringKita.\n\nKode: {kode}\nMenu: {menu}\nTotal: {total}\n"
-  + "Cara bayar: {metode_bayar}\nAmbil di: {titik_temu}\nWaktu ambil: {waktu_ambil}";
+const PESAN_PEMBELI =
+  "Halo {toko}, saya {nama} memesan lewat KateringKita.\n\nKode: {kode}\nMenu: {menu}\nTotal: {total}\n" +
+  "Cara bayar: {metode_bayar}\nAmbil di: {titik_temu}\nWaktu ambil: {waktu_ambil}";
 // qris: pesanan lama sebelum F26
-const METODE: Record<string, string> = { qris: "QRIS toko", va: "Virtual Account", cod: "Tunai", online: "Bayar online" };
+const METODE: Record<string, string> = {
+  qris: "QRIS toko",
+  va: "Virtual Account",
+  cod: "Tunai",
+  online: "Bayar online",
+};
 
 // Nilai placeholder; format sama dengan fe/lib/wa-template.ts (Rp 30.000, HH.MM WIB / Secepatnya, Tunai)
 export function nilaiWa(o: {
-  code: string; customer_name: string; business_name: string; items: { qty: number; menu_name: string }[]; total: number;
-  titik_temu: string; pickup_at: Date | null; payment_method: string; note: string | null;
+  code: string;
+  customer_name: string;
+  business_name: string;
+  items: { qty: number; menu_name: string }[];
+  total: number;
+  titik_temu: string;
+  pickup_at: Date | null;
+  payment_method: string;
+  note: string | null;
 }): Record<string, string> {
   return {
-    kode: o.code, nama: o.customer_name, toko: o.business_name,
+    kode: o.code,
+    nama: o.customer_name,
+    toko: o.business_name,
     menu: o.items.map((i) => `${i.qty}x ${i.menu_name}`).join(", "),
-    total: `Rp ${o.total.toLocaleString("id-ID")}`, titik_temu: o.titik_temu,
-    waktu_ambil: o.pickup_at ? `${hariAmbil(o.pickup_at)}${jamWib(o.pickup_at.getTime()).slice(0, 5).replace(":", ".")} WIB` : "Secepatnya",
-    metode_bayar: METODE[o.payment_method] ?? o.payment_method, catatan: o.note ?? "",
+    total: `Rp ${o.total.toLocaleString("id-ID")}`,
+    titik_temu: o.titik_temu,
+    waktu_ambil: o.pickup_at
+      ? `${hariAmbil(o.pickup_at)}${jamWib(o.pickup_at.getTime()).slice(0, 5).replace(":", ".")} WIB`
+      : "Secepatnya",
+    metode_bayar: METODE[o.payment_method] ?? o.payment_method,
+    catatan: o.note ?? "",
   };
 }
 
 const fmtTanggal = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" });
 // "3 November " bila hari ambil (WIB) bukan hari ini
-const hariAmbil = (d: Date) => (hariIniWib(d) === hariIniWib(new Date(jam.sekarang())) ? "" : `${fmtTanggal.format(d)} `);
+const hariAmbil = (d: Date) =>
+  hariIniWib(d) === hariIniWib(new Date(jam.sekarang())) ? "" : `${fmtTanggal.format(d)} `;
 
 // Placeholder dikenal diganti, yang tidak dikenal dibiarkan (sama dengan fe renderTemplate)
-export const render = (teks: string, nilai: Record<string, string>) => teks.replace(/\{[^{}\n]+\}/g, (k) => nilai[k.slice(1, -1)] ?? k);
+export const render = (teks: string, nilai: Record<string, string>) =>
+  teks.replace(/\{[^{}\n]+\}/g, (k) => nilai[k.slice(1, -1)] ?? k);
 
 // wa_number 08… / 628… / +628… → 628… (wa.me butuh kode negara tanpa +)
 export const tautanWa = (nomor: string, pesan: string) =>
@@ -357,20 +533,34 @@ export async function waPesanan(userId: number, code: string) {
     [code, userId],
   );
   if (!o) throw tidakAda();
-  const [items] = await db.query<RowDataPacket[]>("SELECT qty, menu_name FROM order_items WHERE order_id = ? ORDER BY id", [o.id]);
-  const message = render(PESAN_PEMBELI + (o.note ? "\nCatatan: {catatan}" : ""), nilaiWa({ ...o, items } as Parameters<typeof nilaiWa>[0]));
+  const [items] = await db.query<RowDataPacket[]>(
+    "SELECT qty, menu_name FROM order_items WHERE order_id = ? ORDER BY id",
+    [o.id],
+  );
+  const message = render(
+    PESAN_PEMBELI + (o.note ? "\nCatatan: {catatan}" : ""),
+    nilaiWa({ ...o, items } as Parameters<typeof nilaiWa>[0]),
+  );
   return { wa_number: o.wa_number, message, url: tautanWa(o.wa_number, message) };
 }
 
 // F14 pesan lagi: isi pesanan lama disusun ulang lalu dicek quote (harga, opsi, stok, promo terkini; tanpa tulis).
 // Klien menambah payment_method lalu mengirim `request` ke POST /orders.
 export async function pesanLagi(userId: number, code: string) {
-  const [[o]] = await db.query<RowDataPacket[]>("SELECT id, pickup_point_id, note FROM orders WHERE code = ? AND customer_id = ?", [code, userId]);
+  const [[o]] = await db.query<RowDataPacket[]>(
+    "SELECT id, pickup_point_id, note FROM orders WHERE code = ? AND customer_id = ?",
+    [code, userId],
+  );
   if (!o) throw tidakAda();
   const items = (await muatItem([o.id])).get(o.id) ?? [];
   const request = quoteSchema.parse({
-    items: items.map((i) => ({ menu_id: i.menu_id, qty: i.qty, option_ids: (i.options as { id: number }[]).map((x) => x.id) })),
-    pickup_point_id: o.pickup_point_id, note: o.note,
+    items: items.map((i) => ({
+      menu_id: i.menu_id,
+      qty: i.qty,
+      option_ids: (i.options as { id: number }[]).map((x) => x.id),
+    })),
+    pickup_point_id: o.pickup_point_id,
+    note: o.note,
   });
   return { request, quote: await quote(userId, request) };
 }

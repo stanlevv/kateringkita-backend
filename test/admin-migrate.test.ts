@@ -29,7 +29,13 @@ describe("migrasi 002_admin (A-05)", () => {
     );
     lamaId = m.insertId;
     await conn.end();
-    expect(await migrate(url)).toEqual(fs.readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort().slice(1));
+    expect(await migrate(url)).toEqual(
+      fs
+        .readdirSync(MIGRATIONS)
+        .filter((f) => f.endsWith(".sql"))
+        .sort()
+        .slice(1),
+    );
   });
 
   const query = async (sql: string, params: unknown[] = []) => {
@@ -48,12 +54,23 @@ describe("migrasi 002_admin (A-05)", () => {
     );
     const names = cols.map((r) => `${r.t}.${r.c}`);
     for (const n of [
-      "merchants.verification_status", "merchants.verification_note", "merchants.suspended_at", "merchants.suspended_reason",
-      "merchant_types.is_active", "merchant_types.sort_order",
-      "admin_audit_logs.id", "admin_audit_logs.admin_user_id", "admin_audit_logs.action", "admin_audit_logs.target_type",
-      "admin_audit_logs.target_id", "admin_audit_logs.reason", "admin_audit_logs.before_json", "admin_audit_logs.after_json",
+      "merchants.verification_status",
+      "merchants.verification_note",
+      "merchants.suspended_at",
+      "merchants.suspended_reason",
+      "merchant_types.is_active",
+      "merchant_types.sort_order",
+      "admin_audit_logs.id",
+      "admin_audit_logs.admin_user_id",
+      "admin_audit_logs.action",
+      "admin_audit_logs.target_type",
+      "admin_audit_logs.target_id",
+      "admin_audit_logs.reason",
+      "admin_audit_logs.before_json",
+      "admin_audit_logs.after_json",
       "admin_audit_logs.created_at",
-    ]) expect(names).toContain(n);
+    ])
+      expect(names).toContain(n);
   });
 
   test("merchant_types.sort_order lama = id", async () => {
@@ -69,8 +86,12 @@ describe("migrasi 002_admin (A-05)", () => {
 
   test("penjual yang daftar setelah 002 → pending", async () => {
     const { merchant } = await registerMerchant({
-      full_name: "Baru", phone: "081200000002", password: "rahasia123",
-      business_name: "Toko Baru", merchant_type_id: 1, address: "Jl. B",
+      full_name: "Baru",
+      phone: "081200000002",
+      password: "rahasia123",
+      business_name: "Toko Baru",
+      merchant_type_id: 1,
+      address: "Jl. B",
     });
     const [r] = await query("SELECT verification_status s, verified_at v FROM merchants WHERE id = ?", [merchant.id]);
     expect(r.s).toBe("pending");

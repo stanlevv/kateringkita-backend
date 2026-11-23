@@ -33,8 +33,13 @@ beforeAll(async () => {
   await request(app)
     .post("/api/v1/auth/merchant/register")
     .send({
-      full_name: "Siti", email: "siti@mail.com", phone: "081298765432", password: "rahasia123",
-      business_name: "Dapur Siti", merchant_type_id: 1, address: "Jl. Mawar 1",
+      full_name: "Siti",
+      email: "siti@mail.com",
+      phone: "081298765432",
+      password: "rahasia123",
+      business_name: "Dapur Siti",
+      merchant_type_id: 1,
+      address: "Jl. Mawar 1",
     })
     .expect(201);
   adminToken = (await login("081300000009")).body.data.token;
@@ -80,7 +85,10 @@ test("path admin tak dikenal: 401 tanpa token, 403 penjual, 404 admin", async ()
 });
 
 test("limit dibatasi 100", async () => {
-  const r = await request(app).get("/api/v1/admin/audit-logs?limit=9999").set("Authorization", `Bearer ${adminToken}`).expect(200);
+  const r = await request(app)
+    .get("/api/v1/admin/audit-logs?limit=9999")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .expect(200);
   expect(r.body.meta.limit).toBe(100);
 });
 
@@ -89,7 +97,10 @@ test("admin+mobile: satu bcrypt.compare, body sama dengan sandi salah", async ()
   const bener = await login("081300000009", "mobile").expect(401);
   expect(spy).toHaveBeenCalledTimes(1);
   spy.mockClear();
-  const salah = await request(app).post("/api/v1/auth/login").send({ identifier: "081300000009", password: "salahsalah1", client: "mobile" }).expect(401);
+  const salah = await request(app)
+    .post("/api/v1/auth/login")
+    .send({ identifier: "081300000009", password: "salahsalah1", client: "mobile" })
+    .expect(401);
   expect(spy).toHaveBeenCalledTimes(1);
   expect(bener.body).toEqual(salah.body);
   spy.mockRestore();
@@ -104,17 +115,36 @@ test("catat tersimpan & terbaca sebagai objek; rollback tidak meninggalkan baris
   let r = await request(app).get("/api/v1/admin/audit-logs").set("Authorization", `Bearer ${adminToken}`).expect(200);
   expect(r.body.data).toEqual([]);
 
-  await catat(db, { adminId, action: "uji.simpan", targetType: "merchant", targetId: 7, reason: "alasan", before: { a: 1 }, after: { a: 2 } });
+  await catat(db, {
+    adminId,
+    action: "uji.simpan",
+    targetType: "merchant",
+    targetId: 7,
+    reason: "alasan",
+    before: { a: 1 },
+    after: { a: 2 },
+  });
   r = await request(app).get("/api/v1/admin/audit-logs").set("Authorization", `Bearer ${adminToken}`).expect(200);
   expect(r.body.data).toHaveLength(1);
-  expect(r.body.data[0]).toMatchObject({ admin_name: "Admin Uji", action: "uji.simpan", target_id: "7", reason: "alasan", before: { a: 1 }, after: { a: 2 } });
+  expect(r.body.data[0]).toMatchObject({
+    admin_name: "Admin Uji",
+    action: "uji.simpan",
+    target_id: "7",
+    reason: "alasan",
+    before: { a: 1 },
+    after: { a: 2 },
+  });
   expect(r.body.meta.total).toBe(1);
 });
 
 test("rute tulis admin: token penjual → 403 tanpa baris log (review akhir A6)", async () => {
   const [[{ n }]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs");
   const [[m]] = await db.query<any[]>("SELECT id, verification_status FROM merchants LIMIT 1");
-  await request(app).post(`/api/v1/admin/merchants/${m.id}/suspend`).set("Authorization", `Bearer ${merchantToken}`).send({ reason: "coba" }).expect(403);
+  await request(app)
+    .post(`/api/v1/admin/merchants/${m.id}/suspend`)
+    .set("Authorization", `Bearer ${merchantToken}`)
+    .send({ reason: "coba" })
+    .expect(403);
   const [[after]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs");
   expect(after.n).toBe(n);
   const [[m2]] = await db.query<any[]>("SELECT verification_status FROM merchants WHERE id = ?", [m.id]);

@@ -18,19 +18,46 @@ const HARI = hariIniWib();
 const H = "2026-03-20"; // hari uji laporan per jam; completed_at disimpan UTC (WIB − 7 jam)
 // Hari uji tetap di masa lalu: batas WIB sama dengan "kemarin 17:30 UTC = hari ini 00:30 WIB" tanpa mencemari data hari ini
 const D = "2026-03-10";
-const get = (jalur: string, qs: string, token = s.tA) => request(app).get(`/api/v1/merchant/reports/${jalur}?${qs}`).set("Authorization", `Bearer ${token}`);
+const get = (jalur: string, qs: string, token = s.tA) =>
+  request(app).get(`/api/v1/merchant/reports/${jalur}?${qs}`).set("Authorization", `Bearer ${token}`);
 const ringkasan = (from: string, to = from) => get("summary", `from=${from}&to=${to}`);
 const salahTanggal = async (qs: string, pesan: string[]) => {
   const r = await get("hourly", qs).expect(400);
-  expect(r.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid.", fields: { date: pesan } });
+  expect(r.body.error).toMatchObject({
+    code: "VALIDATION_ERROR",
+    message: "Data tidak valid.",
+    fields: { date: pesan },
+  });
   expect(Object.keys(r.body.error.fields)).toEqual(["date"]);
 };
-const KUNCI_TRX = ["code", "completed_at", "created_at", "customer_name", "hpp_total", "menu_name", "payment_method", "qty", "status", "total"];
+const KUNCI_TRX = [
+  "code",
+  "completed_at",
+  "created_at",
+  "customer_name",
+  "hpp_total",
+  "menu_name",
+  "payment_method",
+  "qty",
+  "status",
+  "total",
+];
 
 // pesanan dua menu: 2× Nasi Ayam (15.000/HPP 9.000) + 1× Es Teh (5.000/HPP 2.000)
 async function pesanDua(token: string): Promise<string> {
-  const r = await request(app).post("/api/v1/orders").set("Authorization", `Bearer ${token}`).set("Idempotency-Key", randomUUID())
-    .send({ items: [{ menu_id: s.menu, qty: 2 }, { menu_id: s.menu2, qty: 1 }], pickup_point_id: 1, payment_method: "cod" }).expect(201);
+  const r = await request(app)
+    .post("/api/v1/orders")
+    .set("Authorization", `Bearer ${token}`)
+    .set("Idempotency-Key", randomUUID())
+    .send({
+      items: [
+        { menu_id: s.menu, qty: 2 },
+        { menu_id: s.menu2, qty: 1 },
+      ],
+      pickup_point_id: 1,
+      payment_method: "cod",
+    })
+    .expect(201);
   return r.body.data.code;
 }
 
@@ -77,9 +104,18 @@ describe("GET /merchant/reports/summary", () => {
   test("hari ini: revenue/hpp dari order_items pesanan selesai toko sendiri; status lain & toko B tidak ikut", async () => {
     const [[q]] = await db.query<any[]>(
       `SELECT SUM(oi.line_total) AS r, SUM(oi.hpp * oi.qty) AS h FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       WHERE o.merchant_id = ? AND o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?`, [s.idA, ...rentangUtc({ from: HARI, to: HARI })]);
+       WHERE o.merchant_id = ? AND o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?`,
+      [s.idA, ...rentangUtc({ from: HARI, to: HARI })],
+    );
     const r = await ringkasan(HARI).expect(200);
-    expect(r.body.data).toEqual({ target: 0, revenue: 50000, hpp_total: 26000, profit: 24000, achievement_pct: 0, orders: 2 });
+    expect(r.body.data).toEqual({
+      target: 0,
+      revenue: 50000,
+      hpp_total: 26000,
+      profit: 24000,
+      achievement_pct: 0,
+      orders: 2,
+    });
     expect(r.body.data.revenue).toBe(Number(q.r));
     expect(r.body.data.hpp_total).toBe(Number(q.h));
   });
@@ -92,7 +128,11 @@ describe("GET /merchant/reports/summary", () => {
   test("target = target harian × jumlah hari; achievement_pct dibulatkan, boleh > 100; target 0 → 0", async () => {
     await db.query("UPDATE merchants SET daily_revenue_target = 100000 WHERE id = ?", [s.idA]);
     const r = await ringkasan(geser(HARI, -2), HARI).expect(200);
-    expect(r.body.data).toMatchObject({ target: 300000, revenue: 50000, achievement_pct: Math.round((50000 / 300000) * 100) });
+    expect(r.body.data).toMatchObject({
+      target: 300000,
+      revenue: 50000,
+      achievement_pct: Math.round((50000 / 300000) * 100),
+    });
     await db.query("UPDATE merchants SET daily_revenue_target = 20000 WHERE id = ?", [s.idA]);
     expect((await ringkasan(HARI).expect(200)).body.data).toMatchObject({ target: 20000, achievement_pct: 250 });
     await db.query("UPDATE merchants SET daily_revenue_target = 0 WHERE id = ?", [s.idA]);
@@ -106,7 +146,11 @@ describe("GET /merchant/reports/summary", () => {
     k.y = await pesanDulu(s.tCust, s.menu2); // 23:59:59 WIB tanggal D-1
     await atur(k.y, { status: "completed", completed_at: new Date(`${hari}T16:59:59Z`) });
     k.z = await pesanDulu(s.tCust, s.menu2); // dibuat D-2, selesai D
-    await atur(k.z, { status: "completed", created_at: wib(geser(D, -2), "10:00:00"), completed_at: wib(D, "09:00:00") });
+    await atur(k.z, {
+      status: "completed",
+      created_at: wib(geser(D, -2), "10:00:00"),
+      completed_at: wib(D, "09:00:00"),
+    });
     expect((await ringkasan(D).expect(200)).body.data).toMatchObject({ revenue: 10000, orders: 2 });
     expect((await ringkasan(hari).expect(200)).body.data).toMatchObject({ revenue: 5000, orders: 1 });
     expect((await ringkasan(geser(D, -2)).expect(200)).body.data).toMatchObject({ revenue: 0, orders: 0 });
@@ -123,12 +167,26 @@ describe("GET /merchant/reports/transactions", () => {
   test("satu baris per item, kunci persis, urut completed_at terbaru; toko B & status lain tidak ikut", async () => {
     const r = await get("transactions", `from=${HARI}&to=${HARI}`).expect(200);
     for (const t of r.body.data) expect(Object.keys(t).sort()).toEqual(KUNCI_TRX);
-    expect(r.body.data.map((t: any) => [t.code, t.menu_name])).toEqual([[k.satu, "Es Teh"], [k.multi, "Nasi Ayam"], [k.multi, "Es Teh"]]);
+    expect(r.body.data.map((t: any) => [t.code, t.menu_name])).toEqual([
+      [k.satu, "Es Teh"],
+      [k.multi, "Nasi Ayam"],
+      [k.multi, "Es Teh"],
+    ]);
     expect(r.body.data[0]).toMatchObject({
-      customer_name: "Budi", payment_method: "cod", qty: 3, total: 15000, hpp_total: 6000, status: "completed",
+      customer_name: "Budi",
+      payment_method: "cod",
+      qty: 3,
+      total: 15000,
+      hpp_total: 6000,
+      status: "completed",
       completed_at: wib(HARI, "12:00:00").toISOString(),
     });
-    expect(r.body.data[1]).toMatchObject({ qty: 2, total: 30000, hpp_total: 18000, completed_at: wib(HARI, "09:00:00").toISOString() });
+    expect(r.body.data[1]).toMatchObject({
+      qty: 2,
+      total: 30000,
+      hpp_total: 18000,
+      completed_at: wib(HARI, "09:00:00").toISOString(),
+    });
     expect(typeof r.body.data[1].created_at).toBe("string");
   });
 

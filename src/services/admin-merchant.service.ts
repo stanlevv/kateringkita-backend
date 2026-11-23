@@ -10,22 +10,28 @@ type Status = (typeof STATUSES)[number];
 type Rule = { action: string; from: Status[]; set: string; cols: string[]; reason?: "note" | "suspend" };
 const RULES: Record<string, Rule> = {
   verify: {
-    action: "merchant.verify", from: ["pending", "needs_fix"],
+    action: "merchant.verify",
+    from: ["pending", "needs_fix"],
     set: "verification_status='verified', verified_at=UTC_TIMESTAMP(), verification_note=NULL",
     cols: ["verification_status", "verified_at", "verification_note"],
   },
   "request-fix": {
-    action: "merchant.request_fix", from: ["pending"],
+    action: "merchant.request_fix",
+    from: ["pending"],
     set: "verification_status='needs_fix', verification_note=?",
-    cols: ["verification_status", "verification_note"], reason: "note",
+    cols: ["verification_status", "verification_note"],
+    reason: "note",
   },
   suspend: {
-    action: "merchant.suspend", from: ["pending", "needs_fix", "verified"],
+    action: "merchant.suspend",
+    from: ["pending", "needs_fix", "verified"],
     set: "verification_status='suspended', verified_at=NULL, suspended_at=UTC_TIMESTAMP(), suspended_reason=?",
-    cols: ["verification_status", "verified_at", "suspended_at", "suspended_reason"], reason: "suspend",
+    cols: ["verification_status", "verified_at", "suspended_at", "suspended_reason"],
+    reason: "suspend",
   },
   reactivate: {
-    action: "merchant.reactivate", from: ["suspended"],
+    action: "merchant.reactivate",
+    from: ["suspended"],
     set: "verification_status='verified', verified_at=UTC_TIMESTAMP(), suspended_at=NULL, suspended_reason=NULL",
     cols: ["verification_status", "verified_at", "suspended_at", "suspended_reason"],
   },
@@ -56,12 +62,14 @@ export async function daftarPenjual(f: { q?: string; status?: string; open?: str
   const where: string[] = [];
   const args: unknown[] = [];
   if (f.status !== undefined) {
-    if (!STATUSES.includes(f.status as Status)) throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { status: ["Status tidak dikenal."] });
+    if (!STATUSES.includes(f.status as Status))
+      throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { status: ["Status tidak dikenal."] });
     where.push("m.verification_status = ?");
     args.push(f.status);
   }
   if (f.open !== undefined) {
-    if (f.open !== "0" && f.open !== "1") throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { open: ["Harus 1 atau 0."] });
+    if (f.open !== "0" && f.open !== "1")
+      throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { open: ["Harus 1 atau 0."] });
     where.push("m.is_open = ?");
     args.push(Number(f.open));
   }
@@ -80,7 +88,10 @@ export async function daftarPenjual(f: { q?: string; status?: string; open?: str
     [...args, f.limit, (f.page - 1) * f.limit],
   );
   const [c] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM merchants m ${w}`, args);
-  return { data: rows.map((r) => ({ ...r, is_open: Boolean(r.is_open), menu_count: Number(r.menu_count) })), meta: { page: f.page, limit: f.limit, total: Number(c[0].total) } };
+  return {
+    data: rows.map((r) => ({ ...r, is_open: Boolean(r.is_open), menu_count: Number(r.menu_count) })),
+    meta: { page: f.page, limit: f.limit, total: Number(c[0].total) },
+  };
 }
 
 export async function antrianVerifikasi() {
@@ -124,7 +135,12 @@ export async function detailPenjual(id: number) {
     ...profile,
     is_open: Boolean(r.is_open),
     menu_count: Number(r.menu_count),
-    owner: { full_name: r.owner_full_name, phone: r.owner_phone, email: r.owner_email, is_active: Boolean(r.owner_is_active) },
+    owner: {
+      full_name: r.owner_full_name,
+      phone: r.owner_phone,
+      email: r.owner_email,
+      is_active: Boolean(r.owner_is_active),
+    },
     pickup_points: points,
     checklist: checklist(r),
     recent_logs: logs,
@@ -137,12 +153,21 @@ export async function jalankanAksi(adminId: number, id: number, name: string, re
     const pick = (row: RowDataPacket) => Object.fromEntries(rule.cols.map((c) => [c, row[c]]));
     const [found] = await conn.query<RowDataPacket[]>("SELECT * FROM merchants WHERE id = ? FOR UPDATE", [id]);
     if (!found[0]) throw new AppError(404, "NOT_FOUND", "Penjual tidak ditemukan.");
-    if (!rule.from.includes(found[0].verification_status)) throw new AppError(409, "CONFLICT", "Status penjual sudah berubah.");
+    if (!rule.from.includes(found[0].verification_status))
+      throw new AppError(409, "CONFLICT", "Status penjual sudah berubah.");
     if (name === "close-today" && !found[0].is_open) return; // sudah tutup: tanpa perubahan dan tanpa log
     if (!rule.reason) reason = undefined; // hanya aksi bertanda reason yang memakai alasan (sudah divalidasi)
     await conn.query(`UPDATE merchants SET ${rule.set} WHERE id = ?`, [...(rule.reason ? [reason] : []), id]);
     const [after] = await conn.query<RowDataPacket[]>("SELECT * FROM merchants WHERE id = ?", [id]);
-    await catat(conn, { adminId, action: rule.action, targetType: "merchant", targetId: id, reason, before: pick(found[0]), after: pick(after[0]) });
+    await catat(conn, {
+      adminId,
+      action: rule.action,
+      targetType: "merchant",
+      targetId: id,
+      reason,
+      before: pick(found[0]),
+      after: pick(after[0]),
+    });
   });
   return detailPenjual(id);
 }

@@ -9,14 +9,22 @@ const MIGRATIONS_DIR = path.join(__dirname, "../../database/migrations");
 // Menjalankan database/migrations/*.sql yang belum tercatat, urut nama. Mengembalikan nama file yang diterapkan.
 export async function migrate(databaseUrl: string, dir = MIGRATIONS_DIR): Promise<string[]> {
   // multipleStatements hanya di koneksi ini: isinya file dari repo, bukan input pengguna
-  const conn = await mysql.createConnection({ uri: databaseUrl, multipleStatements: true, timezone: "Z", ssl: sslFor(databaseUrl) });
+  const conn = await mysql.createConnection({
+    uri: databaseUrl,
+    multipleStatements: true,
+    timezone: "Z",
+    ssl: sslFor(databaseUrl),
+  });
   try {
     await conn.query(
       "CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)",
     );
     const [rows] = await conn.query<mysql.RowDataPacket[]>("SELECT name FROM schema_migrations");
     const done = new Set(rows.map((r) => r.name));
-    const pending = fs.readdirSync(dir).filter((f) => f.endsWith(".sql") && !done.has(f)).sort();
+    const pending = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".sql") && !done.has(f))
+      .sort();
     for (const name of pending) {
       try {
         await conn.query(fs.readFileSync(path.join(dir, name), "utf8"));

@@ -2,7 +2,14 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
 import {
-  BannerAdmin, BannerToko, TinjauBanner, UbahBannerToko, bannerAdminSchema, bannerTokoSchema, tinjauBannerSchema, ubahBannerTokoSchema,
+  BannerAdmin,
+  BannerToko,
+  TinjauBanner,
+  UbahBannerToko,
+  bannerAdminSchema,
+  bannerTokoSchema,
+  tinjauBannerSchema,
+  ubahBannerTokoSchema,
 } from "../dto/banner.dto";
 import { AppError } from "../utils/errors";
 import { PRESIGN_DETIK } from "../utils/r2";
@@ -23,15 +30,26 @@ const KOLOM = `b.id, b.merchant_id, b.title, b.image_url, b.target, b.promo_id, 
 const DARI = "banners b LEFT JOIN promos p ON p.id = b.promo_id LEFT JOIN merchants m ON m.id = b.merchant_id";
 
 const peta = (r: RowDataPacket) => ({
-  id: r.id as number, title: r.title as string, image_url: r.image_url as string, target: r.target as string,
+  id: r.id as number,
+  title: r.title as string,
+  image_url: r.image_url as string,
+  target: r.target as string,
   promo: r.promo_id ? { id: r.promo_id as number, code: r.promo_code as string } : null,
-  merchant: r.merchant_id ? { id: r.merchant_id as number, slug: r.slug as string, business_name: r.business_name as string } : null,
-  status: r.status as string, catatan: (r.catatan as string | null) ?? null, starts_at: r.starts_at, ends_at: r.ends_at,
-  sort_order: r.sort_order as number, reviewed_at: r.reviewed_at, created_at: r.created_at,
+  merchant: r.merchant_id
+    ? { id: r.merchant_id as number, slug: r.slug as string, business_name: r.business_name as string }
+    : null,
+  status: r.status as string,
+  catatan: (r.catatan as string | null) ?? null,
+  starts_at: r.starts_at,
+  ends_at: r.ends_at,
+  sort_order: r.sort_order as number,
+  reviewed_at: r.reviewed_at,
+  created_at: r.created_at,
 });
 
 const tidakAda = () => new AppError(404, "NOT_FOUND", "Banner tidak ditemukan.");
-const tidakValid = (fields: Record<string, string[]>) => new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
+const tidakValid = (fields: Record<string, string[]>) =>
+  new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", fields);
 
 /** zod + cek gambar sekaligus, agar semua galat kolom keluar dalam satu respons. */
 export function rapikan<S extends z.ZodType>(skema: S, body: unknown, prefix: string): z.infer<S> {
@@ -58,7 +76,11 @@ const baris = async (id: number) => {
 
 // ---------------- publik ----------------
 export type BannerPublik = {
-  id: number; title: string; image_url: string; target: string; promo: VoucherKartu | null;
+  id: number;
+  title: string;
+  image_url: string;
+  target: string;
+  promo: VoucherKartu | null;
   merchant: { id: number; slug: string; business_name: string } | null;
 };
 
@@ -89,13 +111,18 @@ export async function bannerPublik(userId: number | null): Promise<BannerPublik[
 
 // ---------------- penjual ----------------
 export async function daftarBannerToko(userId: number) {
-  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM} FROM ${DARI} WHERE b.merchant_id = ? ORDER BY b.id DESC`, [await idToko(userId)]);
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${KOLOM} FROM ${DARI} WHERE b.merchant_id = ? ORDER BY b.id DESC`,
+    [await idToko(userId)],
+  );
   return rows.map(peta);
 }
 
 async function cekPromoToko(merchantId: number, target: string | undefined, promoId: number | null | undefined) {
   if (target !== "promo") return null;
-  const [[p]] = promoId ? await db.query<RowDataPacket[]>("SELECT id FROM promos WHERE id = ? AND merchant_id = ?", [promoId, merchantId]) : [[]];
+  const [[p]] = promoId
+    ? await db.query<RowDataPacket[]>("SELECT id FROM promos WHERE id = ? AND merchant_id = ?", [promoId, merchantId])
+    : [[]];
   if (!p) throw tidakValid({ promo_id: ["Pilih voucher milik tokomu."] });
   return promoId as number;
 }
@@ -125,8 +152,10 @@ export async function buatBannerToko(userId: number, body: unknown) {
 export async function ubahBannerToko(userId: number, idRaw: unknown, body: unknown) {
   const merchantId = await idToko(userId);
   const id = Number(idRaw);
-  const [[b]] = Number.isInteger(id) && id > 0
-    ? await db.query<RowDataPacket[]>("SELECT * FROM banners WHERE id = ? AND merchant_id = ?", [id, merchantId]) : [[]];
+  const [[b]] =
+    Number.isInteger(id) && id > 0
+      ? await db.query<RowDataPacket[]>("SELECT * FROM banners WHERE id = ? AND merchant_id = ?", [id, merchantId])
+      : [[]];
   if (!b) throw tidakAda();
   const d: UbahBannerToko = rapikan(ubahBannerTokoSchema, body, prefixToko(merchantId));
   const target = d.target ?? b.target;
@@ -135,8 +164,15 @@ export async function ubahBannerToko(userId: number, idRaw: unknown, body: unkno
   await db.query(
     `UPDATE banners SET title = ?, image_url = ?, target = ?, promo_id = ?, starts_at = ?, ends_at = ?, status = 'menunggu', catatan = NULL,
        reviewed_by = NULL, reviewed_at = NULL WHERE id = ?`,
-    [d.title ?? b.title, d.image_url ?? b.image_url, target, promoId, d.starts_at ? new Date(d.starts_at) : b.starts_at,
-      d.ends_at ? new Date(d.ends_at) : b.ends_at, b.id],
+    [
+      d.title ?? b.title,
+      d.image_url ?? b.image_url,
+      target,
+      promoId,
+      d.starts_at ? new Date(d.starts_at) : b.starts_at,
+      d.ends_at ? new Date(d.ends_at) : b.ends_at,
+      b.id,
+    ],
   );
   return baris(b.id);
 }
@@ -144,8 +180,10 @@ export async function ubahBannerToko(userId: number, idRaw: unknown, body: unkno
 export async function hapusBannerToko(userId: number, idRaw: unknown) {
   const merchantId = await idToko(userId);
   const id = Number(idRaw);
-  const [r] = Number.isInteger(id) && id > 0
-    ? await db.query<ResultSetHeader>("DELETE FROM banners WHERE id = ? AND merchant_id = ?", [id, merchantId]) : [{ affectedRows: 0 }];
+  const [r] =
+    Number.isInteger(id) && id > 0
+      ? await db.query<ResultSetHeader>("DELETE FROM banners WHERE id = ? AND merchant_id = ?", [id, merchantId])
+      : [{ affectedRows: 0 }];
   if (!r.affectedRows) throw tidakAda();
   return { id };
 }
@@ -163,22 +201,43 @@ export async function daftarBannerAdmin(status?: string) {
 export async function buatBannerAdmin(adminId: number, body: unknown) {
   const d: BannerAdmin = rapikan(bannerAdminSchema, body, PREFIX_PLATFORM);
   if (d.target === "promo") {
-    const [[p]] = d.promo_id ? await db.query<RowDataPacket[]>("SELECT id FROM promos WHERE id = ?", [d.promo_id]) : [[]];
+    const [[p]] = d.promo_id
+      ? await db.query<RowDataPacket[]>("SELECT id FROM promos WHERE id = ?", [d.promo_id])
+      : [[]];
     if (!p) throw tidakValid({ promo_id: ["Pilih voucher."] });
   }
   return dalamTransaksi(async (conn) => {
     const [r] = await conn.query<ResultSetHeader>(
       `INSERT INTO banners (merchant_id, title, image_url, target, promo_id, status, starts_at, ends_at, sort_order, created_by, reviewed_by, reviewed_at)
        VALUES (NULL, ?, ?, ?, ?, 'disetujui', ?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
-      [d.title, d.image_url, d.target, d.target === "promo" ? d.promo_id : null, new Date(d.starts_at), new Date(d.ends_at), d.sort_order,
-        adminId, adminId],
+      [
+        d.title,
+        d.image_url,
+        d.target,
+        d.target === "promo" ? d.promo_id : null,
+        new Date(d.starts_at),
+        new Date(d.ends_at),
+        d.sort_order,
+        adminId,
+        adminId,
+      ],
     );
-    await catat(conn, { adminId, action: "banner.create", targetType: "banner", targetId: r.insertId, after: { title: d.title, target: d.target } });
+    await catat(conn, {
+      adminId,
+      action: "banner.create",
+      targetType: "banner",
+      targetId: r.insertId,
+      after: { title: d.title, target: d.target },
+    });
     return r.insertId;
   }).then(baris);
 }
 
-const AKSI: Record<string, string> = { disetujui: "banner.approve", ditolak: "banner.reject", nonaktif: "banner.deactivate" };
+const AKSI: Record<string, string> = {
+  disetujui: "banner.approve",
+  ditolak: "banner.reject",
+  nonaktif: "banner.deactivate",
+};
 // masa berlaku presign + 1 menit toleransi selisih jam
 const JEDA_SETUJUI_DETIK = PRESIGN_DETIK + 60;
 
@@ -196,24 +255,50 @@ export async function tinjauBanner(adminId: number, idRaw: unknown, body: unknow
     // AUD-36: URL unggah (presign PUT) bisa dipakai ulang selama berlaku, jadi isi gambar pengajuan penjual baru pasti
     // setelah URL itu kedaluwarsa; pengajuan/ubahan penjual memperbarui updated_at
     if (d.status === "disetujui" && b.merchant_id !== null && b.status === "menunggu") {
-      const [[u]] = await conn.query<RowDataPacket[]>("SELECT TIMESTAMPDIFF(SECOND, updated_at, CURRENT_TIMESTAMP) AS umur FROM banners WHERE id = ?", [b.id]);
+      const [[u]] = await conn.query<RowDataPacket[]>(
+        "SELECT TIMESTAMPDIFF(SECOND, updated_at, CURRENT_TIMESTAMP) AS umur FROM banners WHERE id = ?",
+        [b.id],
+      );
       if (Number(u.umur) < JEDA_SETUJUI_DETIK) {
-        throw new AppError(409, "CONFLICT", `Gambar banner baru saja diunggah. Setujui setelah ${JEDA_SETUJUI_DETIK / 60} menit.`);
+        throw new AppError(
+          409,
+          "CONFLICT",
+          `Gambar banner baru saja diunggah. Setujui setelah ${JEDA_SETUJUI_DETIK / 60} menit.`,
+        );
       }
     }
-    const isi = b.merchant_id === null
-      ? { title: d.title, image_url: d.image_url, starts_at: d.starts_at && new Date(d.starts_at), ends_at: d.ends_at && new Date(d.ends_at) }
-      : {};
+    const isi =
+      b.merchant_id === null
+        ? {
+            title: d.title,
+            image_url: d.image_url,
+            starts_at: d.starts_at && new Date(d.starts_at),
+            ends_at: d.ends_at && new Date(d.ends_at),
+          }
+        : {};
     if (b.merchant_id === null && d.image_url) cekUrlGambar(d.image_url, b.image_url, PREFIX_PLATFORM, "image_url");
-    const ubah: Record<string, unknown> = Object.fromEntries(Object.entries({ ...isi, sort_order: d.sort_order }).filter(([, v]) => v !== undefined));
-    if (d.status) Object.assign(ubah, { status: d.status, catatan: d.status === "ditolak" ? d.catatan : d.catatan ?? null, reviewed_by: adminId });
+    const ubah: Record<string, unknown> = Object.fromEntries(
+      Object.entries({ ...isi, sort_order: d.sort_order }).filter(([, v]) => v !== undefined),
+    );
+    if (d.status)
+      Object.assign(ubah, {
+        status: d.status,
+        catatan: d.status === "ditolak" ? d.catatan : (d.catatan ?? null),
+        reviewed_by: adminId,
+      });
     const cols = Object.keys(ubah);
     if (cols.length) {
-      await conn.query(`UPDATE banners SET ${cols.map((c) => `${c} = ?`).join(", ")}${d.status ? ", reviewed_at = UTC_TIMESTAMP()" : ""} WHERE id = ?`,
-        [...cols.map((c) => ubah[c]), b.id]);
+      await conn.query(
+        `UPDATE banners SET ${cols.map((c) => `${c} = ?`).join(", ")}${d.status ? ", reviewed_at = UTC_TIMESTAMP()" : ""} WHERE id = ?`,
+        [...cols.map((c) => ubah[c]), b.id],
+      );
       await catat(conn, {
-        adminId, action: d.status ? AKSI[d.status] : "banner.update", targetType: "banner", targetId: b.id,
-        before: { status: b.status, catatan: b.catatan ?? null }, after: { status: d.status ?? b.status, catatan: ubah.catatan ?? b.catatan ?? null },
+        adminId,
+        action: d.status ? AKSI[d.status] : "banner.update",
+        targetType: "banner",
+        targetId: b.id,
+        before: { status: b.status, catatan: b.catatan ?? null },
+        after: { status: d.status ?? b.status, catatan: ubah.catatan ?? b.catatan ?? null },
       });
     }
     return b.id as number;

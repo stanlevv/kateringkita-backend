@@ -8,7 +8,13 @@ import { PublicUser } from "../services/auth.service";
 
 export type AdminLevel = "super" | "ops" | "support";
 export type AuthedRequest = Request & {
-  auth: { userId: number; role: PublicUser["role"]; jti: string; adminLevel: AdminLevel | null; mustChangePassword: boolean };
+  auth: {
+    userId: number;
+    role: PublicUser["role"];
+    jti: string;
+    adminLevel: AdminLevel | null;
+    mustChangePassword: boolean;
+  };
 };
 
 const unauthenticated = () => new AppError(401, "UNAUTHENTICATED", "Silakan masuk terlebih dahulu.");
@@ -33,8 +39,11 @@ export async function bacaSesi(req: Request): Promise<AuthedRequest["auth"] | nu
   );
   if (rows.length === 0) return null;
   return {
-    userId: rows[0].id, role: rows[0].role, jti: payload.jti,
-    adminLevel: rows[0].admin_level ?? null, mustChangePassword: Boolean(rows[0].must_change_password),
+    userId: rows[0].id,
+    role: rows[0].role,
+    jti: payload.jti,
+    adminLevel: rows[0].admin_level ?? null,
+    mustChangePassword: Boolean(rows[0].must_change_password),
   };
 }
 

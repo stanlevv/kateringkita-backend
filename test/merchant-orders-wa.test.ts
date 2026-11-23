@@ -11,7 +11,8 @@ import { pesanDulu, siapCheckout } from "./helpers/toko";
 let s: Awaited<ReturnType<typeof siapCheckout>>;
 let code: string;
 
-const wa = (c = code, token = s.tA) => request(app).get(`/api/v1/merchant/orders/${c}/whatsapp`).set("Authorization", `Bearer ${token}`);
+const wa = (c = code, token = s.tA) =>
+  request(app).get(`/api/v1/merchant/orders/${c}/whatsapp`).set("Authorization", `Bearer ${token}`);
 const teks = (url: string) => decodeURIComponent(url.split("?text=")[1]);
 
 beforeAll(async () => {
@@ -28,7 +29,8 @@ test("templat bawaan (wa_template NULL) → pesan ke nomor pembeli", async () =>
   expect(Object.keys(d).sort()).toEqual(["message", "url", "wa_number"]);
   expect(d.wa_number).toBe("081234567890");
   expect(d.message.startsWith(`Halo Budi, pesanan ${code} sudah kami terima.`)).toBe(true);
-  for (const s of ["Menu: 2x Nasi Ayam", "Total: Rp 30.000", "Cara bayar: Tunai", "Waktu ambil: Secepatnya"]) expect(d.message).toContain(s);
+  for (const s of ["Menu: 2x Nasi Ayam", "Total: Rp 30.000", "Cara bayar: Tunai", "Waktu ambil: Secepatnya"])
+    expect(d.message).toContain(s);
   expect(d.url.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
   expect(teks(d.url)).toBe(d.message);
 });
@@ -45,7 +47,9 @@ test("templat toko dipakai; placeholder asing dibiarkan; nama dengan & # ter-enc
 
 test("TEMPLAT_BAWAAN sama persis dengan fe/lib/wa-template.ts", () => {
   // monorepo tim memakai fe/, monorepo C:\DIEGO-UATAMA memakai frontend/
-  const berkas = ["fe", "frontend"].map((d) => join(__dirname, "../..", d, "lib/wa-template.ts")).find((p) => existsSync(p));
+  const berkas = ["fe", "frontend"]
+    .map((d) => join(__dirname, "../..", d, "lib/wa-template.ts"))
+    .find((p) => existsSync(p));
   const fe = readFileSync(berkas ?? join(__dirname, "../../fe/lib/wa-template.ts"), "utf8");
   const literal = /export const TEMPLATE_BAWAAN = `([^`]*)`;/.exec(fe)![1].replace(/\r\n/g, "\n");
   expect(TEMPLAT_BAWAAN).toBe(literal);

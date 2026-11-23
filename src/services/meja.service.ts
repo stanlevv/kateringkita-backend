@@ -9,7 +9,15 @@ import { DARI, jam, JOIN_FAVORIT, kartu, KOLOM_KARTU, TAMPIL, tokoBuka, TOKO_TAM
 import { hariIniWib } from "./merchant-kuota.service";
 import { idToko } from "./merchant-menu.service";
 import { muatKeranjang, periksa } from "./pesanan-keranjang.service";
-import { habis, MAKS_PORSI_MEJA, muatItem, porsiTertahan, sisipPesanan, tahanStokDanItem, totalPorsi } from "./pesanan.service";
+import {
+  habis,
+  MAKS_PORSI_MEJA,
+  muatItem,
+  porsiTertahan,
+  sisipPesanan,
+  tahanStokDanItem,
+  totalPorsi,
+} from "./pesanan.service";
 
 // F21 pesan dari meja: QR meja → menu tanpa login → pesanan tamu → bayar lewat Snap → status lewat token tamu.
 // Token tamu hanya dipegang peramban tamu; DB menyimpan SHA-256-nya.
@@ -26,28 +34,36 @@ const hhmm = (t: unknown) => String(t).slice(0, 5);
 // ---------- penjual ----------
 const petaMeja = (r: RowDataPacket) => ({ id: r.id, label: r.label, token: r.token, is_active: Boolean(r.is_active) });
 const labelDipakai = (e: unknown) => (e as { code?: string }).code === "ER_DUP_ENTRY";
-const tolakLabel = () => new AppError(409, "CONFLICT", "Nama meja sudah dipakai.", { label: ["Nama meja sudah dipakai."] });
+const tolakLabel = () =>
+  new AppError(409, "CONFLICT", "Nama meja sudah dipakai.", { label: ["Nama meja sudah dipakai."] });
 
 export async function daftarMeja(userId: number) {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT id, label, token, is_active FROM merchant_tables WHERE merchant_id = ? ORDER BY LENGTH(label), label", [await idToko(userId)],
+    "SELECT id, label, token, is_active FROM merchant_tables WHERE merchant_id = ? ORDER BY LENGTH(label), label",
+    [await idToko(userId)],
   );
   return rows.map(petaMeja);
 }
 
 async function ambilMeja(tokoId: number, id: number) {
-  const [[r]] = await db.query<RowDataPacket[]>("SELECT id, label, token, is_active FROM merchant_tables WHERE id = ? AND merchant_id = ?", [id, tokoId]);
+  const [[r]] = await db.query<RowDataPacket[]>(
+    "SELECT id, label, token, is_active FROM merchant_tables WHERE id = ? AND merchant_id = ?",
+    [id, tokoId],
+  );
   if (!r) throw new AppError(404, "NOT_FOUND", "Meja tidak ditemukan.");
   return petaMeja(r);
 }
 
 export async function buatMeja(userId: number, label: string) {
   const tokoId = await idToko(userId);
-  const [[n]] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM merchant_tables WHERE merchant_id = ?", [tokoId]);
+  const [[n]] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM merchant_tables WHERE merchant_id = ?", [
+    tokoId,
+  ]);
   if (Number(n.n) >= MAKS_MEJA) throw konflik(`Maksimal ${MAKS_MEJA} meja per toko.`);
   try {
     const [r] = await db.query<ResultSetHeader>(
-      "INSERT INTO merchant_tables (merchant_id, label, token) VALUES (?, ?, ?)", [tokoId, label, randomBytes(16).toString("hex")],
+      "INSERT INTO merchant_tables (merchant_id, label, token) VALUES (?, ?, ?)",
+      [tokoId, label, randomBytes(16).toString("hex")],
     );
     return ambilMeja(tokoId, r.insertId);
   } catch (e) {
@@ -63,11 +79,15 @@ export async function ubahMeja(userId: number, idRaw: unknown, input: UbahMejaIn
   await ambilMeja(tokoId, id);
   const sets: string[] = [];
   const args: unknown[] = [];
-  if (input.label !== undefined) sets.push("label = ?"), args.push(input.label);
-  if (input.is_active !== undefined) sets.push("is_active = ?"), args.push(input.is_active);
-  if (input.ganti_token) sets.push("token = ?"), args.push(randomBytes(16).toString("hex"));
+  if (input.label !== undefined) (sets.push("label = ?"), args.push(input.label));
+  if (input.is_active !== undefined) (sets.push("is_active = ?"), args.push(input.is_active));
+  if (input.ganti_token) (sets.push("token = ?"), args.push(randomBytes(16).toString("hex")));
   try {
-    await db.query(`UPDATE merchant_tables SET ${sets.join(", ")} WHERE id = ? AND merchant_id = ?`, [...args, id, tokoId]);
+    await db.query(`UPDATE merchant_tables SET ${sets.join(", ")} WHERE id = ? AND merchant_id = ?`, [
+      ...args,
+      id,
+      tokoId,
+    ]);
   } catch (e) {
     if (labelDipakai(e)) throw tolakLabel();
     throw e;
@@ -102,17 +122,29 @@ export async function menuMeja(token: string) {
   const opsi = new Map<number, { id: number; name: string; extra_price: number }[]>();
   if (rows.length) {
     const [o] = await db.query<RowDataPacket[]>(
-      "SELECT id, menu_id, name, extra_price FROM menu_options WHERE menu_id IN (?) AND is_active ORDER BY id", [rows.map((r) => r.id)],
+      "SELECT id, menu_id, name, extra_price FROM menu_options WHERE menu_id IN (?) AND is_active ORDER BY id",
+      [rows.map((r) => r.id)],
     );
-    for (const r of o) opsi.set(r.menu_id, [...(opsi.get(r.menu_id) ?? []), { id: r.id, name: r.name, extra_price: r.extra_price }]);
+    for (const r of o)
+      opsi.set(r.menu_id, [...(opsi.get(r.menu_id) ?? []), { id: r.id, name: r.name, extra_price: r.extra_price }]);
   }
   return {
     table: { label: t.label },
     merchant: {
-      slug: t.slug, business_name: t.business_name, description: t.description, logo_url: t.logo_url,
-      is_open: tokoBuka(t, ms), open_time: hhmm(t.open_time), close_time: hhmm(t.close_time),
+      slug: t.slug,
+      business_name: t.business_name,
+      description: t.description,
+      logo_url: t.logo_url,
+      is_open: tokoBuka(t, ms),
+      open_time: hhmm(t.open_time),
+      close_time: hhmm(t.close_time),
     },
-    menus: rows.map((r) => ({ ...kartu(r, ms), description: r.description, min_order_qty: r.min_order_qty, options: opsi.get(r.id) ?? [] })),
+    menus: rows.map((r) => ({
+      ...kartu(r, ms),
+      description: r.description,
+      min_order_qty: r.min_order_qty,
+      options: opsi.get(r.id) ?? [],
+    })),
   };
 }
 
@@ -124,28 +156,50 @@ export async function pesanMeja(token: string, data: PesananMejaInput) {
     // serial per meja agar batas pesanan menunggu tidak dilampaui request paralel
     await conn.query("SELECT id FROM merchant_tables WHERE id = ? FOR UPDATE", [t.id]);
     const [[n]] = await conn.query<RowDataPacket[]>(
-      "SELECT COUNT(*) AS n FROM orders WHERE table_id = ? AND status = 'holding' AND hold_until > UTC_TIMESTAMP() FOR UPDATE", [t.id],
+      "SELECT COUNT(*) AS n FROM orders WHERE table_id = ? AND status = 'holding' AND hold_until > UTC_TIMESTAMP() FOR UPDATE",
+      [t.id],
     );
-    if (Number(n.n) >= MAKS_TERTAHAN) throw konflik("Masih ada pesanan meja ini yang menunggu pembayaran. Selesaikan dulu.");
+    if (Number(n.n) >= MAKS_TERTAHAN)
+      throw konflik("Masih ada pesanan meja ini yang menunggu pembayaran. Selesaikan dulu.");
     const ms = jam.sekarang();
     const hari = hariIniWib(new Date(ms));
     const q = { ...data, pickup_point_id: 0, promo_code: null, promo_codes: [], pickup_at: null };
     const h = periksa(await muatKeranjang(conn, q, { segarkan: true, hari, ms }), q, ms, { tanpaTitikTemu: true });
-    if (h.merchant.id !== t.merchant_id) throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { items: ["Menu bukan dari toko ini."] });
+    if (h.merchant.id !== t.merchant_id)
+      throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { items: ["Menu bukan dari toko ini."] });
     if (h.kurang.length) throw habis(h.kurang);
     // AUD-32: tamu anonim tanpa bayar dulu; batasi porsi tertahan per meja, bukan hanya jumlah pesanannya (setelah cek stok)
-    if (await porsiTertahan(conn, "table_id", t.id) + totalPorsi(data.items) > MAKS_PORSI_MEJA) {
-      throw konflik(`Maksimal ${MAKS_PORSI_MEJA} porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.`);
+    if ((await porsiTertahan(conn, "table_id", t.id)) + totalPorsi(data.items) > MAKS_PORSI_MEJA) {
+      throw konflik(
+        `Maksimal ${MAKS_PORSI_MEJA} porsi menunggu pembayaran per meja. Selesaikan pembayaran pesanan lain dulu.`,
+      );
     }
-    const { orderId, code } = await sisipPesanan(conn, hari,
+    const { orderId, code } = await sisipPesanan(
+      conn,
+      hari,
       `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, table_id, guest_token_hash, status, customer_name, customer_phone,
          note, subtotal, discount, service_fee, total, payment_method, payment_status, hold_until, stock_date)
        VALUES (?, NULL, ?, NULL, ?, ?, 'holding', ?, ?, ?, ?, 0, ?, ?, 'online', 'unpaid', DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE), ?)`,
-      (kode) => [kode, t.merchant_id, t.id, hash(tamu), data.customer_name, data.customer_phone, data.note, h.subtotal, h.service_fee, h.total,
-        h.merchant.hold_minutes, hari],
+      (kode) => [
+        kode,
+        t.merchant_id,
+        t.id,
+        hash(tamu),
+        data.customer_name,
+        data.customer_phone,
+        data.note,
+        h.subtotal,
+        h.service_fee,
+        h.total,
+        h.merchant.hold_minutes,
+        hari,
+      ],
     );
     await tahanStokDanItem(conn, orderId, h, hari);
-    await conn.query("INSERT INTO order_status_logs (order_id, from_status, to_status, actor_user_id) VALUES (?, NULL, 'holding', NULL)", [orderId]);
+    await conn.query(
+      "INSERT INTO order_status_logs (order_id, from_status, to_status, actor_user_id) VALUES (?, NULL, 'holding', NULL)",
+      [orderId],
+    );
     return code;
   }, "READ COMMITTED");
   return { guest_token: tamu, ...(await statusMeja(code, tamu)) };
@@ -162,18 +216,32 @@ export async function statusMeja(code: string, tamu: string) {
   if (!o) throw pesananTidakAda();
   const holding = o.status === "holding";
   return {
-    code: o.code, status: o.status, payment_status: o.payment_status, table: { label: o.label }, merchant: { slug: o.slug, business_name: o.business_name },
-    customer_name: o.customer_name, note: o.note, items: (await muatItem([o.id])).get(o.id) ?? [],
-    subtotal: o.subtotal, service_fee: o.service_fee, total: o.total,
-    hold_until: holding ? o.hold_until : null, seconds_left: holding ? Number(o.seconds_left) : null,
-    payment_url: holding && o.payment_status !== "paid" ? o.url : null, created_at: o.created_at,
+    code: o.code,
+    status: o.status,
+    payment_status: o.payment_status,
+    table: { label: o.label },
+    merchant: { slug: o.slug, business_name: o.business_name },
+    customer_name: o.customer_name,
+    note: o.note,
+    items: (await muatItem([o.id])).get(o.id) ?? [],
+    subtotal: o.subtotal,
+    service_fee: o.service_fee,
+    total: o.total,
+    hold_until: holding ? o.hold_until : null,
+    seconds_left: holding ? Number(o.seconds_left) : null,
+    payment_url: holding && o.payment_status !== "paid" ? o.url : null,
+    created_at: o.created_at,
   };
 }
 
 // Halaman bayar Snap tamu (logika bersama pre-order F26 di bukaSnap)
 export async function bayarMeja(code: string, tamu: string, kembali: string) {
-  if (!asalSah(kembali)) throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { kembali: ["Alamat kembali tidak diizinkan."] });
-  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_SNAP} FROM orders o WHERE o.code = ? AND o.guest_token_hash = ?`, [code, hash(tamu)]);
+  if (!asalSah(kembali))
+    throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { kembali: ["Alamat kembali tidak diizinkan."] });
+  const [[o]] = await db.query<RowDataPacket[]>(
+    `SELECT ${KOLOM_SNAP} FROM orders o WHERE o.code = ? AND o.guest_token_hash = ?`,
+    [code, hash(tamu)],
+  );
   if (!o) throw pesananTidakAda();
   return { payment_url: await bukaSnap(o, code, kembali) };
 }

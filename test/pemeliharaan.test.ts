@@ -8,7 +8,8 @@ import { login, siapkanToko } from "./helpers/toko";
 // F27: mode pemeliharaan — admin super menyalakan; penjual & pembeli dapat 503, admin/login/webhook tetap jalan.
 let tAdmin: string, tOps: string, tA: string, tCust: string;
 const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-const nyalakan = (body: object, t = tAdmin) => request(app).put("/api/v1/admin/settings/maintenance").set(H(t)).send(body);
+const nyalakan = (body: object, t = tAdmin) =>
+  request(app).put("/api/v1/admin/settings/maintenance").set(H(t)).send(body);
 
 beforeAll(async () => {
   ({ tA, tCust } = await siapkanToko());
@@ -21,8 +22,13 @@ beforeAll(async () => {
 
 describe("mati (bawaan)", () => {
   test("status mati di /meta/settings dan /admin/settings; rute biasa normal", async () => {
-    expect((await request(app).get("/api/v1/meta/settings").expect(200)).body.data.maintenance).toEqual({ aktif: false, pesan: null });
-    expect((await request(app).get("/api/v1/admin/settings").set(H(tAdmin)).expect(200)).body.data.maintenance).toEqual({ aktif: false, pesan: null });
+    expect((await request(app).get("/api/v1/meta/settings").expect(200)).body.data.maintenance).toEqual({
+      aktif: false,
+      pesan: null,
+    });
+    expect((await request(app).get("/api/v1/admin/settings").set(H(tAdmin)).expect(200)).body.data.maintenance).toEqual(
+      { aktif: false, pesan: null },
+    );
     await request(app).get("/api/v1/menus").expect(200);
     await request(app).get("/api/v1/merchant/profile").set(H(tA)).expect(200);
   });
@@ -42,7 +48,10 @@ describe("mengubah", () => {
     expect(r.body.data).toEqual({ maintenance: { aktif: true, pesan: "Pembaruan sistem sampai 14.00 WIB." } });
     const [log] = await db.query<any[]>("SELECT * FROM admin_audit_logs WHERE action = 'settings.maintenance'");
     expect(log).toHaveLength(1);
-    expect((await request(app).get("/api/v1/meta/settings")).body.data.maintenance).toEqual({ aktif: true, pesan: "Pembaruan sistem sampai 14.00 WIB." });
+    expect((await request(app).get("/api/v1/meta/settings")).body.data.maintenance).toEqual({
+      aktif: true,
+      pesan: "Pembaruan sistem sampai 14.00 WIB.",
+    });
   });
 });
 
@@ -68,7 +77,13 @@ describe("saat nyala", () => {
   test("pengecualian tetap jalan: health, admin, login, /me, ganti sandi, meta/settings, webhook Midtrans", async () => {
     await request(app).get("/api/v1/health").expect(200);
     await request(app).get("/api/v1/admin/summary").set(H(tAdmin)).expect(200);
-    expect((await request(app).post("/api/v1/auth/login").send({ identifier: "081300000009", password: "rahasia123", client: "web" })).status).toBe(200);
+    expect(
+      (
+        await request(app)
+          .post("/api/v1/auth/login")
+          .send({ identifier: "081300000009", password: "rahasia123", client: "web" })
+      ).status,
+    ).toBe(200);
     await request(app).get("/api/v1/me").set(H(tA)).expect(200);
     expect((await request(app).put("/api/v1/me/password").set(H(tA)).send({})).status).toBe(400);
     await request(app).get("/api/v1/meta/settings").expect(200);

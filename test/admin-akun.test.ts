@@ -69,8 +69,11 @@ describe("kelola admin (Fase 1)", () => {
   });
 
   test("buat admin ops → sandi sementara, wajib ganti, tercatat di audit", async () => {
-    const r = await request(app).post("/api/v1/admin/admins").set(as(superToken))
-      .send({ full_name: "Ops Dua", phone: "081300000102", admin_level: "ops" }).expect(201);
+    const r = await request(app)
+      .post("/api/v1/admin/admins")
+      .set(as(superToken))
+      .send({ full_name: "Ops Dua", phone: "081300000102", admin_level: "ops" })
+      .expect(201);
     const { admin, temp_password } = r.body.data;
     expect(admin).toMatchObject({ admin_level: "ops", must_change_password: true, is_active: true });
     expect(temp_password).toMatch(/[A-Za-z]/);
@@ -80,28 +83,47 @@ describe("kelola admin (Fase 1)", () => {
     const blok = await request(app).get("/api/v1/admin/summary").set(as(token)).expect(403);
     expect(blok.body.error.code).toBe("PASSWORD_CHANGE_REQUIRED");
 
-    await request(app).put("/api/v1/me/password").set(as(token))
-      .send({ current_password: temp_password, new_password: "opsbaru123" }).expect(204);
+    await request(app)
+      .put("/api/v1/me/password")
+      .set(as(token))
+      .send({ current_password: temp_password, new_password: "opsbaru123" })
+      .expect(204);
     await request(app).get("/api/v1/admin/summary").set(as(token)).expect(200);
     await request(app).get("/api/v1/admin/admins").set(as(token)).expect(403); // ops bukan super
 
-    const [log] = await db.query<any[]>("SELECT action FROM admin_audit_logs WHERE target_type = 'admin' AND target_id = ?", [String(admin.id)]);
+    const [log] = await db.query<any[]>(
+      "SELECT action FROM admin_audit_logs WHERE target_type = 'admin' AND target_id = ?",
+      [String(admin.id)],
+    );
     expect(log.map((l) => l.action)).toContain("admin.create");
   });
 
   test("nomor sudah terdaftar → 409", async () => {
-    await request(app).post("/api/v1/admin/admins").set(as(superToken))
-      .send({ full_name: "Kembar", phone: "081300000102", admin_level: "support" }).expect(409);
+    await request(app)
+      .post("/api/v1/admin/admins")
+      .set(as(superToken))
+      .send({ full_name: "Kembar", phone: "081300000102", admin_level: "support" })
+      .expect(409);
   });
 
   test("support hanya bisa baca", async () => {
-    const r = await request(app).post("/api/v1/admin/admins").set(as(superToken))
-      .send({ full_name: "Support Tiga", phone: "081300000103", admin_level: "support" }).expect(201);
+    const r = await request(app)
+      .post("/api/v1/admin/admins")
+      .set(as(superToken))
+      .send({ full_name: "Support Tiga", phone: "081300000103", admin_level: "support" })
+      .expect(201);
     const t1 = await login("081300000103", r.body.data.temp_password);
-    await request(app).put("/api/v1/me/password").set(as(t1))
-      .send({ current_password: r.body.data.temp_password, new_password: "support123" }).expect(204);
+    await request(app)
+      .put("/api/v1/me/password")
+      .set(as(t1))
+      .send({ current_password: r.body.data.temp_password, new_password: "support123" })
+      .expect(204);
     await request(app).get("/api/v1/admin/merchants").set(as(t1)).expect(200);
-    await request(app).post("/api/v1/admin/broadcasts").set(as(t1)).send({ audience: "all", title: "x", body: "y" }).expect(403);
+    await request(app)
+      .post("/api/v1/admin/broadcasts")
+      .set(as(t1))
+      .send({ audience: "all", title: "x", body: "y" })
+      .expect(403);
     // huruf besar di path tetap kena penjagaan tingkat (rute Express tidak peka huruf)
     await request(app).get("/api/v1/admin/Admins").set(as(t1)).expect(403);
     await request(app).get("/api/v1/admin/Payouts/balances").set(as(t1)).expect(403);
@@ -109,13 +131,24 @@ describe("kelola admin (Fase 1)", () => {
 
   test("tidak bisa mengubah akun sendiri; super terakhir tidak bisa diturunkan", async () => {
     await request(app).post(`/api/v1/admin/admins/${superId}/deactivate`).set(as(superToken)).expect(409);
-    await request(app).patch(`/api/v1/admin/admins/${superId}/level`).set(as(superToken)).send({ admin_level: "ops" }).expect(409);
+    await request(app)
+      .patch(`/api/v1/admin/admins/${superId}/level`)
+      .set(as(superToken))
+      .send({ admin_level: "ops" })
+      .expect(409);
 
-    const r = await request(app).post("/api/v1/admin/admins").set(as(superToken))
-      .send({ full_name: "Super Empat", phone: "081300000104", admin_level: "super" }).expect(201);
+    const r = await request(app)
+      .post("/api/v1/admin/admins")
+      .set(as(superToken))
+      .send({ full_name: "Super Empat", phone: "081300000104", admin_level: "super" })
+      .expect(201);
     const id4 = r.body.data.admin.id;
     // dua super aktif: yang lain boleh diturunkan, lalu super terakhir (diri sendiri) tetap terjaga
-    await request(app).patch(`/api/v1/admin/admins/${id4}/level`).set(as(superToken)).send({ admin_level: "ops" }).expect(200);
+    await request(app)
+      .patch(`/api/v1/admin/admins/${id4}/level`)
+      .set(as(superToken))
+      .send({ admin_level: "ops" })
+      .expect(200);
   });
 
   test("nonaktifkan admin mencabut sesinya; reset sandi memberi sandi sementara baru", async () => {

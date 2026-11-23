@@ -14,32 +14,62 @@ const get = (u: string) => request(app).get(`/api/v1/admin${u}`).set(A());
 const post = (u: string, b: object = {}) => request(app).post(`/api/v1/admin${u}`).set(A()).send(b);
 const patch = (u: string, b: object = {}) => request(app).patch(`/api/v1/admin${u}`).set(A()).send(b);
 const put = (u: string, b: object = {}) => request(app).put(`/api/v1/admin${u}`).set(A()).send(b);
-const logs = async (like: string) => (await db.query<any[]>("SELECT * FROM admin_audit_logs WHERE action LIKE ? ORDER BY id", [like]))[0] as any[];
+const logs = async (like: string) =>
+  (await db.query<any[]>("SELECT * FROM admin_audit_logs WHERE action LIKE ? ORDER BY id", [like]))[0] as any[];
 
 const valid = {
-  code: " hemat10 ", description: "Diskon", type: "percent", value: 10, max_discount: 5000,
-  min_subtotal: 20000, quota: 100, per_user_limit: 1,
-  starts_at: "2030-01-01T00:00:00.000Z", ends_at: "2030-02-01T00:00:00.000Z",
+  code: " hemat10 ",
+  description: "Diskon",
+  type: "percent",
+  value: 10,
+  max_discount: 5000,
+  min_subtotal: 20000,
+  quota: 100,
+  per_user_limit: 1,
+  starts_at: "2030-01-01T00:00:00.000Z",
+  ends_at: "2030-02-01T00:00:00.000Z",
 };
 
 beforeAll(async () => {
   await migrate(await resetTestDatabase());
   loginLimiter.reset();
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
-  token = (await request(app).post("/api/v1/auth/login").send({ identifier: "081300000009", password: "rahasia123", client: "web" })).body.data.token;
-  await request(app).post("/api/v1/auth/merchant/register").send({
-    full_name: "Siti", email: "siti@mail.com", phone: "081298765432", password: "rahasia123",
-    business_name: "Dapur Siti", merchant_type_id: 1, address: "Jl. Mawar 1",
-  }).expect(201);
+  token = (
+    await request(app)
+      .post("/api/v1/auth/login")
+      .send({ identifier: "081300000009", password: "rahasia123", client: "web" })
+  ).body.data.token;
+  await request(app)
+    .post("/api/v1/auth/merchant/register")
+    .send({
+      full_name: "Siti",
+      email: "siti@mail.com",
+      phone: "081298765432",
+      password: "rahasia123",
+      business_name: "Dapur Siti",
+      merchant_type_id: 1,
+      address: "Jl. Mawar 1",
+    })
+    .expect(201);
   const [m] = await db.query<any[]>("SELECT id FROM merchants LIMIT 1");
   const [ins] = await db.query<any>(
-    "INSERT INTO promos (merchant_id, code, type, value, starts_at, ends_at) VALUES (?, 'TOKO1', 'fixed', 1000, '2030-01-01', '2030-02-01')", [m[0].id]);
+    "INSERT INTO promos (merchant_id, code, type, value, starts_at, ends_at) VALUES (?, 'TOKO1', 'fixed', 1000, '2030-01-01', '2030-02-01')",
+    [m[0].id],
+  );
   tokoPromoId = ins.insertId;
 });
 
 test("buat promo platform: kode kapital, log create", async () => {
   const r = await post("/promos", valid).expect(201);
-  expect(r.body.data).toMatchObject({ code: "HEMAT10", merchant_id: null, type: "percent", value: 10, max_discount: 5000, used_count: 0, quota: 100 });
+  expect(r.body.data).toMatchObject({
+    code: "HEMAT10",
+    merchant_id: null,
+    type: "percent",
+    value: 10,
+    max_discount: 5000,
+    used_count: 0,
+    quota: 100,
+  });
   expect(Boolean(r.body.data.is_active)).toBe(true);
   const l = await logs("promo.create");
   expect(l).toHaveLength(1);
@@ -54,7 +84,10 @@ test("kode ganda (juga milik toko) → 409 fields.code", async () => {
 });
 
 test("validasi", async () => {
-  const bad = async (o: object, f: string) => { const r = await post("/promos", { ...valid, code: "ZZZ99", ...o }); expect([f, r.status, Object.keys(r.body.error?.fields ?? {})]).toEqual([f, 400, expect.arrayContaining([f])]); };
+  const bad = async (o: object, f: string) => {
+    const r = await post("/promos", { ...valid, code: "ZZZ99", ...o });
+    expect([f, r.status, Object.keys(r.body.error?.fields ?? {})]).toEqual([f, 400, expect.arrayContaining([f])]);
+  };
   await bad({ code: "a!" }, "code");
   await bad({ type: "x" }, "type");
   await bad({ value: 101 }, "value");
@@ -120,13 +153,21 @@ test("nonaktif/aktif: log, idempoten tanpa log", async () => {
 });
 
 test("biaya layanan", async () => {
-  expect((await get("/settings").expect(200)).body.data).toEqual({ service_fee: 0, cs_whatsapp: null, maintenance: { aktif: false, pesan: null } });
+  expect((await get("/settings").expect(200)).body.data).toEqual({
+    service_fee: 0,
+    cs_whatsapp: null,
+    maintenance: { aktif: false, pesan: null },
+  });
   await put("/settings/service-fee", { value: -1 }).expect(400);
   await put("/settings/service-fee", { value: 1.5 }).expect(400);
   await put("/settings/service-fee", { value: 100001 }).expect(400);
   await put("/settings/service-fee", { value: "2000" }).expect(400);
   await put("/settings/service-fee", { value: 2000 }).expect(200);
-  expect((await get("/settings")).body.data).toEqual({ service_fee: 2000, cs_whatsapp: null, maintenance: { aktif: false, pesan: null } });
+  expect((await get("/settings")).body.data).toEqual({
+    service_fee: 2000,
+    cs_whatsapp: null,
+    maintenance: { aktif: false, pesan: null },
+  });
   const [row] = await db.query<any[]>("SELECT setting_value FROM app_settings WHERE setting_key='service_fee'");
   expect(row[0].setting_value).toBe("2000");
   await put("/settings/service-fee", { value: 2000 }).expect(200);
@@ -156,9 +197,16 @@ test("log: filter admin, action, target, tanggal; nilai tak valid 400", async ()
 });
 
 test("waktu dengan offset +07:00 tersimpan sebagai instan UTC yang benar", async () => {
-  const r = await post("/promos", { ...valid, code: "WIB07", starts_at: "2030-03-01T07:00:00+07:00", ends_at: "2030-03-02T07:00:00+07:00" }).expect(201);
+  const r = await post("/promos", {
+    ...valid,
+    code: "WIB07",
+    starts_at: "2030-03-01T07:00:00+07:00",
+    ends_at: "2030-03-02T07:00:00+07:00",
+  }).expect(201);
   expect(new Date(r.body.data.starts_at).toISOString()).toBe("2030-03-01T00:00:00.000Z");
-  const [row] = await db.query<any[]>("SELECT DATE_FORMAT(starts_at, '%Y-%m-%d %H:%i:%s') s FROM promos WHERE code='WIB07'");
+  const [row] = await db.query<any[]>(
+    "SELECT DATE_FORMAT(starts_at, '%Y-%m-%d %H:%i:%s') s FROM promos WHERE code='WIB07'",
+  );
   expect(row[0].s).toBe("2030-03-01 00:00:00");
 });
 

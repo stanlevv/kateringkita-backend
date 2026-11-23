@@ -18,9 +18,11 @@ export const asalSah = (url: string) => {
     return false;
   }
 };
-const tolakKembali = () => new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { kembali: ["Alamat kembali tidak diizinkan."] });
+const tolakKembali = () =>
+  new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { kembali: ["Alamat kembali tidak diizinkan."] });
 
-export const URL_BAYAR = "(SELECT redirect_url FROM payments p WHERE p.order_id = o.id AND p.method = 'online' ORDER BY p.id DESC LIMIT 1)";
+export const URL_BAYAR =
+  "(SELECT redirect_url FROM payments p WHERE p.order_id = o.id AND p.method = 'online' ORDER BY p.id DESC LIMIT 1)";
 // kolom yang dibutuhkan bukaSnap; o = orders
 export const KOLOM_SNAP = `o.id, o.total, o.status, o.payment_method, o.payment_status,
   TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), o.hold_until) AS menit, ${URL_BAYAR} AS url`;
@@ -45,7 +47,10 @@ export async function bukaSnap(o: RowDataPacket, code: string, kembali?: string)
 // F26: halaman bayar online (QRIS, e-wallet, VA) untuk pre-order pembeli; `kembali` opsional (web), mobile cukup membuka payment_url
 export async function bayarOnline(userId: number, code: string, kembali?: string) {
   if (kembali !== undefined && !asalSah(kembali)) throw tolakKembali();
-  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_SNAP} FROM orders o WHERE o.code = ? AND o.customer_id = ?`, [code, userId]);
+  const [[o]] = await db.query<RowDataPacket[]>(
+    `SELECT ${KOLOM_SNAP} FROM orders o WHERE o.code = ? AND o.customer_id = ?`,
+    [code, userId],
+  );
   if (!o) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
   if (o.payment_method !== "online") throw konflik("Pesanan ini tidak memakai bayar online.");
   await bukaSnap(o, code, kembali);
@@ -117,7 +122,13 @@ export async function buatVa(userId: number, code: string, bank: BankVa) {
   return bacaPesanan(userId, code);
 }
 
-const STATUS: Record<string, "paid" | "expired" | "failed"> = { settlement: "paid", expire: "expired", cancel: "failed", deny: "failed", failure: "failed" };
+const STATUS: Record<string, "paid" | "expired" | "failed"> = {
+  settlement: "paid",
+  expire: "expired",
+  cancel: "failed",
+  deny: "failed",
+  failure: "failed",
+};
 
 // F10: notifikasi HTTP Midtrans (rute publik). Sah = signature cocok dan nominal sama dengan pembayaran tersimpan.
 // settlement → transisi pay oleh sistem (holding → confirmed, stok terjual, notifikasi pembeli) lalu payments lunas.

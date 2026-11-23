@@ -22,7 +22,11 @@ export async function rekapKeuangan(r: Rentang) {
      GROUP BY m.id, m.business_name ORDER BY total DESC, m.id`,
     rentangUtc(r),
   );
-  const data = rows.map((x) => ({ merchant_id: x.merchant_id as number, business_name: x.business_name as string, ...bersih(x) }));
+  const data = rows.map((x) => ({
+    merchant_id: x.merchant_id as number,
+    business_name: x.business_name as string,
+    ...bersih(x),
+  }));
   const totals = bersih(Object.fromEntries(ANGKA.map((k) => [k, data.reduce((s, x) => s + x[k], 0)])));
   return { rows: data, totals };
 }

@@ -20,8 +20,13 @@ export const petaPesananToko = (o: RowDataPacket, items: Item[]) => ({
   ...dasarPesanan(o, items),
   pickup_point: o.pickup_point_id ? { id: o.pickup_point_id, name: o.p_name } : null,
   table: o.table_id ? { id: o.table_id, label: o.table_label } : null,
-  customer_name: o.customer_name, customer_phone: o.customer_phone,
-  confirmed_at: o.confirmed_at, cooking_at: o.cooking_at, ready_at: o.ready_at, completed_at: o.completed_at, cancelled_at: o.cancelled_at,
+  customer_name: o.customer_name,
+  customer_phone: o.customer_phone,
+  confirmed_at: o.confirmed_at,
+  cooking_at: o.cooking_at,
+  ready_at: o.ready_at,
+  completed_at: o.completed_at,
+  cancelled_at: o.cancelled_at,
 });
 
 // D11, D12: updated_since mengabaikan status; date = tanggal WIB created_at → rentang UTC agar indeks terpakai
@@ -48,7 +53,10 @@ export async function daftarPesananToko(userId: number, f: DaftarToko) {
 }
 
 export async function ambilPesananToko(userId: number, code: string) {
-  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${DARI_TOKO} WHERE o.code = ? AND o.merchant_id = ?`, [code, await idToko(userId)]);
+  const [[o]] = await db.query<RowDataPacket[]>(`SELECT ${DARI_TOKO} WHERE o.code = ? AND o.merchant_id = ?`, [
+    code,
+    await idToko(userId),
+  ]);
   if (!o) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
   return petaPesananToko(o, (await muatItem([o.id])).get(o.id) ?? []);
 }

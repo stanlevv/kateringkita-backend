@@ -10,11 +10,35 @@ let s: Awaited<ReturnType<typeof siapCheckout>>;
 const k: Record<string, string> = {};
 
 const KUNCI = [
-  "cancel_reason", "cancelled_at", "cancelled_by", "code", "completed_at", "confirmed_at", "cooking_at", "created_at", "customer_name",
-  "customer_phone", "discount", "hold_until", "items", "note", "payment_method", "payment_status", "pickup_at", "pickup_point", "ready_at",
-  "seconds_left", "service_fee", "status", "subtotal", "table", "total", "updated_at",
+  "cancel_reason",
+  "cancelled_at",
+  "cancelled_by",
+  "code",
+  "completed_at",
+  "confirmed_at",
+  "cooking_at",
+  "created_at",
+  "customer_name",
+  "customer_phone",
+  "discount",
+  "hold_until",
+  "items",
+  "note",
+  "payment_method",
+  "payment_status",
+  "pickup_at",
+  "pickup_point",
+  "ready_at",
+  "seconds_left",
+  "service_fee",
+  "status",
+  "subtotal",
+  "table",
+  "total",
+  "updated_at",
 ];
-const daftar = (qs = "", token = s.tA) => request(app).get(`/api/v1/merchant/orders${qs}`).set("Authorization", `Bearer ${token}`);
+const daftar = (qs = "", token = s.tA) =>
+  request(app).get(`/api/v1/merchant/orders${qs}`).set("Authorization", `Bearer ${token}`);
 const kodeDari = (r: request.Response) => r.body.data.map((o: { code: string }) => o.code).sort();
 const atur = (code: string, o: Record<string, unknown>) => db.query("UPDATE orders SET ? WHERE code = ?", [o, code]);
 const kemarin = () => new Date(Date.parse(`${hariIniWib()}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
@@ -44,11 +68,19 @@ describe("GET /merchant/orders", () => {
     expect(JSON.stringify(r.body)).not.toMatch(/"hpp"|"merchant"|"can_cancel"/);
     const h = r.body.data.find((o: any) => o.code === k.holding);
     expect(h).toMatchObject({
-      customer_name: "Budi", customer_phone: "081234567890", cancel_reason: null, cancelled_by: null, confirmed_at: null,
-      status: "holding", items: [{ menu_name: "Nasi Ayam", qty: 2, unit_price: 15000, line_total: 30000, options: [] }],
+      customer_name: "Budi",
+      customer_phone: "081234567890",
+      cancel_reason: null,
+      cancelled_by: null,
+      confirmed_at: null,
+      status: "holding",
+      items: [{ menu_name: "Nasi Ayam", qty: 2, unit_price: 15000, line_total: 30000, options: [] }],
     });
     expect(h.seconds_left).toBeGreaterThan(0);
-    expect(r.body.data.find((o: any) => o.code === k.confirmed)).toMatchObject({ hold_until: null, seconds_left: null });
+    expect(r.body.data.find((o: any) => o.code === k.confirmed)).toMatchObject({
+      hold_until: null,
+      seconds_left: null,
+    });
   });
 
   test("status daftar koma; status tak dikenal → 400", async () => {
@@ -64,7 +96,9 @@ describe("GET /merchant/orders", () => {
     await atur(k.completed, { created_at: `${kemarin()} 16:59:59` }); // kemarin 23:59:59 WIB
     expect(kodeDari(await daftar(`?date=${hariIniWib()}`).expect(200))).not.toContain(k.completed);
     expect(kodeDari(await daftar(`?date=${kemarin()}`).expect(200))).toEqual([k.completed]);
-    expect((await daftar("?date=2026-13-01").expect(400)).body.error.fields).toEqual({ date: ["Tanggal tidak valid."] });
+    expect((await daftar("?date=2026-13-01").expect(400)).body.error.fields).toEqual({
+      date: ["Tanggal tidak valid."],
+    });
   });
 
   test("q: nama pembeli tanpa beda huruf, sebagian kode", async () => {
@@ -85,7 +119,9 @@ describe("GET /merchant/orders", () => {
     await atur(k.confirmed, { status: "cooking", updated_at: new Date() });
     const r = await daftar(`?status=holding&updated_since=${encodeURIComponent(t)}`).expect(200);
     expect(r.body.data.map((o: any) => [o.code, o.status])).toEqual([[k.confirmed, "cooking"]]);
-    expect((await daftar("?updated_since=kemarin").expect(400)).body.error.fields).toEqual({ updated_since: ["Waktu tidak valid."] });
+    expect((await daftar("?updated_since=kemarin").expect(400)).body.error.fields).toEqual({
+      updated_since: ["Waktu tidak valid."],
+    });
   });
 });
 
@@ -94,7 +130,8 @@ describe("updated_since berurut (review)", () => {
     const t0 = Date.now() - 3600e3;
     await db.query("UPDATE orders SET updated_at = ?", [new Date(t0 - 3600e3)]);
     const detik = [3, 1, 2]; // holding paling baru, confirmed paling lama
-    for (const [i, c] of [k.holding, k.confirmed, k.completed].entries()) await atur(c, { updated_at: new Date(t0 + detik[i] * 1000) });
+    for (const [i, c] of [k.holding, k.confirmed, k.completed].entries())
+      await atur(c, { updated_at: new Date(t0 + detik[i] * 1000) });
     const r1 = await daftar(`?updated_since=${new Date(t0).toISOString()}&limit=2`).expect(200);
     expect(r1.body.data.map((o: any) => o.code)).toEqual([k.confirmed, k.completed]);
     const r2 = await daftar(`?updated_since=${r1.body.data.at(-1).updated_at}&limit=2`).expect(200);
@@ -104,19 +141,30 @@ describe("updated_since berurut (review)", () => {
 
 describe("GET /merchant/orders/:code", () => {
   test("200 bentuk sama; toko lain → 404; pembeli → 403", async () => {
-    const r = await request(app).get(`/api/v1/merchant/orders/${k.holding}`).set("Authorization", `Bearer ${s.tA}`).expect(200);
+    const r = await request(app)
+      .get(`/api/v1/merchant/orders/${k.holding}`)
+      .set("Authorization", `Bearer ${s.tA}`)
+      .expect(200);
     expect(Object.keys(r.body.data).sort()).toEqual(KUNCI);
     expect(r.body.data.code).toBe(k.holding);
-    const b = await request(app).get(`/api/v1/merchant/orders/${k.b}`).set("Authorization", `Bearer ${s.tA}`).expect(404);
+    const b = await request(app)
+      .get(`/api/v1/merchant/orders/${k.b}`)
+      .set("Authorization", `Bearer ${s.tA}`)
+      .expect(404);
     expect(b.body.error.message).toBe("Pesanan tidak ditemukan.");
-    await request(app).get(`/api/v1/merchant/orders/${k.holding}`).set("Authorization", `Bearer ${s.tCust}`).expect(403);
+    await request(app)
+      .get(`/api/v1/merchant/orders/${k.holding}`)
+      .set("Authorization", `Bearer ${s.tCust}`)
+      .expect(403);
     await daftar("", s.tCust).expect(403);
   });
 });
 
 // TiDB memakai utf8mb4_bin secara bawaan: pencarian harus tetap tak peka huruf (test terakhir: mengubah skema file ini)
 test("q tak peka huruf walau kolom berkolasi biner", async () => {
-  await db.query("ALTER TABLE orders MODIFY customer_name VARCHAR(150) NOT NULL COLLATE utf8mb4_bin, MODIFY code VARCHAR(20) NOT NULL COLLATE utf8mb4_bin");
+  await db.query(
+    "ALTER TABLE orders MODIFY customer_name VARCHAR(150) NOT NULL COLLATE utf8mb4_bin, MODIFY code VARCHAR(20) NOT NULL COLLATE utf8mb4_bin",
+  );
   expect(kodeDari(await daftar("?q=BUDI").expect(200))).toHaveLength(3);
   expect(kodeDari(await daftar(`?q=${k.holding.toLowerCase()}`).expect(200))).toEqual([k.holding]);
 });

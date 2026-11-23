@@ -64,12 +64,11 @@ test("body kosong → 200, profil tak berubah", async () => {
 });
 
 test("mass assignment diabaikan", async () => {
-  const res = await patch(
-    { role: "admin", is_active: false, password_hash: "x" },
-    customerToken,
-  );
+  const res = await patch({ role: "admin", is_active: false, password_hash: "x" }, customerToken);
   expect(res.status).toBe(200);
-  const [rows] = await db.query<any[]>("SELECT role, is_active, avatar_url, password_hash FROM users WHERE email = 'budi@mail.com'");
+  const [rows] = await db.query<any[]>(
+    "SELECT role, is_active, avatar_url, password_hash FROM users WHERE email = 'budi@mail.com'",
+  );
   expect(rows[0].role).toBe("customer");
   expect(rows[0].is_active).toBe(1);
   expect(rows[0].avatar_url).toBeNull();
@@ -141,7 +140,9 @@ test("admin boleh mengosongkan email", async () => {
 test("ubah nomor tanpa current_password → 400", async () => {
   const res = await patch({ phone: "081200000001" }, customerToken);
   expect(res.status).toBe(400);
-  expect(res.body.error.fields.current_password).toEqual(["Masukkan kata sandi saat ini untuk mengubah email atau nomor."]);
+  expect(res.body.error.fields.current_password).toEqual([
+    "Masukkan kata sandi saat ini untuk mengubah email atau nomor.",
+  ]);
 });
 
 test("ubah email dengan current_password salah → 400", async () => {
@@ -175,7 +176,8 @@ test("PATCH /me penjual mengembalikan merchant dengan verification_status", asyn
 });
 
 test("3 salah lewat PATCH + 3 salah lewat PUT /me/password berbagi jatah → ke-6 429", async () => {
-  for (let i = 0; i < 3; i++) await patch({ phone: "081200000001", current_password: "salahsalah1" }, customerToken).expect(400);
+  for (let i = 0; i < 3; i++)
+    await patch({ phone: "081200000001", current_password: "salahsalah1" }, customerToken).expect(400);
   const put = () =>
     request(app)
       .put("/api/v1/me/password")
@@ -222,4 +224,6 @@ test("avatar_url: unggahan sendiri diterima, null mengosongkan, selain itu 400",
   expect((await patch({ avatar_url: "" }, customerToken)).body.data.user.avatar_url).toBeNull();
 });
 
-afterEach(() => { isiR2(false); });
+afterEach(() => {
+  isiR2(false);
+});
