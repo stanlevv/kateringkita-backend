@@ -3,6 +3,7 @@ import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { catat, dalamTransaksi, kunci } from "./admin-audit.service";
 import { pola } from "./pesanan.service";
+import { galeri } from "./merchant-menu.service";
 import { hitungUlangRating } from "./ulasan.service";
 
 // F19 moderasi admin: sembunyikan ulasan & turunkan menu (suspend toko sudah ada di admin-merchant F18). Semua aksi dicatat audit.
@@ -66,10 +67,10 @@ export async function moderasiUlasan(adminId: number, idRaw: unknown, sembunyi: 
 
 // --- Menu ---
 const DARI_MENU = "FROM menus x JOIN merchants m ON m.id = x.merchant_id";
-const KOLOM_MENU = `x.id, x.name, x.price, x.image_url, x.is_active, x.moderated_at, x.moderation_reason, x.created_at,
+const KOLOM_MENU = `x.id, x.name, x.price, x.image_url, x.gallery, x.is_active, x.moderated_at, x.moderation_reason, x.created_at,
   m.id AS merchant_id, m.business_name`;
 const petaMenu = (x: RowDataPacket) => ({
-  id: x.id, name: x.name, price: x.price, image_url: x.image_url, is_active: Boolean(x.is_active), moderated: x.moderated_at !== null,
+  id: x.id, name: x.name, price: x.price, image_url: x.image_url, gallery: galeri(x.gallery), is_active: Boolean(x.is_active), moderated: x.moderated_at !== null,
   moderated_at: x.moderated_at, moderation_reason: x.moderation_reason, created_at: x.created_at,
   merchant: { id: x.merchant_id, business_name: x.business_name },
 });

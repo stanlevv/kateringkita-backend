@@ -70,4 +70,12 @@ describe("menu", () => {
     await aktifkan().expect(200);
     expect(await logs("menu.restore")).toBe(1);
   });
+
+  test("daftar menu admin memuat foto tambahan (gallery) agar ikut dimoderasi; tanpa foto tambahan → []", async () => {
+    const g = ["https://foto.test/merchants/1/menu/a.jpg", "https://foto.test/merchants/1/menu/b.jpg"];
+    await db.query("UPDATE menus SET gallery = ? WHERE id = ?", [JSON.stringify(g), s.menu]);
+    const rows: { id: number; gallery: string[] }[] = (await adm("get", "/menus").expect(200)).body.data;
+    expect(rows.find((m) => m.id === s.menu)!.gallery).toEqual(g);
+    expect(rows.find((m) => m.id === s.menu2)!.gallery).toEqual([]);
+  });
 });
