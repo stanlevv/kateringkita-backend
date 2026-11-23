@@ -1,17 +1,28 @@
+// Isi file: skema zod untuk body profil toko dan status dapur. Zod = pustaka pemeriksa bentuk data: nilai yang tidak
+// sesuai aturan ditolak dengan pesan galat per kolom (400). Dipakai `validate` di routes/merchant.ts sebelum
+// handlers/merchant.handler.ts memanggil merchant.service.
 import { z } from "zod";
 import { imageUrlSchema } from "./upload.dto";
 
+/** Body PATCH /merchant/status: `is_open` wajib berupa true (buka dapur) atau false (tutup dapur). */
 export const openStatusSchema = z.object({ is_open: z.boolean("Status dapur wajib diisi.") });
 
-// Pesan sama persis dengan fe/lib/schemas.ts & fe/lib/wa-template.ts
+/**
+ * Kata kunci yang boleh dipakai di templat pesan WhatsApp toko, ditulis di dalam kurung kurawal, contoh `{kode}` atau
+ * `{titik_temu}`. Isinya harus sama persis dengan daftar di web (fe/lib/schemas.ts dan fe/lib/wa-template.ts).
+ */
 export const WA_PLACEHOLDERS = ["kode", "nama", "menu", "total", "titik_temu", "waktu_ambil", "metode_bayar"];
 
+// Pesan galat nomor WhatsApp.
 const WA_NUMBER_MSG = "Nomor WA harus diawali 08 dan 10–13 digit.";
+// Teks wajib: spasi di ujung dibuang, minimal 1 huruf, maksimal `max` huruf.
 const requiredText = (message: string, max: number) =>
   z.string({ error: message }).trim().min(1, message).max(max, `Maksimal ${max} karakter.`);
+// Jam berbentuk `JJ:MM` 24 jam, dari 00:00 sampai 23:59.
 const timeSchema = z
   .string({ error: "Jam harus berformat JJ:MM." })
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Jam harus berformat JJ:MM.");
+// Angka bulat dari `min` sampai `max`, dengan pesan galat yang memakai nama kolom `label`.
 const numberField = (label: string, min: number, max: number) =>
   z
     .number({ error: `${label} wajib diisi.` })
@@ -19,10 +30,15 @@ const numberField = (label: string, min: number, max: number) =>
     .min(min, `${label} minimal ${min.toLocaleString("id-ID")}.`)
     .max(max, `${label} maksimal ${max.toLocaleString("id-ID")}.`);
 
+// Templat pesan WhatsApp: tidak boleh kosong, maksimal 1.000 huruf, dan setiap `{...}` harus kata kunci yang dikenal
+// (lihat WA_PLACEHOLDERS). Kata kunci asing disebut satu kali di pesan galat.
 const waTemplateSchema = z.string({ error: "Templat tidak boleh kosong." }).superRefine((template, context) => {
   const reportIssue = (message: string) => context.addIssue({ code: "custom", message: message });
+  // 1. Tolak templat kosong atau lebih dari 1.000 huruf.
   if (template.trim() === "") return reportIssue("Templat tidak boleh kosong.");
   if (template.length > 1000) return reportIssue("Templat maksimal 1.000 karakter.");
+  // 2. Ambil semua `{...}` (tanpa kurung kurawal atau baris baru di dalamnya) yang bukan kata kunci dikenal; yang
+  //    kembar hanya dihitung sekali.
   const unknownKeys = [
     ...new Set(
       (template.match(/\{[^{}\n]+\}/g) ?? []).filter(
@@ -30,11 +46,15 @@ const waTemplateSchema = z.string({ error: "Templat tidak boleh kosong." }).supe
       ),
     ),
   ];
+  // 3. Sebutkan semua kata kunci asing dalam satu pesan.
   if (unknownKeys.length > 0) reportIssue(`Kata kunci ${unknownKeys.join(", ")} tidak dikenal.`);
 });
 
-// Field di luar daftar dibuang zod (mass assignment); logo_url dicek pemiliknya di service (F04 D10).
-// F26: qris_image_url dihapus (semua non-tunai lewat Midtrans); rekening pencairan lewat PUT /merchant/payout-account.
+/**
+ * Body PATCH /merchant/profile. Semua kolom opsional; hanya yang dikirim yang diubah. Kolom di luar daftar ini dibuang
+ * zod, jadi klien tidak bisa mengisi kolom lain di tabel toko. Pemilik URL logo dan sampul dicek di service, bukan di
+ * sini. Rekening pencairan tidak diubah lewat skema ini, tetapi lewat PUT /merchant/payout-account.
+ */
 export const updateProfileSchema = z
   .object({
     business_name: requiredText("Nama usaha wajib diisi.", 150),
@@ -48,17 +68,18 @@ export const updateProfileSchema = z
     daily_revenue_target: numberField("Target omzet", 0, 1_000_000_000),
     wa_template: waTemplateSchema,
     logo_url: imageUrlSchema,
-    // background profil toko (unggahan purpose cover)
+    // foto latar profil toko (hasil unggahan dengan purpose `cover`)
     cover_url: imageUrlSchema,
-    // F21: terima pesanan dari meja (QR)
+    // terima pesanan dari meja lewat kode QR
     dine_in_enabled: z.boolean({ error: "Pilihan pesan dari meja tidak valid." }),
     pickup_point_ids: z
       .array(z.unknown(), { error: "Pilih minimal satu titik temu." })
       .min(1, "Pilih minimal satu titik temu.")
       .max(50, "Maksimal 50 titik temu.")
-      // galat per elemen dilaporkan di pickup_point_ids, bukan pickup_point_ids.0
+      // semua harus bilangan bulat; galat dilaporkan di kolom pickup_point_ids, bukan per elemen (pickup_point_ids.0)
       .refine((ids): ids is number[] => ids.every(Number.isInteger), "Titik temu tidak tersedia."),
   })
   .partial();
 
+/** Isi body profil toko yang sudah lolos {@link updateProfileSchema}. */
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
