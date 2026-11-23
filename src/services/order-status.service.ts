@@ -1,30 +1,39 @@
-// Mesin status pesanan: tabel aturan transisi dan satu fungsi yang menjalankannya di dalam transaksi.
-// Dipakai order.service (pembeli), merchant-order.service (penjual), pembayaran-va.service (lunas), dan job kadaluarsa.
+// Isi file: "mesin status" pesanan, yaitu tabel aturan perpindahan status (contoh: menunggu → diterima →
+// dimasak → siap → selesai) dan satu fungsi yang menjalankannya. Lapisan services paling dalam: dipakai
+// order.service (pembeli), merchant-order.service (penjual), pembayaran-va.service (lunas), dan job kadaluarsa.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/errors";
 import { buatNotifikasiPesanan } from "./notifikasi.service";
 import { releaseStock } from "./order-stock.service";
 
-// F07 mesin status pesanan (C-15, C-16, M-04, M-08, R-03; D1–D7). Dipakai rute pembeli, rute penjual, dan job kadaluarsa F08
-// (D18: `expire` dengan aktor sistem, galat 409 ditelan). F08: notifikasi in-app pembeli (C-21) dibuat di transaksi yang sama.
 /** Status pesanan, sama dengan nilai kolom `orders.status`. */
 export type Status = "holding" | "confirmed" | "cooking" | "ready" | "completed" | "cancelled" | "expired";
-/** Aksi yang mengubah status pesanan; aturan tiap aksi ada di {@link TRANSITION_RULES}. */
+/**
+ * Aksi yang mengubah status pesanan: terima (`confirm`), lunas (`pay`), masak (`cook`), siap (`ready`), selesai
+ * (`complete`), tolak (`reject`), batal (`cancel`), dan kadaluarsa (`expire`). Aturan tiap aksi ada di
+ * {@link TRANSITION_RULES}.
+ */
 export type OrderAction = "confirm" | "pay" | "cook" | "ready" | "complete" | "reject" | "cancel" | "expire";
 /**
- * Pelaku transisi. Pembeli dan penjual membawa `userId` (dicatat di log status); penjual juga `merchantId`
- * untuk membatasi pesanan ke tokonya. `system` dipakai notifikasi Midtrans dan job kadaluarsa.
+ * Pelaku perubahan status. Pembeli dan penjual membawa `userId` (dicatat di riwayat status); penjual juga membawa
+ * `merchantId` supaya hanya bisa mengubah pesanan tokonya sendiri. `system` dipakai pemberitahuan pembayaran dari
+ * Midtrans (penyedia pembayaran online) dan job kadaluarsa.
  */
 export type Actor =
   { kind: "customer"; userId: number } | { kind: "merchant"; userId: number; merchantId: number } | { kind: "system" };
 
+// Nasib porsi yang ditahan pesanan: "terjual" (jadi terjual), "kembali" (dilepas ke stok), "batal" (porsi yang sudah
+// terjual dikembalikan ke stok).
 type StockOutcome = "terjual" | "kembali" | "batal";
+// Batal/tolak/kadaluarsa: pesanan yang masih menunggu melepas porsi tahanannya; pesanan yang sudah diterima toko
+// mengembalikan porsi terjualnya.
 const releaseOutcome = (fromStatus: Status): StockOutcome => (fromStatus === "holding" ? "kembali" : "batal");
 
 /**
- * Aturan tiap aksi: `oleh` = aktor yang boleh, `dari` = status asal yang sah, `ke` = status tujuan, `kolom` = kolom
- * waktu yang diisi, `stok` = nasib porsi yang ditahan (tanpa `stok` = stok tidak disentuh).
+ * Aturan tiap aksi. `actors` = siapa yang boleh, `from` = status asal yang sah, `to` = status tujuan,
+ * `timestampColumn` = kolom waktu yang diisi saat itu, `stockOutcome` = nasib porsi yang ditahan (bila tidak ada,
+ * stok tidak disentuh).
  */
 export const TRANSITION_RULES: Record<
   OrderAction,
@@ -43,7 +52,8 @@ export const TRANSITION_RULES: Record<
     timestampColumn: "confirmed_at",
     stockOutcome: () => "terjual",
   },
-  // F10: lunas sekaligus diterima, agar pesanan lunas tidak pernah kedaluwarsa. F26: hanya notifikasi Midtrans (sistem), QRIS manual dihapus
+  // Lunas sekaligus dianggap diterima, supaya pesanan yang sudah dibayar tidak pernah kadaluarsa. Hanya bisa
+  // dilakukan sistem saat pemberitahuan pembayaran dari Midtrans masuk.
   pay: {
     actors: ["system"],
     from: ["holding"],
@@ -61,7 +71,7 @@ export const TRANSITION_RULES: Record<
     timestampColumn: "cancelled_at",
     stockOutcome: releaseOutcome,
   },
-  // confirmed hanya untuk tunai (dicek di transisi)
+  // Pembeli hanya boleh membatalkan pesanan yang sudah diterima toko bila bayar tunai (dicek di transitionOrder).
   cancel: {
     actors: ["customer"],
     from: ["holding", "confirmed"],
@@ -81,22 +91,27 @@ export const TRANSITION_RULES: Record<
 const conflict = (message = "Pesanan sudah berubah status.") => new AppError(409, "CONFLICT", message);
 
 /**
- * Jalankan satu aksi pada pesanan `code`: cek aktor dan status asal, ubah status dan kolom waktunya, kembalikan kuota
- * promo bila batal/kadaluarsa (F12), perbarui porsi stok lewat releaseStock (konfirmasi/lunas: tertahan → terjual;
- * batal/tolak/kadaluarsa: dilepas, D14), tulis `order_status_logs`, dan buat notifikasi in-app pembeli bila pelakunya
- * bukan pembeli (C-21).
+ * Menjalankan satu aksi pada pesanan `code`: cek pelaku dan status asal, ubah status dan kolom waktunya, kembalikan
+ * jatah voucher bila batal/kadaluarsa, perbarui stok (diterima/lunas: porsi tahanan menjadi terjual;
+ * batal/tolak/kadaluarsa: porsi dilepas), catat riwayat status di `order_status_logs`, dan buat notifikasi di aplikasi
+ * pembeli bila pelakunya bukan pembeli itu sendiri.
  *
- * Dipanggil di dalam dalamTransaksi. Urutan kunci (D5, F08 D11) untuk semua aktor: users pembeli → orders (baris, lewat code unik)
- * → menus (releaseStock, urut id), sama dengan checkout F06 (users → orders → menus) sehingga tidak ada siklus.
+ * Harus dipanggil di dalam transaksi database (rangkaian perubahan yang disimpan semua atau dibatalkan semua).
+ * Baris dikunci dengan urutan yang sama seperti checkout: pembeli (users) → pesanan (orders) → menu (menus, urut id).
+ * Kalau dua transaksi mengunci dengan urutan berbeda, keduanya bisa saling menunggu selamanya (deadlock).
  *
- * Aturan tambahan: pembeli hanya boleh membatalkan pesanan `confirmed` bila tunai; holding yang lewat waktu hanya bisa
- * di-`expire` (D2); `confirm` non-tunai harus sudah lunas; `pay` hanya untuk VA/online yang belum lunas.
+ * Aturan tambahan di luar tabel: pembeli hanya boleh membatalkan pesanan yang sudah diterima bila bayar tunai;
+ * pesanan menunggu yang sudah lewat batas waktu hanya bisa dikadaluarsakan; `confirm` untuk pesanan non-tunai harus
+ * sudah lunas; `pay` hanya untuk pesanan Virtual Account/online yang belum lunas.
  *
+ * @param conn   koneksi di dalam transaksi pemanggil
+ * @param code   kode pesanan
  * @param action aksi yang diminta
- * @param actor pelaku; pesanan dicari sesuai kepemilikan (pembeli: customer_id, penjual: merchant_id, sistem: semua)
+ * @param actor  pelaku; pesanan dicari sesuai pemiliknya (pembeli: customer_id, penjual: merchant_id,
+ *               sistem: semua pesanan)
  * @param reason alasan batal/tolak; untuk `expire` diisi otomatis "Tidak dikonfirmasi tepat waktu."
- * @returns id pesanan serta status asal (`dari`) dan tujuan (`ke`)
- * @throws AppError 404 NOT_FOUND bila pesanan tidak ada/bukan milik aktor; 409 CONFLICT bila aksi tidak sah untuk status itu
+ * @returns id pesanan, status asal (`dari`), dan status tujuan (`ke`)
+ * @throws 404 pesanan tidak ada atau bukan milik pelaku; 409 aksi tidak boleh untuk status pesanan saat ini
  */
 export async function transitionOrder(
   conn: Pick<PoolConnection, "query">,
@@ -106,12 +121,13 @@ export async function transitionOrder(
   reason?: string | null,
 ): Promise<{ id: number; dari: Status; ke: Status }> {
   const rule = TRANSITION_RULES[action];
-  // Pembeli: kunci baris users dulu seperti checkout. INSERT log di bawah mengambil kunci bersama FK pada users pembeli;
-  // tanpa ini, checkout pembeli yang sama (users X → orders holding miliknya) dan batal ini (orders X → users S) saling menunggu.
+  // 1. Kunci baris pembeli lebih dulu (FOR UPDATE = baca sambil mengunci, transaksi lain harus menunggu). Menyimpan
+  //    riwayat status dan notifikasi di bawah ikut mengunci baris pembeli karena berelasi ke tabel users; tanpa
+  //    langkah ini, checkout dan pembatalan milik pembeli yang sama bisa saling menunggu.
   if (actor.kind === "customer") await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [actor.userId]);
   else {
-    // F08 D11: penjual/sistem juga mengunci users pembeli dulu, karena INSERT notifikasi di bawah mengambil kunci FK pada users itu.
-    // customer_id tidak pernah berubah, jadi baca tanpa kunci aman; kepemilikan dicek ulang di SELECT berkunci.
+    // Penjual/sistem: cari dulu pemilik pesanan. customer_id tidak pernah berubah, jadi aman dibaca tanpa kunci;
+    // kepemilikan dicek ulang di langkah 2.
     const [[orderOwner]] = await conn.query<RowDataPacket[]>(
       `SELECT customer_id FROM orders WHERE code = ?${actor.kind === "merchant" ? " AND merchant_id = ?" : ""}`,
       [code, ...(actor.kind === "merchant" ? [actor.merchantId] : [])],
@@ -119,6 +135,7 @@ export async function transitionOrder(
     if (!orderOwner) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
     await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [orderOwner.customer_id]);
   }
+  // 2. Ambil dan kunci pesanannya, dibatasi milik pelaku. `lewat` = batas waktu tahan sudah habis.
   const [[order]] = await conn.query<RowDataPacket[]>(
     `SELECT id, customer_id, merchant_id, status, payment_method, payment_status, total, promo_id, merchant_promo_id, platform_promo_id,
        hold_until <= UTC_TIMESTAMP() AS lewat FROM orders WHERE code = ?${
@@ -127,19 +144,23 @@ export async function transitionOrder(
     [code, ...(actor.kind === "customer" ? [actor.userId] : actor.kind === "merchant" ? [actor.merchantId] : [])],
   );
   if (!order) throw new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
+  // 3. Cek aturan: tabel TRANSITION_RULES, lalu aturan tambahan.
   const fromStatus = order.status as Status;
   if (!rule.actors.includes(actor.kind) || !rule.from.includes(fromStatus)) throw conflict();
   if (action === "cancel" && fromStatus === "confirmed" && order.payment_method !== "cod") throw conflict();
-  // D2: holding lewat waktu hanya bisa di-expire (job F08)
+  // Pesanan menunggu yang sudah lewat batas waktu hanya boleh dikadaluarsakan (oleh job kadaluarsa), dan aksi
+  // kadaluarsa hanya boleh untuk pesanan yang sudah lewat batas waktu.
   if (fromStatus === "holding" && Boolean(order.lewat) !== (action === "expire"))
     throw conflict(action === "expire" ? undefined : "Batas waktu pesanan sudah habis.");
   if (action === "confirm" && order.payment_method !== "cod" && order.payment_status !== "paid")
     throw conflict("Pesanan belum dibayar.");
-  // VA (F10) dan Snap (meja F21, pre-order F26) dilunasi notifikasi Midtrans
+  // Virtual Account dan halaman bayar online (Snap) dilunasi lewat pemberitahuan dari Midtrans.
   if (action === "pay" && (!["va", "online"].includes(order.payment_method) || order.payment_status === "paid"))
     throw conflict("Pesanan ini tidak menunggu pembayaran online.");
-  // tolak pesanan yang sudah lunas tidak mengubah payment_status: dana Midtrans dikembalikan admin lewat daftar refund (F26)
+  // Menolak pesanan yang sudah lunas tidak mengubah payment_status: uangnya dikembalikan admin lewat daftar refund.
 
+  // 4. Ubah status, isi kolom waktunya, dan catat siapa serta mengapa bila batal. Pesanan tunai yang selesai
+  //    sekalian ditandai lunas; aksi `pay` menandai lunas (baris pembayarannya ditandai oleh penerima pemberitahuan).
   const isCancel = rule.to === "cancelled" || rule.to === "expired";
   const cancelReason = action === "expire" ? "Tidak dikonfirmasi tepat waktu." : reason?.trim() || null;
   await conn.query(
@@ -148,9 +169,8 @@ export async function transitionOrder(
     }${action === "pay" ? ", payment_status = 'paid'" : ""} WHERE id = ?`,
     [rule.to, ...(isCancel ? [actor.kind, cancelReason] : []), order.id],
   );
-  // pay: baris payments sudah ada sejak VA/halaman Snap dibuat, ditandai lunas oleh penerima notifikasi
-  // F12: kuota promo kembali saat batal/kedaluwarsa; sebelum releaseStock (urutan kunci promos → menus, sama dengan checkout)
-  // voucher toko + platform (pesanan baru) atau promo_id tunggal (pesanan sebelum migrasi 014); id naik = urutan kunci checkout
+  // 5. Batal/kadaluarsa: kembalikan jatah voucher (voucher toko + platform, atau satu promo_id di pesanan lama) dan
+  //    hapus catatan pemakaiannya. Dilakukan sebelum stok dan urut id, sama dengan urutan kunci saat checkout.
   const promoIds = [
     ...new Set(
       [order.promo_id, order.merchant_promo_id, order.platform_promo_id].filter(
@@ -163,8 +183,10 @@ export async function transitionOrder(
       await conn.query("UPDATE promos SET used_count = used_count - 1 WHERE id = ? AND used_count > 0", [promoId]);
     await conn.query("DELETE FROM promo_redemptions WHERE order_id = ?", [order.id]);
   }
+  // 6. Perbarui stok sesuai aturan aksi.
   const outcome = rule.stockOutcome?.(fromStatus);
   if (outcome) await releaseStock(conn, order.id, outcome);
+  // 7. Catat riwayat status, lalu beri tahu pembeli bila perubahan dilakukan penjual atau sistem.
   await conn.query(
     "INSERT INTO order_status_logs (order_id, from_status, to_status, actor_user_id) VALUES (?, ?, ?, ?)",
     [order.id, fromStatus, rule.to, actor.kind === "system" ? null : actor.userId],
