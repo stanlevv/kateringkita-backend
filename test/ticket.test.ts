@@ -17,8 +17,8 @@ let otherToken: string;
 let adminToken: string;
 let adminId: number;
 let budi: number;
-let kodeBudi: string;
-let kodeLain: string;
+let budiCode: string;
+let otherCode: string;
 
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
 const get = (urlPath: string, token: string) => request(app).get(`/api/v1${urlPath}`).set(authHeader(token));
@@ -26,11 +26,15 @@ const post = (urlPath: string, token: string, body?: object) => {
   const req = request(app).post(`/api/v1${urlPath}`).set(authHeader(token));
   return body === undefined ? req : req.send(body);
 };
-const ISI = { category: "pembayaran", subject: "VA sudah dibayar", message: "Status belum lunas padahal sudah bayar." };
-const buat = async (token = setup.customerToken, overrides: object = {}) =>
-  (await post("/me/tickets", token, { ...ISI, ...overrides }).expect(201)).body.data;
+const TICKET_INPUT = {
+  category: "pembayaran",
+  subject: "VA sudah dibayar",
+  message: "Status belum lunas padahal sudah bayar.",
+};
+const createTicket = async (token = setup.customerToken, overrides: object = {}) =>
+  (await post("/me/tickets", token, { ...TICKET_INPUT, ...overrides }).expect(201)).body.data;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-const KUNCI_DETAIL = [
+const DETAIL_KEYS = [
   "category",
   "closed_at",
   "closed_by",
@@ -43,7 +47,7 @@ const KUNCI_DETAIL = [
   "status",
   "subject",
 ];
-const KUNCI_RINGKAS = [
+const SUMMARY_KEYS = [
   "category",
   "code",
   "created_at",
@@ -55,15 +59,18 @@ const KUNCI_RINGKAS = [
   "subject",
   "unread",
 ];
-const TIDAK_ADA = { code: "NOT_FOUND", message: "Tiket tidak ditemukan." };
-const DITUTUP = { code: "TICKET_CLOSED", message: "Tiket sudah ditutup. Buat tiket baru bila masih perlu bantuan." };
+const NOT_FOUND_ERROR = { code: "NOT_FOUND", message: "Tiket tidak ditemukan." };
+const CLOSED_ERROR = {
+  code: "TICKET_CLOSED",
+  message: "Tiket sudah ditutup. Buat tiket baru bila masih perlu bantuan.",
+};
 
-const baris = async (code: string) =>
+const ticketRow = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM support_tickets WHERE code = ?", [code]))[0] as any[])[0];
-const jumlahTiket = async () =>
+const countTickets = async () =>
   Number(((await db.query<any[]>("SELECT COUNT(*) AS n FROM support_tickets"))[0] as any[])[0].n);
 // waktu (UTC) tiket dan semua pesannya diatur agar urutan & penanda belum dibaca pasti
-const setWaktu = async (code: string, timestamp: string) => {
+const setTimestamps = async (code: string, timestamp: string) => {
   await db.query(
     "UPDATE support_ticket_messages m JOIN support_tickets t ON t.id = m.ticket_id SET m.created_at = ? WHERE t.code = ?",
     [timestamp, code],
@@ -75,8 +82,8 @@ const setWaktu = async (code: string, timestamp: string) => {
   ]);
 };
 // balasan admin langsung lewat SQL (endpoint admin diuji di admin-ticket.test.ts)
-const balasanAdmin = async (code: string, body: string, timestamp: string | Date) => {
-  const { id } = await baris(code);
+const addAdminReply = async (code: string, body: string, timestamp: string | Date) => {
+  const { id } = await ticketRow(code);
   await db.query(
     "INSERT INTO support_ticket_messages (ticket_id, sender_role, sender_user_id, body, created_at) VALUES (?, 'admin', ?, ?, ?)",
     [id, adminId, body, timestamp],
@@ -91,8 +98,8 @@ beforeAll(async () => {
   adminToken = await login("081300000009");
   const [[user]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
   budi = user.id;
-  kodeBudi = await placeOrder(setup.customerToken, setup.menu);
-  kodeLain = await placeOrder(otherToken, setup.menu);
+  budiCode = await placeOrder(setup.customerToken, setup.menu);
+  otherCode = await placeOrder(otherToken, setup.menu);
 });
 beforeEach(async () => {
   await db.query("DELETE FROM support_tickets");
@@ -130,16 +137,16 @@ describe("POST /me/tickets", () => {
       category: "pembayaran",
       subject: "  VA sudah dibayar  ",
       message: "  Status belum lunas padahal sudah bayar.  ",
-      order_code: kodeBudi,
+      order_code: budiCode,
     }).expect(201);
     const ticket = res.body.data;
-    expect(Object.keys(ticket).sort()).toEqual(KUNCI_DETAIL);
+    expect(Object.keys(ticket).sort()).toEqual(DETAIL_KEYS);
     expect(ticket.code).toMatch(new RegExp(`^TK-${getWibDate().replace(/-/g, "")}-[2-9A-HJ-NP-Z]{4}$`));
     expect(ticket).toMatchObject({
       category: "pembayaran",
       subject: "VA sudah dibayar",
       status: "open",
-      order_code: kodeBudi,
+      order_code: budiCode,
       last_sender_role: "customer",
       closed_at: null,
       closed_by: null,
@@ -155,8 +162,8 @@ describe("POST /me/tickets", () => {
         created_at: ticket.last_message_at,
       },
     ]);
-    const row = await baris(ticket.code);
-    const [[order]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [kodeBudi]);
+    const row = await ticketRow(ticket.code);
+    const [[order]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [budiCode]);
     expect(row).toMatchObject({
       user_id: budi,
       order_id: order.id,
@@ -168,67 +175,73 @@ describe("POST /me/tickets", () => {
   });
 
   test("order_code kosong/tidak diisi → order_code null", async () => {
-    expect((await buat(setup.customerToken, { order_code: "" })).order_code).toBeNull();
-    expect((await buat(setup.customerToken, { order_code: null })).order_code).toBeNull();
-    expect((await buat()).order_code).toBeNull();
+    expect((await createTicket(setup.customerToken, { order_code: "" })).order_code).toBeNull();
+    expect((await createTicket(setup.customerToken, { order_code: null })).order_code).toBeNull();
+    expect((await createTicket()).order_code).toBeNull();
   });
 
   test("validasi: pesan per field, batas panjang setelah trim", async () => {
-    const SEMUA = {
+    const ALL_FIELD_ERRORS = {
       category: ["Pilih kategori."],
       subject: ["Judul 3–120 karakter."],
       message: ["Pesan 5–2000 karakter."],
     };
     expect((await post("/me/tickets", setup.customerToken).expect(400)).body.error).toMatchObject({
       code: "VALIDATION_ERROR",
-      fields: SEMUA,
+      fields: ALL_FIELD_ERRORS,
     });
-    expect((await post("/me/tickets", setup.customerToken, {}).expect(400)).body.error.fields).toEqual(SEMUA);
-    const salah = async (overrides: object) =>
-      (await post("/me/tickets", setup.customerToken, { ...ISI, ...overrides }).expect(400)).body.error.fields;
-    expect(await salah({ category: "lain" })).toEqual({ category: SEMUA.category });
-    expect(await salah({ category: "Akun" })).toEqual({ category: SEMUA.category });
-    expect(await salah({ subject: "  ab  " })).toEqual({ subject: SEMUA.subject });
-    expect(await salah({ subject: "x".repeat(121) })).toEqual({ subject: SEMUA.subject });
-    expect(await salah({ subject: 123 })).toEqual({ subject: SEMUA.subject });
-    expect(await salah({ message: "  abcd  " })).toEqual({ message: SEMUA.message });
-    expect(await salah({ message: "x".repeat(2001) })).toEqual({ message: SEMUA.message });
-    expect(await salah({ order_code: 12 })).toEqual({ order_code: ["Pesanan tidak ditemukan."] });
-    expect(await jumlahTiket()).toBe(0);
+    expect((await post("/me/tickets", setup.customerToken, {}).expect(400)).body.error.fields).toEqual(
+      ALL_FIELD_ERRORS,
+    );
+    const expectInvalid = async (overrides: object) =>
+      (await post("/me/tickets", setup.customerToken, { ...TICKET_INPUT, ...overrides }).expect(400)).body.error.fields;
+    expect(await expectInvalid({ category: "lain" })).toEqual({ category: ALL_FIELD_ERRORS.category });
+    expect(await expectInvalid({ category: "Akun" })).toEqual({ category: ALL_FIELD_ERRORS.category });
+    expect(await expectInvalid({ subject: "  ab  " })).toEqual({ subject: ALL_FIELD_ERRORS.subject });
+    expect(await expectInvalid({ subject: "x".repeat(121) })).toEqual({ subject: ALL_FIELD_ERRORS.subject });
+    expect(await expectInvalid({ subject: 123 })).toEqual({ subject: ALL_FIELD_ERRORS.subject });
+    expect(await expectInvalid({ message: "  abcd  " })).toEqual({ message: ALL_FIELD_ERRORS.message });
+    expect(await expectInvalid({ message: "x".repeat(2001) })).toEqual({ message: ALL_FIELD_ERRORS.message });
+    expect(await expectInvalid({ order_code: 12 })).toEqual({ order_code: ["Pesanan tidak ditemukan."] });
+    expect(await countTickets()).toBe(0);
     // batas tepat lolos; semua kategori diterima
-    await buat(setup.customerToken, { category: "akun", subject: "abc", message: "abcde" });
-    await buat(setup.customerToken, { category: "lainnya", subject: "x".repeat(120), message: "y".repeat(2000) });
+    await createTicket(setup.customerToken, { category: "akun", subject: "abc", message: "abcde" });
+    await createTicket(setup.customerToken, {
+      category: "lainnya",
+      subject: "x".repeat(120),
+      message: "y".repeat(2000),
+    });
     for (const category of ["pesanan", "penjual", "aplikasi"]) {
-      const { code } = await buat(setup.customerToken, { category });
+      const { code } = await createTicket(setup.customerToken, { category });
       await post(`/me/tickets/${code}/close`, setup.customerToken).expect(200);
     }
   });
 
   test("order_code milik pembeli lain / tidak ada → 400 fields.order_code, tidak ada tiket", async () => {
-    for (const order_code of [kodeLain, "KK-20000101-ZZZZ"]) {
-      const res = await post("/me/tickets", setup.customerToken, { ...ISI, order_code }).expect(400);
+    for (const order_code of [otherCode, "KK-20000101-ZZZZ"]) {
+      const res = await post("/me/tickets", setup.customerToken, { ...TICKET_INPUT, order_code }).expect(400);
       expect(res.body.error).toMatchObject({
         code: "VALIDATION_ERROR",
         fields: { order_code: ["Pesanan tidak ditemukan."] },
       });
     }
-    expect(await jumlahTiket()).toBe(0);
-    expect((await buat(otherToken, { order_code: kodeLain })).order_code).toBe(kodeLain);
+    expect(await countTickets()).toBe(0);
+    expect((await createTicket(otherToken, { order_code: otherCode })).order_code).toBe(otherCode);
   });
 
   test("maks 3 tiket belum ditutup (open/answered) → 409; tutup satu → boleh lagi; pembeli lain tidak terpengaruh", async () => {
-    const [first] = [await buat(), await buat(), await buat()];
+    const [first] = [await createTicket(), await createTicket(), await createTicket()];
     await db.query("UPDATE support_tickets SET status = 'answered' WHERE code = ?", [first.code]);
-    const res = await post("/me/tickets", setup.customerToken, ISI).expect(409);
+    const res = await post("/me/tickets", setup.customerToken, TICKET_INPUT).expect(409);
     expect(res.body.error).toEqual({
       code: "TOO_MANY_OPEN_TICKETS",
       message: "Masih ada 3 tiket yang belum selesai. Tunggu balasan atau tutup salah satunya.",
     });
-    await buat(otherToken);
+    await createTicket(otherToken);
     await post(`/me/tickets/${first.code}/close`, setup.customerToken).expect(200);
-    await buat();
-    await post("/me/tickets", setup.customerToken, ISI).expect(409);
-    expect(await jumlahTiket()).toBe(5);
+    await createTicket();
+    await post("/me/tickets", setup.customerToken, TICKET_INPUT).expect(409);
+    expect(await countTickets()).toBe(5);
   });
 
   test("kode bentrok → coba kode acak lain", async () => {
@@ -238,8 +251,8 @@ describe("POST /me/tickets", () => {
       .mockReturnValueOnce("AAAA")
       .mockReturnValueOnce("BBBB");
     try {
-      const first = await buat();
-      const second = await buat();
+      const first = await createTicket();
+      const second = await createTicket();
       expect(first.code.endsWith("-AAAA")).toBe(true);
       expect(second.code.endsWith("-BBBB")).toBe(true);
       expect(spy).toHaveBeenCalledTimes(3);
@@ -250,59 +263,59 @@ describe("POST /me/tickets", () => {
 
   test("batas laju 10 tiket baru per jam; permintaan gagal tidak dihitung", async () => {
     await post("/me/tickets", setup.customerToken, {}).expect(400);
-    await post("/me/tickets", setup.customerToken, { ...ISI, order_code: kodeLain }).expect(400);
+    await post("/me/tickets", setup.customerToken, { ...TICKET_INPUT, order_code: otherCode }).expect(400);
     for (let i = 0; i < 10; i++) {
-      const { code } = await buat();
+      const { code } = await createTicket();
       await post(`/me/tickets/${code}/close`, setup.customerToken).expect(200);
     }
-    const res = await post("/me/tickets", setup.customerToken, ISI).expect(429);
+    const res = await post("/me/tickets", setup.customerToken, TICKET_INPUT).expect(429);
     expect(res.body.error.code).toBe("RATE_LIMITED");
-    await buat(otherToken);
+    await createTicket(otherToken);
   });
 });
 
 describe("GET /me/tickets", () => {
   test("urut pesan terakhir terbaru, ringkasan, unread & unread_count, halaman, hanya milik sendiri", async () => {
     const [first, second, third] = [
-      await buat(setup.customerToken, { order_code: kodeBudi }),
-      await buat(),
-      await buat(),
+      await createTicket(setup.customerToken, { order_code: budiCode }),
+      await createTicket(),
+      await createTicket(),
     ];
-    const lain = await buat(otherToken);
-    for (const ticket of [first, second, third, lain]) await setWaktu(ticket.code, "2025-12-31 00:00:00");
-    await setWaktu(second.code, "2026-01-02 00:00:00");
-    const panjang = `Halo kak, ${"dana sudah masuk ".repeat(10)}`;
+    const otherTicket = await createTicket(otherToken);
+    for (const ticket of [first, second, third, otherTicket]) await setTimestamps(ticket.code, "2025-12-31 00:00:00");
+    await setTimestamps(second.code, "2026-01-02 00:00:00");
+    const longReply = `Halo kak, ${"dana sudah masuk ".repeat(10)}`;
     // t1: dibaca 01-02, admin membalas 01-03 → belum dibaca; t3: admin membalas 01-01, dibaca sesudahnya → sudah
     await db.query("UPDATE support_tickets SET customer_last_read_at = '2026-01-02 00:00:00' WHERE code = ?", [
       first.code,
     ]);
-    await balasanAdmin(first.code, panjang, "2026-01-03 00:00:00");
-    await balasanAdmin(third.code, "Sudah kami cek.", "2026-01-01 00:00:00");
+    await addAdminReply(first.code, longReply, "2026-01-03 00:00:00");
+    await addAdminReply(third.code, "Sudah kami cek.", "2026-01-01 00:00:00");
     await db.query("UPDATE support_tickets SET customer_last_read_at = '2026-01-01 00:00:01' WHERE code = ?", [
       third.code,
     ]);
-    await balasanAdmin(lain.code, "Untuk pembeli lain.", "2026-01-05 00:00:00");
+    await addAdminReply(otherTicket.code, "Untuk pembeli lain.", "2026-01-05 00:00:00");
 
     const res = await get("/me/tickets", setup.customerToken).expect(200);
     expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 3, unread_count: 1 });
     expect(res.body.data.map((ticket: any) => ticket.code)).toEqual([first.code, second.code, third.code]);
-    for (const summary of res.body.data) expect(Object.keys(summary).sort()).toEqual(KUNCI_RINGKAS);
+    for (const summary of res.body.data) expect(Object.keys(summary).sort()).toEqual(SUMMARY_KEYS);
     expect(res.body.data[0]).toEqual({
       code: first.code,
       category: "pembayaran",
       subject: "VA sudah dibayar",
       status: "answered",
-      order_code: kodeBudi,
+      order_code: budiCode,
       created_at: "2025-12-31T00:00:00.000Z",
       last_message_at: "2026-01-03T00:00:00.000Z",
-      last_message_preview: panjang.slice(0, 100),
+      last_message_preview: longReply.slice(0, 100),
       last_sender_role: "admin",
       unread: true,
     });
     expect(res.body.data[1]).toMatchObject({
       status: "open",
       order_code: null,
-      last_message_preview: ISI.message,
+      last_message_preview: TICKET_INPUT.message,
       last_sender_role: "customer",
       unread: false,
     });
@@ -325,7 +338,7 @@ describe("GET /me/tickets", () => {
     });
 
     const otherRes = await get("/me/tickets", otherToken).expect(200);
-    expect(otherRes.body.data.map((ticket: any) => ticket.code)).toEqual([lain.code]);
+    expect(otherRes.body.data.map((ticket: any) => ticket.code)).toEqual([otherTicket.code]);
     expect(otherRes.body.meta).toEqual({ page: 1, limit: 20, total: 1, unread_count: 1 });
   });
 
@@ -337,13 +350,13 @@ describe("GET /me/tickets", () => {
 
 describe("GET /me/tickets/:code", () => {
   test("menandai dibaca; nama admin asli tidak dikirim; pesan urut kirim", async () => {
-    const ticket = await buat();
-    await setWaktu(ticket.code, "2026-01-01 00:00:00");
-    await balasanAdmin(ticket.code, "Halo, sudah kami cek.", "2026-01-01 01:00:00");
+    const ticket = await createTicket();
+    await setTimestamps(ticket.code, "2026-01-01 00:00:00");
+    await addAdminReply(ticket.code, "Halo, sudah kami cek.", "2026-01-01 01:00:00");
     expect((await get("/me/tickets", setup.customerToken).expect(200)).body.meta.unread_count).toBe(1);
 
     const res = await get(`/me/tickets/${ticket.code}`, setup.customerToken).expect(200);
-    expect(Object.keys(res.body.data).sort()).toEqual(KUNCI_DETAIL);
+    expect(Object.keys(res.body.data).sort()).toEqual(DETAIL_KEYS);
     expect(res.body.data).toMatchObject({
       code: ticket.code,
       status: "answered",
@@ -355,7 +368,7 @@ describe("GET /me/tickets/:code", () => {
         id: expect.any(Number),
         sender_role: "customer",
         sender_name: null,
-        body: ISI.message,
+        body: TICKET_INPUT.message,
         created_at: "2026-01-01T00:00:00.000Z",
       },
       {
@@ -367,56 +380,62 @@ describe("GET /me/tickets/:code", () => {
       },
     ]);
     expect(JSON.stringify(res.body)).not.toContain("Admin Rahasia");
-    expect((await baris(ticket.code)).customer_last_read_at).not.toBeNull();
+    expect((await ticketRow(ticket.code)).customer_last_read_at).not.toBeNull();
     const listRes = await get("/me/tickets", setup.customerToken).expect(200);
     expect(listRes.body.meta.unread_count).toBe(0);
     expect(listRes.body.data[0].unread).toBe(false);
 
     // balasan admin setelah dibaca → belum dibaca lagi
-    await balasanAdmin(ticket.code, "Ada tambahan.", new Date(Date.now() + 3600e3));
+    await addAdminReply(ticket.code, "Ada tambahan.", new Date(Date.now() + 3600e3));
     expect((await get("/me/tickets", setup.customerToken).expect(200)).body.data[0].unread).toBe(true);
   });
 
   test("tiket pembeli lain / tidak ada → 404, tidak ditandai dibaca", async () => {
-    const lain = await buat(otherToken);
-    for (const code of [lain.code, "TK-20000101-ZZZZ"]) {
-      expect((await get(`/me/tickets/${code}`, setup.customerToken).expect(404)).body.error).toMatchObject(TIDAK_ADA);
+    const otherTicket = await createTicket(otherToken);
+    for (const code of [otherTicket.code, "TK-20000101-ZZZZ"]) {
+      expect((await get(`/me/tickets/${code}`, setup.customerToken).expect(404)).body.error).toMatchObject(
+        NOT_FOUND_ERROR,
+      );
       expect(
         (await post(`/me/tickets/${code}/messages`, setup.customerToken, { body: "Halo" }).expect(404)).body.error,
-      ).toMatchObject(TIDAK_ADA);
+      ).toMatchObject(NOT_FOUND_ERROR);
       expect((await post(`/me/tickets/${code}/close`, setup.customerToken).expect(404)).body.error).toMatchObject(
-        TIDAK_ADA,
+        NOT_FOUND_ERROR,
       );
     }
-    expect(await baris(lain.code)).toMatchObject({ status: "open", customer_last_read_at: null, closed_at: null });
-    expect((await get(`/me/tickets/${lain.code}`, otherToken).expect(200)).body.data.messages).toHaveLength(1);
+    expect(await ticketRow(otherTicket.code)).toMatchObject({
+      status: "open",
+      customer_last_read_at: null,
+      closed_at: null,
+    });
+    expect((await get(`/me/tickets/${otherTicket.code}`, otherToken).expect(200)).body.data.messages).toHaveLength(1);
   });
 });
 
 describe("balas & tutup (pembeli)", () => {
   test("balas: 201 TicketDetail, status kembali open, last_message_at maju; validasi 1–2000", async () => {
-    const ticket = await buat();
-    await setWaktu(ticket.code, "2026-01-01 00:00:00");
-    await balasanAdmin(ticket.code, "Mohon kirim bukti bayar.", "2026-01-01 01:00:00");
+    const ticket = await createTicket();
+    await setTimestamps(ticket.code, "2026-01-01 00:00:00");
+    await addAdminReply(ticket.code, "Mohon kirim bukti bayar.", "2026-01-01 01:00:00");
 
     const res = await post(`/me/tickets/${ticket.code}/messages`, setup.customerToken, {
       body: "  Sudah saya kirim.  ",
     }).expect(201);
     const detail = res.body.data;
-    expect(Object.keys(detail).sort()).toEqual(KUNCI_DETAIL);
+    expect(Object.keys(detail).sort()).toEqual(DETAIL_KEYS);
     expect(detail).toMatchObject({ status: "open", last_sender_role: "customer" });
     expect(detail.messages.map((message: any) => [message.sender_role, message.body])).toEqual([
-      ["customer", ISI.message],
+      ["customer", TICKET_INPUT.message],
       ["admin", "Mohon kirim bukti bayar."],
       ["customer", "Sudah saya kirim."],
     ]);
     expect(detail.last_message_at).toBe(detail.messages[2].created_at);
     expect(Date.parse(detail.last_message_at)).toBeGreaterThan(Date.parse("2026-01-01T01:00:00Z"));
 
-    const PESAN = { body: ["Pesan 1–2000 karakter."] };
+    const MESSAGE_FIELD_ERROR = { body: ["Pesan 1–2000 karakter."] };
     for (const body of [{}, { body: "   " }, { body: "x".repeat(2001) }, { body: 5 }]) {
       const errorRes = await post(`/me/tickets/${ticket.code}/messages`, setup.customerToken, body).expect(400);
-      expect(errorRes.body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: PESAN });
+      expect(errorRes.body.error).toMatchObject({ code: "VALIDATION_ERROR", fields: MESSAGE_FIELD_ERROR });
     }
     await post(`/me/tickets/${ticket.code}/messages`, setup.customerToken).expect(400);
     await post(`/me/tickets/${ticket.code}/messages`, setup.customerToken, { body: "y" }).expect(201);
@@ -427,15 +446,15 @@ describe("balas & tutup (pembeli)", () => {
   });
 
   test("tutup: 200 closed oleh customer; ulang tanpa perubahan; balas tiket tertutup 409", async () => {
-    const ticket = await buat();
+    const ticket = await createTicket();
     const res = await post(`/me/tickets/${ticket.code}/close`, setup.customerToken).expect(200);
-    expect(Object.keys(res.body.data).sort()).toEqual(KUNCI_DETAIL);
+    expect(Object.keys(res.body.data).sort()).toEqual(DETAIL_KEYS);
     expect(res.body.data).toMatchObject({ code: ticket.code, status: "closed", closed_by: "customer" });
     expect(res.body.data.closed_at).toMatch(ISO);
 
     await db.query("UPDATE support_tickets SET closed_at = '2026-01-01 00:00:00' WHERE code = ?", [ticket.code]);
-    const ulang = await post(`/me/tickets/${ticket.code}/close`, setup.customerToken).expect(200);
-    expect(ulang.body.data).toMatchObject({
+    const closeAgain = await post(`/me/tickets/${ticket.code}/close`, setup.customerToken).expect(200);
+    expect(closeAgain.body.data).toMatchObject({
       status: "closed",
       closed_by: "customer",
       closed_at: "2026-01-01T00:00:00.000Z",
@@ -444,14 +463,14 @@ describe("balas & tutup (pembeli)", () => {
     const errorRes = await post(`/me/tickets/${ticket.code}/messages`, setup.customerToken, {
       body: "Masih ada masalah.",
     }).expect(409);
-    expect(errorRes.body.error).toEqual(DITUTUP);
+    expect(errorRes.body.error).toEqual(CLOSED_ERROR);
     expect((await get(`/me/tickets/${ticket.code}`, setup.customerToken).expect(200)).body.data.messages).toHaveLength(
       1,
     );
   });
 
   test("tiket yang sudah ditutup admin: tutup oleh pembeli 200, closed_by tetap admin", async () => {
-    const ticket = await buat();
+    const ticket = await createTicket();
     await db.query(
       "UPDATE support_tickets SET status = 'closed', closed_by = 'admin', closed_at = '2026-01-01 00:00:00' WHERE code = ?",
       [ticket.code],
@@ -467,17 +486,17 @@ describe("balas & tutup (pembeli)", () => {
 
 describe("akses /me/tickets", () => {
   test("penjual & admin 403, tanpa token 401", async () => {
-    const ticket = await buat();
-    for (const tok of [setup.tokenA, adminToken]) {
-      await get("/me/tickets", tok).expect(403);
-      await post("/me/tickets", tok, ISI).expect(403);
-      await get(`/me/tickets/${ticket.code}`, tok).expect(403);
-      await post(`/me/tickets/${ticket.code}/messages`, tok, { body: "Halo" }).expect(403);
-      await post(`/me/tickets/${ticket.code}/close`, tok).expect(403);
+    const ticket = await createTicket();
+    for (const token of [setup.tokenA, adminToken]) {
+      await get("/me/tickets", token).expect(403);
+      await post("/me/tickets", token, TICKET_INPUT).expect(403);
+      await get(`/me/tickets/${ticket.code}`, token).expect(403);
+      await post(`/me/tickets/${ticket.code}/messages`, token, { body: "Halo" }).expect(403);
+      await post(`/me/tickets/${ticket.code}/close`, token).expect(403);
     }
     await request(app).get("/api/v1/me/tickets").expect(401);
-    await request(app).post("/api/v1/me/tickets").send(ISI).expect(401);
-    expect(await jumlahTiket()).toBe(1);
-    expect(await baris(ticket.code)).toMatchObject({ status: "open", customer_last_read_at: null });
+    await request(app).post("/api/v1/me/tickets").send(TICKET_INPUT).expect(401);
+    expect(await countTickets()).toBe(1);
+    expect(await ticketRow(ticket.code)).toMatchObject({ status: "open", customer_last_read_at: null });
   });
 });

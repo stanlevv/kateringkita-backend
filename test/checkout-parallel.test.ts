@@ -8,7 +8,7 @@ import { menuRow, createCustomer, prepareCheckout } from "./helpers/merchant";
 // Idempotensi & checkout paralel tanpa oversell
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
-const pesan = (token: string, key: string, item: Record<string, unknown> = {}) =>
+const postOrder = (token: string, key: string, item: Record<string, unknown> = {}) =>
   request(app)
     .post("/api/v1/orders")
     .set("Authorization", `Bearer ${token}`)
@@ -16,7 +16,7 @@ const pesan = (token: string, key: string, item: Record<string, unknown> = {}) =
     .send({ items: [{ menu_id: setup.menu, qty: 1, ...item }], pickup_point_id: 1, payment_method: "cod" });
 const count = async (sql: string, args: unknown[] = []) =>
   Number(((await db.query<any[]>(sql, args))[0] as any[])[0].n);
-const kuota = (quota: number) =>
+const setQuota = (quota: number) =>
   db.query("UPDATE menus SET daily_quota = ?, quota_today = ? WHERE id = ?", [quota, quota, setup.menu]);
 const status = (responses: { status: number }[]) => responses.map((res) => res.status).sort();
 
@@ -26,9 +26,12 @@ beforeEach(async () => {
 
 describe("tanpa oversell", () => {
   test("sisa 1, 2 pembeli paralel → tepat 1 sukses", async () => {
-    await kuota(1);
-    const lain = await createCustomer(1);
-    const responses = await Promise.all([pesan(setup.customerToken, randomUUID()), pesan(lain, randomUUID())]);
+    await setQuota(1);
+    const otherToken = await createCustomer(1);
+    const responses = await Promise.all([
+      postOrder(setup.customerToken, randomUUID()),
+      postOrder(otherToken, randomUUID()),
+    ]);
     expect(status(responses)).toEqual([201, 409]);
     expect(responses.find((res) => res.status === 409)!.body.error.code).toBe("OUT_OF_STOCK");
     expect((await menuRow(setup.menu)).held_today).toBe(1);
@@ -36,10 +39,10 @@ describe("tanpa oversell", () => {
   });
 
   test("sisa 3, 5 pembeli paralel → tepat 3 sukses, sisa tidak negatif", async () => {
-    await kuota(3);
+    await setQuota(3);
     const tokens = [];
     for (let i = 1; i <= 5; i++) tokens.push(await createCustomer(i));
-    const responses = await Promise.all(tokens.map((token) => pesan(token, randomUUID())));
+    const responses = await Promise.all(tokens.map((token) => postOrder(token, randomUUID())));
     expect(status(responses)).toEqual([201, 201, 201, 409, 409]);
     const menu = await menuRow(setup.menu);
     expect(menu.held_today).toBe(3);
@@ -48,7 +51,7 @@ describe("tanpa oversell", () => {
   });
 
   test("1 pembeli, 5 kunci berbeda paralel → tepat 3 sukses, sisanya CONFLICT batas", async () => {
-    const responses = await Promise.all(Array.from({ length: 5 }, () => pesan(setup.customerToken, randomUUID())));
+    const responses = await Promise.all(Array.from({ length: 5 }, () => postOrder(setup.customerToken, randomUUID())));
     expect(status(responses)).toEqual([201, 201, 201, 409, 409]);
     for (const res of responses.filter((response) => response.status === 409)) {
       expect(res.body.error).toMatchObject({
@@ -64,7 +67,9 @@ describe("tanpa oversell", () => {
 describe("idempotensi", () => {
   test("kunci sama, 3 paralel → 1 pesanan, kode sama, stok ditahan sekali", async () => {
     const idempotencyKey = randomUUID();
-    const responses = await Promise.all([1, 2, 3].map(() => pesan(setup.customerToken, idempotencyKey, { qty: 2 })));
+    const responses = await Promise.all(
+      [1, 2, 3].map(() => postOrder(setup.customerToken, idempotencyKey, { qty: 2 })),
+    );
     expect(status(responses)).toEqual([201, 201, 201]);
     expect(new Set(responses.map((res) => res.body.data.code)).size).toBe(1);
     expect(await count("SELECT COUNT(*) n FROM orders")).toBe(1);
@@ -76,13 +81,13 @@ describe("idempotensi", () => {
 
   test("replay berurutan: setelah stok habis & status berubah → 201 kode sama, keadaan terkini, stok tetap", async () => {
     const idempotencyKey = randomUUID();
-    const first = await pesan(setup.customerToken, idempotencyKey).expect(201);
+    const first = await postOrder(setup.customerToken, idempotencyKey).expect(201);
     await db.query("UPDATE menus SET held_today = quota_today WHERE id = ?", [setup.menu]);
     await db.query("UPDATE orders SET status = 'confirmed'");
-    const sebelum = await menuRow(setup.menu);
-    const second = await pesan(setup.customerToken, idempotencyKey).expect(201);
+    const before = await menuRow(setup.menu);
+    const second = await postOrder(setup.customerToken, idempotencyKey).expect(201);
     expect(second.body.data).toMatchObject({ code: first.body.data.code, status: "confirmed" });
-    expect(await menuRow(setup.menu)).toEqual(sebelum);
+    expect(await menuRow(setup.menu)).toEqual(before);
   });
 
   test("isi beda → 409; urutan option_ids berbeda dianggap sama", async () => {
@@ -92,10 +97,12 @@ describe("idempotensi", () => {
     );
     const [lowId, highId] = [setup.keju, result.insertId as number].sort((left, right) => left - right);
     const idempotencyKey = randomUUID();
-    const first = await pesan(setup.customerToken, idempotencyKey, { option_ids: [highId, lowId] }).expect(201);
-    const second = await pesan(setup.customerToken, idempotencyKey, { option_ids: [lowId, highId] }).expect(201);
+    const first = await postOrder(setup.customerToken, idempotencyKey, { option_ids: [highId, lowId] }).expect(201);
+    const second = await postOrder(setup.customerToken, idempotencyKey, { option_ids: [lowId, highId] }).expect(201);
     expect(second.body.data.code).toBe(first.body.data.code);
-    const res = await pesan(setup.customerToken, idempotencyKey, { qty: 2, option_ids: [lowId, highId] }).expect(409);
+    const res = await postOrder(setup.customerToken, idempotencyKey, { qty: 2, option_ids: [lowId, highId] }).expect(
+      409,
+    );
     expect(res.body.error).toEqual({
       code: "CONFLICT",
       message: "Pesanan ini sudah dikirim dengan isi berbeda. Muat ulang lalu coba lagi.",
@@ -103,20 +110,20 @@ describe("idempotensi", () => {
   });
 
   test("gagal lalu ulang dengan kunci sama → boleh", async () => {
-    await kuota(0);
+    await setQuota(0);
     const idempotencyKey = randomUUID();
-    expect((await pesan(setup.customerToken, idempotencyKey).expect(409)).body.error.code).toBe("OUT_OF_STOCK");
-    await kuota(5);
-    await pesan(setup.customerToken, idempotencyKey).expect(201);
+    expect((await postOrder(setup.customerToken, idempotencyKey).expect(409)).body.error.code).toBe("OUT_OF_STOCK");
+    await setQuota(5);
+    await postOrder(setup.customerToken, idempotencyKey).expect(201);
     expect(await count("SELECT COUNT(*) n FROM orders")).toBe(1);
   });
 
   test("lingkup per pembeli; huruf besar = huruf kecil", async () => {
     const idempotencyKey = randomUUID();
-    const first = await pesan(setup.customerToken, idempotencyKey).expect(201);
-    const second = await pesan(await createCustomer(1), idempotencyKey).expect(201);
+    const first = await postOrder(setup.customerToken, idempotencyKey).expect(201);
+    const second = await postOrder(await createCustomer(1), idempotencyKey).expect(201);
     expect(second.body.data.code).not.toBe(first.body.data.code);
-    const third = await pesan(setup.customerToken, idempotencyKey.toUpperCase()).expect(201);
+    const third = await postOrder(setup.customerToken, idempotencyKey.toUpperCase()).expect(201);
     expect(third.body.data.code).toBe(first.body.data.code);
     expect(await count("SELECT COUNT(*) n FROM orders")).toBe(2);
   });

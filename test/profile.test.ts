@@ -105,9 +105,9 @@ test("titik temu favorit: valid, tidak ada, nonaktif, null", async () => {
   expect(bad.body.error.fields.favorite_pickup_point_id).toEqual(["Titik temu tidak tersedia."]);
   await db.query("UPDATE pickup_points SET is_active = FALSE WHERE id = 3");
   expect((await patch({ favorite_pickup_point_id: 3 }, customerToken)).status).toBe(400);
-  const nul = await patch({ favorite_pickup_point_id: null }, customerToken);
-  expect(nul.status).toBe(200);
-  expect(nul.body.data.user.favorite_pickup_point_id).toBeNull();
+  const clearedRes = await patch({ favorite_pickup_point_id: null }, customerToken);
+  expect(clearedRes.status).toBe(200);
+  expect(clearedRes.body.data.user.favorite_pickup_point_id).toBeNull();
 });
 
 test("email null: pembeli ditolak, penjual jadi null; non-string → pesan Indonesia", async () => {

@@ -47,7 +47,7 @@ describe("SigV4", () => {
     expect(presignedUrl.search).toContain("X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost");
     expect(presignedUrl.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
     const urlText = presignedUrl.toString();
-    for (const bagian of ["rahasia", encodeURIComponent("rahasia/r2+uji")]) expect(urlText).not.toContain(bagian);
+    for (const secret of ["rahasia", encodeURIComponent("rahasia/r2+uji")]) expect(urlText).not.toContain(secret);
   });
 });
 
@@ -95,8 +95,8 @@ describe("endpoint unggah", () => {
     const exp = Date.parse(expires_at);
     expect(exp).toBeGreaterThanOrEqual(startMs + 299_000);
     expect(exp).toBeLessThanOrEqual(Date.now() + 301_000);
-    const lagi = await requestUpload(tokenA, MENU).expect(200);
-    expect(lagi.body.data.public_url).not.toBe(public_url);
+    const again = await requestUpload(tokenA, MENU).expect(200);
+    expect(again.body.data.public_url).not.toBe(public_url);
     expect(
       (await requestUpload(tokenA, { ...MENU, purpose: "logo", content_type: "image/jpeg" }).expect(200)).body.data
         .public_url,
@@ -106,8 +106,8 @@ describe("endpoint unggah", () => {
   test("validasi tipe, ukuran, purpose", async () => {
     const svg = await requestUpload(tokenA, { ...MENU, content_type: "image/svg+xml" }).expect(400);
     expect(svg.body.error.fields.content_type).toEqual(["Format foto harus JPG, PNG, atau WebP."]);
-    const besar = await requestUpload(tokenA, { ...MENU, size: 5242881 }).expect(400);
-    expect(besar.body.error.fields.size).toEqual(["Ukuran foto maksimal 5 MB."]);
+    const tooBigRes = await requestUpload(tokenA, { ...MENU, size: 5242881 }).expect(400);
+    expect(tooBigRes.body.error.fields.size).toEqual(["Ukuran foto maksimal 5 MB."]);
     expect((await requestUpload(tokenA, { ...MENU, size: 0 }).expect(400)).body.error.fields.size).toBeDefined();
     expect(
       (await requestUpload(tokenA, { ...MENU, purpose: "avatar" }).expect(400)).body.error.fields.purpose,

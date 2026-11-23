@@ -94,15 +94,15 @@ test("limit dibatasi 100", async () => {
 
 test("admin+mobile: satu bcrypt.compare, body sama dengan sandi salah", async () => {
   const spy = vi.spyOn(bcrypt, "compare");
-  const bener = await login("081300000009", "mobile").expect(401);
+  const correctRes = await login("081300000009", "mobile").expect(401);
   expect(spy).toHaveBeenCalledTimes(1);
   spy.mockClear();
-  const salah = await request(app)
+  const wrongRes = await request(app)
     .post("/api/v1/auth/login")
     .send({ identifier: "081300000009", password: "salahsalah1", client: "mobile" })
     .expect(401);
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(bener.body).toEqual(salah.body);
+  expect(correctRes.body).toEqual(wrongRes.body);
   spy.mockRestore();
 });
 

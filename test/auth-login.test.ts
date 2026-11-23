@@ -22,12 +22,12 @@ beforeEach(async () => {
 });
 
 const SECRET = "rahasia-internal-minimal-32-karakter-aman";
-const loginDari = (clientIp: string, body: object, secret: string | null = SECRET) => {
+const loginFrom = (clientIp: string, body: object, secret: string | null = SECRET) => {
   const req = request(app).post("/api/v1/auth/login").set("X-Client-IP", clientIp);
   return (secret === null ? req : req.set("X-Internal-Secret", secret)).send(body);
 };
-const salah = { identifier: "budi@mail.com", password: "salah12345", client: "web" };
-const benar = { identifier: "budi@mail.com", password: "rahasia123", client: "web" };
+const wrongBody = { identifier: "budi@mail.com", password: "salah12345", client: "web" };
+const correctBody = { identifier: "budi@mail.com", password: "rahasia123", client: "web" };
 
 const login = (body: object) => request(app).post("/api/v1/auth/login").send(body);
 const sessions = async () => {
@@ -133,16 +133,16 @@ test("identifier 300 karakter → 400 VALIDATION_ERROR", async () => {
 });
 
 test("login berhasil tidak memakan jatah (5 berhasil lalu salah → 401)", async () => {
-  for (let i = 0; i < 5; i++) expect((await login(benar)).status).toBe(200);
-  expect((await login(salah)).status).toBe(401);
+  for (let i = 0; i < 5; i++) expect((await login(correctBody)).status).toBe(200);
+  expect((await login(wrongBody)).status).toBe(401);
 });
 
 test("X-Client-IP dipercaya hanya bila secret cocok; bucket per IP klien", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
-    for (let i = 0; i < 5; i++) expect((await loginDari("203.0.113.1", salah)).status).toBe(401);
-    expect((await loginDari("203.0.113.1", salah)).status).toBe(429);
-    expect((await loginDari("203.0.113.2", salah)).status).toBe(401);
+    for (let i = 0; i < 5; i++) expect((await loginFrom("203.0.113.1", wrongBody)).status).toBe(401);
+    expect((await loginFrom("203.0.113.1", wrongBody)).status).toBe(429);
+    expect((await loginFrom("203.0.113.2", wrongBody)).status).toBe(401);
   } finally {
     env.INTERNAL_API_SECRET = undefined;
   }
@@ -153,13 +153,13 @@ test("X-Client-IP diabaikan bila secret salah/kosong/tak dikonfigurasi", async (
   try {
     for (const secret of ["salah-salah-salah-salah-salah-salah-1", "x".repeat(SECRET.length), "pendek", null]) {
       loginLimiter.reset();
-      for (let i = 0; i < 5; i++) expect((await loginDari(`203.0.113.${i + 10}`, salah, secret)).status).toBe(401);
-      expect((await loginDari("203.0.113.99", salah, secret)).status).toBe(429);
+      for (let i = 0; i < 5; i++) expect((await loginFrom(`203.0.113.${i + 10}`, wrongBody, secret)).status).toBe(401);
+      expect((await loginFrom("203.0.113.99", wrongBody, secret)).status).toBe(429);
     }
     env.INTERNAL_API_SECRET = undefined;
     loginLimiter.reset();
-    for (let i = 0; i < 5; i++) expect((await loginDari(`203.0.113.${i + 10}`, salah)).status).toBe(401);
-    expect((await loginDari("203.0.113.99", salah)).status).toBe(429);
+    for (let i = 0; i < 5; i++) expect((await loginFrom(`203.0.113.${i + 10}`, wrongBody)).status).toBe(401);
+    expect((await loginFrom("203.0.113.99", wrongBody)).status).toBe(429);
   } finally {
     env.INTERNAL_API_SECRET = undefined;
   }
@@ -168,17 +168,17 @@ test("X-Client-IP diabaikan bila secret salah/kosong/tak dikonfigurasi", async (
 test("10 gagal dari 10 IP → IP baru 429 walau sandi benar; varian aksen ikut", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
-    for (let i = 0; i < 10; i++) expect((await loginDari(`198.51.100.${i + 1}`, salah)).status).toBe(401);
-    expect((await loginDari("198.51.100.200", benar)).status).toBe(429);
-    expect((await loginDari("198.51.100.201", { ...benar, identifier: "búdi@mail.com" })).status).toBe(429);
+    for (let i = 0; i < 10; i++) expect((await loginFrom(`198.51.100.${i + 1}`, wrongBody)).status).toBe(401);
+    expect((await loginFrom("198.51.100.200", correctBody)).status).toBe(429);
+    expect((await loginFrom("198.51.100.201", { ...correctBody, identifier: "búdi@mail.com" })).status).toBe(429);
   } finally {
     env.INTERNAL_API_SECRET = undefined;
   }
 });
 
 test("8 login salah paralel dari satu IP → tepat 5×401, sisanya 429", async () => {
-  const responses = await Promise.all(Array.from({ length: 8 }, () => login(salah)));
+  const responses = await Promise.all(Array.from({ length: 8 }, () => login(wrongBody)));
   expect(responses.filter((res) => res.status === 401)).toHaveLength(5);
   expect(responses.filter((res) => res.status === 429)).toHaveLength(3);
-  expect((await login(salah)).status).toBe(429);
+  expect((await login(wrongBody)).status).toBe(429);
 });

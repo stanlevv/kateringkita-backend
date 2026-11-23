@@ -7,10 +7,10 @@ import { menuRow, createCustomer, placeOrder, prepareCheckout } from "./helpers/
 
 // GET /me/orders 3 tab, POST /orders/:code/cancel & /complete
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
-let tLain: string;
+let otherToken: string;
 const codes: Record<string, string> = {};
 
-const KUNCI_DAFTAR = [
+const LIST_KEYS = [
   "can_cancel",
   "can_complete",
   "can_review",
@@ -34,33 +34,33 @@ const KUNCI_DAFTAR = [
   "total",
   "updated_at",
 ];
-const daftar = (query = "", token = setup.customerToken) =>
+const listOrders = (query = "", token = setup.customerToken) =>
   request(app).get(`/api/v1/me/orders${query}`).set("Authorization", `Bearer ${token}`);
-const aksi = (code: string, action: "cancel" | "complete", body?: unknown, token = setup.customerToken) => {
+const postAction = (code: string, action: "cancel" | "complete", body?: unknown, token = setup.customerToken) => {
   const req = request(app).post(`/api/v1/orders/${code}/${action}`).set("Authorization", `Bearer ${token}`);
   return body === undefined ? req : req.send(body as object);
 };
 const status = async (code: string) =>
   ((await db.query<any[]>("SELECT status FROM orders WHERE code = ?", [code]))[0] as any[])[0].status;
-const atur = (code: string, fields: Record<string, unknown>) =>
+const updateOrder = (code: string, fields: Record<string, unknown>) =>
   db.query("UPDATE orders SET ? WHERE code = ?", [fields, code]);
 // pesanan berstatus tertentu, created_at berurutan per detik agar urutan pasti
-let detik = 0;
-const buat = async (orderStatus: string, menu = setup.menu) => {
+let seconds = 0;
+const createOrderWithStatus = async (orderStatus: string, menu = setup.menu) => {
   const code = await placeOrder(setup.customerToken, menu, 1);
-  await atur(code, { status: orderStatus, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, ++detik)) });
+  await updateOrder(code, { status: orderStatus, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, ++seconds)) });
   return code;
 };
-const kodeDari = (res: request.Response) => res.body.data.map((order: { code: string }) => order.code);
+const orderCodes = (res: request.Response) => res.body.data.map((order: { code: string }) => order.code);
 
 beforeAll(async () => {
   setup = await prepareCheckout();
-  tLain = await createCustomer(1);
-  codes.holding = await buat("holding");
-  codes.cooking = await buat("cooking", setup.menu2);
-  codes.completed = await buat("completed");
-  codes.cancelled = await buat("cancelled");
-  codes.expired = await buat("expired");
+  otherToken = await createCustomer(1);
+  codes.holding = await createOrderWithStatus("holding");
+  codes.cooking = await createOrderWithStatus("cooking", setup.menu2);
+  codes.completed = await createOrderWithStatus("completed");
+  codes.cancelled = await createOrderWithStatus("cancelled");
+  codes.expired = await createOrderWithStatus("expired");
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -68,10 +68,10 @@ afterAll(() => {
 
 describe("GET /me/orders", () => {
   test("tab active (bawaan) urut terbaru, meta, bentuk Order tanpa payment/hpp", async () => {
-    const res = await daftar("?tab=active").expect(200);
-    expect(kodeDari(res)).toEqual([codes.cooking, codes.holding]);
+    const res = await listOrders("?tab=active").expect(200);
+    expect(orderCodes(res)).toEqual([codes.cooking, codes.holding]);
     expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 2 });
-    expect(Object.keys(res.body.data[0]).sort()).toEqual(KUNCI_DAFTAR);
+    expect(Object.keys(res.body.data[0]).sort()).toEqual(LIST_KEYS);
     expect(JSON.stringify(res.body)).not.toContain('"hpp"');
     expect(res.body.data[0]).toMatchObject({
       status: "cooking",
@@ -81,33 +81,33 @@ describe("GET /me/orders", () => {
     });
     expect(res.body.data[1]).toMatchObject({ status: "holding", can_cancel: true });
     expect(res.body.data[1].seconds_left).toBeGreaterThan(0);
-    expect(kodeDari(await daftar().expect(200))).toEqual([codes.cooking, codes.holding]);
+    expect(orderCodes(await listOrders().expect(200))).toEqual([codes.cooking, codes.holding]);
   });
 
   test("tab completed & cancelled", async () => {
-    const completedRes = await daftar("?tab=completed").expect(200);
-    expect(kodeDari(completedRes)).toEqual([codes.completed]);
+    const completedRes = await listOrders("?tab=completed").expect(200);
+    expect(orderCodes(completedRes)).toEqual([codes.completed]);
     expect(completedRes.body.data[0]).toMatchObject({ can_review: true, can_cancel: false });
-    expect(kodeDari(await daftar("?tab=cancelled").expect(200))).toEqual([codes.expired, codes.cancelled]);
+    expect(orderCodes(await listOrders("?tab=cancelled").expect(200))).toEqual([codes.expired, codes.cancelled]);
   });
 
   test("q: kode sebagian huruf kecil, nama menu, % di-escape", async () => {
-    expect(kodeDari(await daftar(`?tab=active&q=${codes.holding.slice(-6).toLowerCase()}`).expect(200))).toEqual([
+    expect(orderCodes(await listOrders(`?tab=active&q=${codes.holding.slice(-6).toLowerCase()}`).expect(200))).toEqual([
       codes.holding,
     ]);
-    expect(kodeDari(await daftar("?tab=active&q=teh").expect(200))).toEqual([codes.cooking]);
-    expect(kodeDari(await daftar("?tab=active&q=nasi").expect(200))).toEqual([codes.holding]);
-    expect((await daftar("?tab=active&q=%25").expect(200)).body.data).toEqual([]);
+    expect(orderCodes(await listOrders("?tab=active&q=teh").expect(200))).toEqual([codes.cooking]);
+    expect(orderCodes(await listOrders("?tab=active&q=nasi").expect(200))).toEqual([codes.holding]);
+    expect((await listOrders("?tab=active&q=%25").expect(200)).body.data).toEqual([]);
   });
 
   test("page/limit", async () => {
-    const res = await daftar("?tab=cancelled&page=2&limit=1").expect(200);
-    expect(kodeDari(res)).toEqual([codes.cancelled]);
+    const res = await listOrders("?tab=cancelled&page=2&limit=1").expect(200);
+    expect(orderCodes(res)).toEqual([codes.cancelled]);
     expect(res.body.meta).toEqual({ page: 2, limit: 1, total: 2 });
   });
 
   test("validasi query → 400 dengan fields", async () => {
-    const fieldsOf = async (query: string) => (await daftar(query).expect(400)).body.error.fields;
+    const fieldsOf = async (query: string) => (await listOrders(query).expect(400)).body.error.fields;
     expect(await fieldsOf("?tab=semua")).toEqual({ tab: ["Tab tidak dikenal."] });
     expect(await fieldsOf("?updated_since=kemarin")).toEqual({ updated_since: ["Waktu tidak valid."] });
     expect(await fieldsOf(`?q=${"a".repeat(51)}`)).toEqual({ q: ["Pencarian maksimal 50 karakter."] });
@@ -116,24 +116,26 @@ describe("GET /me/orders", () => {
   });
 
   test("pembeli lain → kosong, tidak bisa cancel/complete pesanan Budi (404)", async () => {
-    expect((await daftar("?tab=active", tLain).expect(200)).body.data).toEqual([]);
-    await aksi(codes.holding, "cancel", {}, tLain).expect(404);
-    const ready = await buat("ready");
-    expect((await aksi(ready, "complete", {}, tLain).expect(404)).body.error.message).toBe("Pesanan tidak ditemukan.");
+    expect((await listOrders("?tab=active", otherToken).expect(200)).body.data).toEqual([]);
+    await postAction(codes.holding, "cancel", {}, otherToken).expect(404);
+    const ready = await createOrderWithStatus("ready");
+    expect((await postAction(ready, "complete", {}, otherToken).expect(404)).body.error.message).toBe(
+      "Pesanan tidak ditemukan.",
+    );
     expect(await status(codes.holding)).toBe("holding");
     expect(await status(ready)).toBe("ready");
   });
 
   test("updated_since: tab diabaikan, masa depan → kosong", async () => {
-    const ready = await buat("ready");
+    const ready = await createOrderWithStatus("ready");
     // semua pesanan lama dianggap lebih tua agar hanya perubahan baru yang terkirim
     await db.query("UPDATE orders SET updated_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR");
     const [[latest]] = await db.query<any[]>("SELECT MAX(updated_at) AS t FROM orders");
     const since = new Date(latest.t.getTime() + 1000).toISOString();
-    await aksi(ready, "complete").expect(200);
-    const res = await daftar(`?tab=active&updated_since=${encodeURIComponent(since)}`).expect(200);
+    await postAction(ready, "complete").expect(200);
+    const res = await listOrders(`?tab=active&updated_since=${encodeURIComponent(since)}`).expect(200);
     expect(res.body.data.map((order: any) => [order.code, order.status])).toEqual([[ready, "completed"]]);
-    expect((await daftar("?updated_since=2999-01-01T00:00:00%2B07:00").expect(200)).body.data).toEqual([]);
+    expect((await listOrders("?updated_since=2999-01-01T00:00:00%2B07:00").expect(200)).body.data).toEqual([]);
   });
 });
 
@@ -141,7 +143,7 @@ describe("POST /orders/:code/cancel", () => {
   test("dari holding → 200, stok kembali; ulangi → 409", async () => {
     const code = await placeOrder(setup.customerToken, setup.menu, 2);
     const held = (await menuRow(setup.menu)).held_today;
-    const res = await aksi(code, "cancel", { reason: "Salah pesan" }).expect(200);
+    const res = await postAction(code, "cancel", { reason: "Salah pesan" }).expect(200);
     expect(res.body.data).toMatchObject({
       code,
       status: "cancelled",
@@ -150,7 +152,7 @@ describe("POST /orders/:code/cancel", () => {
       payment: { method: "cod" },
     });
     expect((await menuRow(setup.menu)).held_today).toBe(held - 2);
-    expect((await aksi(code, "cancel").expect(409)).body.error).toMatchObject({
+    expect((await postAction(code, "cancel").expect(409)).body.error).toMatchObject({
       code: "CONFLICT",
       message: "Pesanan sudah berubah status.",
     });
@@ -158,10 +160,10 @@ describe("POST /orders/:code/cancel", () => {
 
   test("dari confirmed tunai → 200 tanpa body; cooking → 409; lewat waktu → 409 habis", async () => {
     const firstCode = await placeOrder(setup.customerToken, setup.menu);
-    await atur(firstCode, { status: "confirmed" });
-    await aksi(firstCode, "cancel").expect(200);
-    const secondCode = await buat("cooking");
-    await aksi(secondCode, "cancel", {}).expect(409);
+    await updateOrder(firstCode, { status: "confirmed" });
+    await postAction(firstCode, "cancel").expect(200);
+    const secondCode = await createOrderWithStatus("cooking");
+    await postAction(secondCode, "cancel", {}).expect(409);
     const thirdCode = await placeOrder(setup.customerToken, setup.menu);
     await db.query("UPDATE orders SET hold_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE code = ?", [thirdCode]);
     expect(
@@ -172,31 +174,31 @@ describe("POST /orders/:code/cancel", () => {
           .expect(200)
       ).body.data.can_cancel,
     ).toBe(false);
-    expect((await aksi(thirdCode, "cancel", {}).expect(409)).body.error.message).toBe(
+    expect((await postAction(thirdCode, "cancel", {}).expect(409)).body.error.message).toBe(
       "Batas waktu pesanan sudah habis.",
     );
-    await atur(thirdCode, { status: "expired" });
+    await updateOrder(thirdCode, { status: "expired" });
   });
 
   test("reason > 255 → 400 fields.reason", async () => {
     const code = await placeOrder(setup.customerToken, setup.menu);
-    const res = await aksi(code, "cancel", { reason: "a".repeat(256) }).expect(400);
+    const res = await postAction(code, "cancel", { reason: "a".repeat(256) }).expect(400);
     expect(res.body.error.fields).toEqual({ reason: ["Alasan maksimal 255 karakter."] });
-    await aksi(code, "cancel", "bukan objek").expect(200);
+    await postAction(code, "cancel", "bukan objek").expect(200);
   });
 });
 
 describe("POST /orders/:code/complete", () => {
   test("dari ready → 200 paid, can_review; dari cooking → 409", async () => {
-    const code = await buat("ready");
-    const res = await aksi(code, "complete").expect(200);
+    const code = await createOrderWithStatus("ready");
+    const res = await postAction(code, "complete").expect(200);
     expect(res.body.data).toMatchObject({
       status: "completed",
       payment: { status: "paid" },
       can_review: true,
       can_complete: false,
     });
-    await aksi(await buat("cooking"), "complete").expect(409);
+    await postAction(await createOrderWithStatus("cooking"), "complete").expect(409);
   });
 });
 
@@ -215,7 +217,7 @@ describe("checkout & batal pembeli yang sama berbarengan", () => {
   test.each([1, 2, 3])("putaran %i: keduanya sukses (tanpa deadlock)", async () => {
     const code = await placeOrder(setup.customerToken, setup.menu);
     const [cancelRes, orderRes] = await Promise.all([
-      aksi(code, "cancel"),
+      postAction(code, "cancel"),
       request(app)
         .post("/api/v1/orders")
         .set("Authorization", `Bearer ${setup.customerToken}`)
@@ -223,22 +225,26 @@ describe("checkout & batal pembeli yang sama berbarengan", () => {
         .send({ items: [{ menu_id: setup.menu, qty: 1 }], pickup_point_id: 1, payment_method: "cod" }),
     ]);
     expect([cancelRes.status, orderRes.status]).toEqual([200, 201]);
-    await atur(orderRes.body.data.code, { status: "expired" });
+    await updateOrder(orderRes.body.data.code, { status: "expired" });
   });
 });
 
 describe("review", () => {
   test("updated_since: urut updated_at naik, halaman berikutnya dari tanda air tidak melompat", async () => {
-    const [firstCode, secondCode, thirdCode] = [await buat("cooking"), await buat("cooking"), await buat("cooking")];
+    const [firstCode, secondCode, thirdCode] = [
+      await createOrderWithStatus("cooking"),
+      await createOrderWithStatus("cooking"),
+      await createOrderWithStatus("cooking"),
+    ];
     const startMs = Date.now() - 3600e3;
     await db.query("UPDATE orders SET updated_at = ?", [new Date(startMs - 3600e3)]);
     for (const [i, code] of [firstCode, secondCode, thirdCode].entries())
-      await atur(code, { updated_at: new Date(startMs + [3, 1, 2][i] * 1000) });
-    const res1 = await daftar(`?updated_since=${new Date(startMs).toISOString()}&limit=2`).expect(200);
+      await updateOrder(code, { updated_at: new Date(startMs + [3, 1, 2][i] * 1000) });
+    const res1 = await listOrders(`?updated_since=${new Date(startMs).toISOString()}&limit=2`).expect(200);
     expect(res1.body.data.map((order: any) => order.code)).toEqual([secondCode, thirdCode]);
-    const res2 = await daftar(`?updated_since=${res1.body.data.at(-1).updated_at}&limit=2`).expect(200);
+    const res2 = await listOrders(`?updated_since=${res1.body.data.at(-1).updated_at}&limit=2`).expect(200);
     expect(res2.body.data.map((order: any) => order.code)).toEqual([thirdCode, firstCode]);
-    for (const code of [firstCode, secondCode, thirdCode]) await atur(code, { status: "completed" });
+    for (const code of [firstCode, secondCode, thirdCode]) await updateOrder(code, { status: "completed" });
   });
 
   test("Order pembeli memuat cancel_reason & cancelled_by penolakan penjual", async () => {
@@ -252,7 +258,7 @@ describe("review", () => {
       await request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${setup.customerToken}`).expect(200)
     ).body.data;
     expect(detail).toMatchObject({ cancel_reason: "Stok habis", cancelled_by: "merchant" });
-    const listed = (await daftar("?tab=cancelled").expect(200)).body.data.find((order: any) => order.code === code);
+    const listed = (await listOrders("?tab=cancelled").expect(200)).body.data.find((order: any) => order.code === code);
     expect(listed).toMatchObject({ cancel_reason: "Stok habis", cancelled_by: "merchant" });
   });
 
@@ -260,7 +266,9 @@ describe("review", () => {
   test("q tak peka huruf walau kolom berkolasi biner", async () => {
     await db.query("ALTER TABLE order_items MODIFY menu_name VARCHAR(80) NOT NULL COLLATE utf8mb4_bin");
     await db.query("ALTER TABLE orders MODIFY code VARCHAR(20) NOT NULL COLLATE utf8mb4_bin");
-    expect(kodeDari(await daftar("?tab=active&q=NASI").expect(200))).toContain(codes.holding);
-    expect(kodeDari(await daftar(`?tab=active&q=${codes.holding.toLowerCase()}`).expect(200))).toEqual([codes.holding]);
+    expect(orderCodes(await listOrders("?tab=active&q=NASI").expect(200))).toContain(codes.holding);
+    expect(orderCodes(await listOrders(`?tab=active&q=${codes.holding.toLowerCase()}`).expect(200))).toEqual([
+      codes.holding,
+    ]);
   });
 });

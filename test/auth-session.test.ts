@@ -127,25 +127,25 @@ test("/me merchant: tidak ada password_hash di mana pun dalam body", async () =>
 
 // Sandi diganti saat login berjalan: login yang sudah lolos bcrypt.compare dengan sandi lama tidak boleh mendapat sesi setelah sandi diganti
 test("login yang dijeda setelah compare, lalu sandi diganti → login itu 401", async () => {
-  const asli = bcrypt.compare.bind(bcrypt) as (plain: string, hash: string) => Promise<boolean>;
-  let lepas!: () => void;
-  const gerbang = new Promise<void>((resolve) => (lepas = resolve));
-  let sampai!: () => void;
-  const dijeda = new Promise<void>((resolve) => (sampai = resolve));
+  const originalCompare = bcrypt.compare.bind(bcrypt) as (plain: string, hash: string) => Promise<boolean>;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let arrived!: () => void;
+  const paused = new Promise<void>((resolve) => (arrived = resolve));
   vi.spyOn(bcrypt, "compare").mockImplementationOnce((async (plain: string, hash: string) => {
-    const matches = await asli(plain, hash);
-    sampai();
-    await gerbang;
+    const matches = await originalCompare(plain, hash);
+    arrived();
+    await gate;
     return matches;
   }) as never);
-  const telat = login("budi@mail.com").then((res) => res);
-  await dijeda;
+  const lateLogin = login("budi@mail.com").then((res) => res);
+  await paused;
   await request(app)
     .put("/api/v1/me/password")
     .set("Authorization", `Bearer ${customerToken}`)
     .send({ current_password: "rahasia123", new_password: "sandibaru123" })
     .expect(204);
-  lepas();
-  expect((await telat).status).toBe(401);
+  release();
+  expect((await lateLogin).status).toBe(401);
   vi.restoreAllMocks();
 });

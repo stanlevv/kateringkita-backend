@@ -10,7 +10,7 @@ import { menuRow, createCustomer, prepareCheckout, makeVisible } from "./helpers
 // POST /orders tunai + GET /orders/:code
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
-const KUNCI_ORDER = [
+const ORDER_KEYS = [
   "can_cancel",
   "can_complete",
   "can_review",
@@ -35,20 +35,20 @@ const KUNCI_ORDER = [
   "total",
   "updated_at",
 ];
-const pesan = (body: unknown, key: string | null = randomUUID(), token = setup.customerToken) => {
+const postOrder = (body: unknown, key: string | null = randomUUID(), token = setup.customerToken) => {
   const req = request(app).post("/api/v1/orders").set("Authorization", `Bearer ${token}`);
   return (key === null ? req : req.set("Idempotency-Key", key)).send(body as object);
 };
-const isi = (overrides: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
+const orderBody = (overrides: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
   items: [{ menu_id: setup.menu, qty: 2, option_ids: [setup.keju], ...item }],
   pickup_point_id: 1,
   payment_method: "cod",
   ...overrides,
 });
-const baca = (code: string, token = setup.customerToken) =>
+const getOrder = (code: string, token = setup.customerToken) =>
   request(app).get(`/api/v1/orders/${code}`).set("Authorization", `Bearer ${token}`);
-const hitung = async (tabel: string) =>
-  Number(((await db.query<any[]>(`SELECT COUNT(*) n FROM ${tabel}`))[0] as any[])[0].n);
+const countRows = async (tableName: string) =>
+  Number(((await db.query<any[]>(`SELECT COUNT(*) n FROM ${tableName}`))[0] as any[])[0].n);
 
 beforeEach(async () => {
   setup = await prepareCheckout();
@@ -58,9 +58,9 @@ afterEach(() => {
 });
 
 test("201: bentuk Order + payment tunai, kode KK-tanggal WIB, harga server, tanpa hpp", async () => {
-  const res = await pesan(isi({ note: " Sambal dipisah ", total: 1 })).expect(201);
+  const res = await postOrder(orderBody({ note: " Sambal dipisah ", total: 1 })).expect(201);
   const data = res.body.data;
-  expect(Object.keys(data).sort()).toEqual(KUNCI_ORDER);
+  expect(Object.keys(data).sort()).toEqual(ORDER_KEYS);
   expect(data.code).toMatch(new RegExp(`^KK-${getWibDate().replace(/-/g, "")}-[0-9A-HJKMNP-TV-Z]{4}$`));
   expect(data).toMatchObject({
     status: "holding",
@@ -94,13 +94,13 @@ test("201: bentuk Order + payment tunai, kode KK-tanggal WIB, harga server, tanp
   expect(JSON.stringify(res.body)).not.toContain('"hpp"');
 
   await db.query("UPDATE merchants SET hold_minutes = 10 WHERE id = ?", [setup.idA]);
-  const res2 = await pesan(isi()).expect(201);
+  const res2 = await postOrder(orderBody()).expect(201);
   expect(res2.body.data.seconds_left).toBeGreaterThanOrEqual(595);
   expect(res2.body.data.seconds_left).toBeLessThanOrEqual(600);
 });
 
 test("DB: salinan pesanan, item, log status, held_today naik; nama dari body", async () => {
-  const res = await pesan(isi()).expect(201);
+  const res = await postOrder(orderBody()).expect(201);
   const [[order]] = await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [res.body.data.code]);
   const [[budi]] = await db.query<any[]>("SELECT id FROM users WHERE full_name = 'Budi'");
   expect(order).toMatchObject({
@@ -141,14 +141,14 @@ test("DB: salinan pesanan, item, log status, held_today naik; nama dari body", a
   expect(logs).toEqual([{ from_status: null, to_status: "holding", actor_user_id: budi.id }]);
   expect(await menuRow(setup.menu)).toMatchObject({ held_today: 2, sold_today: 0 });
 
-  const res2 = await pesan(isi({ customer_name: "Rina", customer_phone: "081111111111" })).expect(201);
+  const res2 = await postOrder(orderBody({ customer_name: "Rina", customer_phone: "081111111111" })).expect(201);
   const [[order2]] = await db.query<any[]>("SELECT customer_name, customer_phone FROM orders WHERE code = ?", [
     res2.body.data.code,
   ]);
   expect(order2).toEqual({ customer_name: "Rina", customer_phone: "081111111111" });
 
   // kosong / spasi → nilai akun, sama dengan null
-  const res3 = await pesan(isi({ customer_name: "  ", customer_phone: "" })).expect(201);
+  const res3 = await postOrder(orderBody({ customer_name: "  ", customer_phone: "" })).expect(201);
   const [[order3]] = await db.query<any[]>("SELECT customer_name, customer_phone FROM orders WHERE code = ?", [
     res3.body.data.code,
   ]);
@@ -156,9 +156,9 @@ test("DB: salinan pesanan, item, log status, held_today naik; nama dari body", a
 });
 
 test("harga menu berubah setelah checkout → pesanan tetap harga lama", async () => {
-  const res = await pesan(isi()).expect(201);
+  const res = await postOrder(orderBody()).expect(201);
   await db.query("UPDATE menus SET price = 50000, name = 'Ganti' WHERE id = ?", [setup.menu]);
-  const detailRes = await baca(res.body.data.code).expect(200);
+  const detailRes = await getOrder(res.body.data.code).expect(200);
   expect(detailRes.body.data.items[0]).toMatchObject({ menu_name: "Nasi Ayam", unit_price: 18000, line_total: 36000 });
   expect(detailRes.body.data.total).toBe(36000);
 });
@@ -167,7 +167,7 @@ test("stok kemarin di-reset lewat refreshDailyQuota sebelum hold", async () => {
   await db.query("UPDATE menus SET stock_date = DATE_SUB(stock_date, INTERVAL 1 DAY), held_today = 7 WHERE id = ?", [
     setup.menu,
   ]);
-  await pesan(isi()).expect(201);
+  await postOrder(orderBody()).expect(201);
   const [[menu]] = await db.query<any[]>(
     "SELECT DATE_FORMAT(stock_date, '%Y-%m-%d') d, held_today FROM menus WHERE id = ?",
     [setup.menu],
@@ -177,87 +177,87 @@ test("stok kemarin di-reset lewat refreshDailyQuota sebelum hold", async () => {
 
 test("balapan tengah malam: menu sudah pindah ke tanggal stok lain → 409, hold tidak bocor ke hari lain", async () => {
   await db.query("UPDATE menus SET stock_date = DATE_ADD(stock_date, INTERVAL 1 DAY) WHERE id = ?", [setup.menu]);
-  const sebelum = await menuRow(setup.menu);
-  const res = await pesan(isi()).expect(409);
+  const before = await menuRow(setup.menu);
+  const res = await postOrder(orderBody()).expect(409);
   expect(res.body.error.code).toBe("OUT_OF_STOCK");
-  expect(await hitung("orders")).toBe(0);
-  expect(await hitung("order_idempotency")).toBe(0);
-  expect(await menuRow(setup.menu)).toEqual(sebelum);
+  expect(await countRows("orders")).toBe(0);
+  expect(await countRows("order_idempotency")).toBe(0);
+  expect(await menuRow(setup.menu)).toEqual(before);
 });
 
 test("OUT_OF_STOCK: 409 dengan sisa per baris, tidak ada pesanan, held_today tetap", async () => {
   await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [setup.menu]);
-  const res = await pesan(isi()).expect(409);
+  const res = await postOrder(orderBody()).expect(409);
   expect(res.body.error).toEqual({
     code: "OUT_OF_STOCK",
     message: "Sisa porsi tidak cukup.",
     fields: { "items.0.qty": ["Sisa 1 porsi."] },
   });
-  expect(await hitung("orders")).toBe(0);
-  expect(await hitung("order_idempotency")).toBe(0);
+  expect(await countRows("orders")).toBe(0);
+  expect(await countRows("order_idempotency")).toBe(0);
   expect((await menuRow(setup.menu)).held_today).toBe(4);
 });
 
 describe("validasi", () => {
   test("payment_method selain cod/va/online (termasuk qris yang sudah dihapus) / tidak ada → 400", async () => {
     for (const paymentMethod of ["transfer", "tunai", "qris", undefined]) {
-      const res = await pesan(isi({ payment_method: paymentMethod })).expect(400);
+      const res = await postOrder(orderBody({ payment_method: paymentMethod })).expect(400);
       expect(res.body.error.fields.payment_method).toEqual(["Pilih bayar tunai, Virtual Account, atau bayar online."]);
     }
   });
 
   test("Idempotency-Key hilang / bukan UUID → 400", async () => {
     for (const key of [null, "abc"]) {
-      const res = await pesan(isi(), key).expect(400);
+      const res = await postOrder(orderBody(), key).expect(400);
       expect(res.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid." });
       expect(res.body.error.fields).toEqual({ idempotency_key: ["Muat ulang aplikasi lalu coba lagi."] });
     }
   });
 
   test("promo → 422 tanpa pesanan", async () => {
-    await pesan(isi({ promo_code: "HEMAT" })).expect(422);
-    expect(await hitung("orders")).toBe(0);
+    await postOrder(orderBody({ promo_code: "HEMAT" })).expect(422);
+    expect(await countRows("orders")).toBe(0);
   });
 
   test("toko tidak tersedia / tutup lewat POST /orders → 409, tanpa baris tertinggal", async () => {
     await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [setup.idA]);
-    expect((await pesan(isi()).expect(409)).body.error.code).toBe("MERCHANT_UNAVAILABLE");
+    expect((await postOrder(orderBody()).expect(409)).body.error.code).toBe("MERCHANT_UNAVAILABLE");
     await makeVisible(setup.idA, { open: false });
-    expect((await pesan(isi()).expect(409)).body.error.code).toBe("MERCHANT_CLOSED");
-    expect(await hitung("orders")).toBe(0);
-    expect(await hitung("order_idempotency")).toBe(0);
+    expect((await postOrder(orderBody()).expect(409)).body.error.code).toBe("MERCHANT_CLOSED");
+    expect(await countRows("orders")).toBe(0);
+    expect(await countRows("order_idempotency")).toBe(0);
   });
 });
 
 test("3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async () => {
-  for (let i = 0; i < 3; i++) await pesan(isi({}, { qty: 1 })).expect(201);
+  for (let i = 0; i < 3; i++) await postOrder(orderBody({}, { qty: 1 })).expect(201);
   const idempotencyKey = randomUUID();
-  const res = await pesan(isi({}, { qty: 1 }), idempotencyKey).expect(409);
+  const res = await postOrder(orderBody({}, { qty: 1 }), idempotencyKey).expect(409);
   expect(res.body.error).toMatchObject({
     code: "CONFLICT",
     message: "Masih ada 3 pesanan yang menunggu. Selesaikan atau batalkan dulu.",
   });
   await db.query("UPDATE orders SET hold_until = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE) ORDER BY id LIMIT 1");
-  await pesan(isi({}, { qty: 1 }), idempotencyKey).expect(201);
+  await postOrder(orderBody({}, { qty: 1 }), idempotencyKey).expect(201);
 });
 
 test("kode bentrok → buat ulang; selalu bentrok → 500 tanpa sisa", async () => {
-  const hari = getWibDate().replace(/-/g, "");
+  const day = getWibDate().replace(/-/g, "");
   vi.spyOn(codeGenerator, "random").mockReturnValueOnce("AAAA").mockReturnValueOnce("AAAA").mockReturnValueOnce("BBBB");
-  expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-AAAA`);
-  expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-BBBB`);
+  expect((await postOrder(orderBody({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${day}-AAAA`);
+  expect((await postOrder(orderBody({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${day}-BBBB`);
   vi.spyOn(codeGenerator, "random").mockReturnValue("AAAA");
   const idempotencyKey = randomUUID();
-  const res = await pesan(isi({}, { qty: 1 }), idempotencyKey).expect(500);
+  const res = await postOrder(orderBody({}, { qty: 1 }), idempotencyKey).expect(500);
   expect(res.body.error.code).toBe("INTERNAL_ERROR");
-  expect(await hitung("orders")).toBe(2);
+  expect(await countRows("orders")).toBe(2);
   const [rows] = await db.query<any[]>("SELECT 1 FROM order_idempotency WHERE idem_key = ?", [idempotencyKey]);
   expect(rows).toHaveLength(0);
   expect((await menuRow(setup.menu)).held_today).toBe(2);
 });
 
 test("pickup_at ikut di Order (ISO UTC)", async () => {
-  const res = await pesan(isi({ pickup_at: `${getWibDate()}T13:30:00+07:00` })).expect(201);
+  const res = await postOrder(orderBody({ pickup_at: `${getWibDate()}T13:30:00+07:00` })).expect(201);
   expect(res.body.data.pickup_at).toBe(new Date(`${getWibDate()}T13:30:00+07:00`).toISOString());
 });
 
@@ -272,37 +272,37 @@ describe.skipIf(process.env.DATABASE_URL?.includes("tidbcloud.com"))("galat di t
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'gagal uji'`);
     const idempotencyKey = randomUUID();
     vi.spyOn(console, "error").mockImplementation(() => {});
-    await pesan(isi(), idempotencyKey).expect(500);
-    expect(await hitung("orders")).toBe(0);
-    expect(await hitung("order_idempotency")).toBe(0);
+    await postOrder(orderBody(), idempotencyKey).expect(500);
+    expect(await countRows("orders")).toBe(0);
+    expect(await countRows("order_idempotency")).toBe(0);
     expect((await menuRow(setup.menu)).held_today).toBe(0);
     await db.query("DROP TRIGGER uji_gagal");
-    await pesan(isi(), idempotencyKey).expect(201);
+    await postOrder(orderBody(), idempotencyKey).expect(201);
   });
 
   test("duplikat pada kunci selain orders.code bukan tabrakan kode → tidak dicoba ulang", async () => {
     await db.query(`CREATE TRIGGER uji_gagal BEFORE INSERT ON orders FOR EACH ROW
       SIGNAL SQLSTATE '23000' SET MESSAGE_TEXT = "Duplicate entry 'x' for key 'orders.lain'", MYSQL_ERRNO = 1062`);
     const randomSpy = vi.spyOn(codeGenerator, "random");
-    const res = await pesan(isi());
+    const res = await postOrder(orderBody());
     expect(res.status).not.toBe(201);
     expect(randomSpy).toHaveBeenCalledTimes(1);
-    expect(await hitung("order_idempotency")).toBe(0);
+    expect(await countRows("order_idempotency")).toBe(0);
   });
 });
 
 describe("GET /orders/:code", () => {
   test("pemilik 200 bentuk sama; pembeli lain / kode tak ada 404; penjual 403; tanpa token 401", async () => {
-    const res = await pesan(isi()).expect(201);
+    const res = await postOrder(orderBody()).expect(201);
     const code = res.body.data.code;
-    const detailRes = await baca(code).expect(200);
-    expect(Object.keys(detailRes.body.data).sort()).toEqual(KUNCI_ORDER);
+    const detailRes = await getOrder(code).expect(200);
+    expect(Object.keys(detailRes.body.data).sort()).toEqual(ORDER_KEYS);
     expect({ ...detailRes.body.data, seconds_left: 0 }).toEqual({ ...res.body.data, seconds_left: 0 });
-    const lain = await createCustomer(1);
-    const otherRes = await baca(code, lain).expect(404);
+    const otherToken = await createCustomer(1);
+    const otherRes = await getOrder(code, otherToken).expect(404);
     expect(otherRes.body.error).toMatchObject({ code: "NOT_FOUND", message: "Pesanan tidak ditemukan." });
-    await baca("KK-00000000-ZZZZ").expect(404);
-    await baca(code, setup.tokenA).expect(403);
+    await getOrder("KK-00000000-ZZZZ").expect(404);
+    await getOrder(code, setup.tokenA).expect(403);
     await request(app).get(`/api/v1/orders/${code}`).expect(401);
   });
 });

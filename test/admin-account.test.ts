@@ -80,8 +80,8 @@ describe("kelola admin", () => {
     expect(temp_password).toMatch(/\d/);
 
     const token = await login("081300000102", temp_password);
-    const blok = await request(app).get("/api/v1/admin/summary").set(authHeader(token)).expect(403);
-    expect(blok.body.error.code).toBe("PASSWORD_CHANGE_REQUIRED");
+    const blockedRes = await request(app).get("/api/v1/admin/summary").set(authHeader(token)).expect(403);
+    expect(blockedRes.body.error.code).toBe("PASSWORD_CHANGE_REQUIRED");
 
     await request(app)
       .put("/api/v1/me/password")

@@ -72,15 +72,15 @@ test("penjual B DELETE menu A → 404, menu A utuh; id aneh → 404", async () =
 test("checklist toko di panel admin: hapus atau nonaktif membuat active_menu & menu_with_photo false", async () => {
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
   const adminToken = await login("081300000009");
-  const cek = async () =>
+  const getChecklist = async () =>
     (await request(app).get(`/api/v1/admin/merchants/${idA}`).set("Authorization", `Bearer ${adminToken}`).expect(200))
       .body.data.checklist;
   const id = await insertMenu(idA, { image_url: "/menu/1.png" });
-  expect(await cek()).toMatchObject({ active_menu: true, menu_with_photo: true });
+  expect(await getChecklist()).toMatchObject({ active_menu: true, menu_with_photo: true });
   await req("patch", `/menus/${id}`).send({ is_active: false }).expect(200);
-  expect(await cek()).toMatchObject({ active_menu: false, menu_with_photo: false });
+  expect(await getChecklist()).toMatchObject({ active_menu: false, menu_with_photo: false });
   await req("patch", `/menus/${id}`).send({ is_active: true }).expect(200);
-  expect(await cek()).toMatchObject({ active_menu: true, menu_with_photo: true });
+  expect(await getChecklist()).toMatchObject({ active_menu: true, menu_with_photo: true });
   await req("delete", `/menus/${id}`).expect(204);
-  expect(await cek()).toMatchObject({ active_menu: false, menu_with_photo: false });
+  expect(await getChecklist()).toMatchObject({ active_menu: false, menu_with_photo: false });
 });

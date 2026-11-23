@@ -12,9 +12,8 @@ const api = (method: "get" | "put" | "delete", path: string, token?: string) => 
 };
 const favIds = async (query = "", token = customerToken) =>
   (await api("get", `/me/favorites${query}`, token).expect(200)).body.data.map((menu: any) => menu.id);
-const jumlahBaris = async () =>
-  Number(((await db.query<any[]>("SELECT COUNT(*) AS n FROM favorites"))[0] as any[])[0].n);
-const KUNCI = [
+const countRows = async () => Number(((await db.query<any[]>("SELECT COUNT(*) AS n FROM favorites"))[0] as any[])[0].n);
+const CARD_KEYS = [
   "available",
   "badge",
   "category",
@@ -43,15 +42,15 @@ test("PUT idempoten 204, GET kartu is_favorite true, DELETE idempoten", async ()
   const res = await api("put", `/me/favorites/${menuA1}`, customerToken).expect(204);
   expect(res.text).toBe("");
   await api("put", `/me/favorites/${menuA1}`, customerToken).expect(204);
-  expect(await jumlahBaris()).toBe(1);
+  expect(await countRows()).toBe(1);
   const listRes = await api("get", "/me/favorites", customerToken).expect(200);
   expect(listRes.body.meta).toEqual({ page: 1, limit: 20, total: 1 });
-  expect(Object.keys(listRes.body.data[0]).sort()).toEqual(KUNCI);
+  expect(Object.keys(listRes.body.data[0]).sort()).toEqual(CARD_KEYS);
   expect(listRes.body.data[0]).toMatchObject({ id: menuA1, is_favorite: true });
   const json = JSON.stringify(listRes.body);
   for (const key of PRIVATE_KEYS) expect(json).not.toContain(key);
   await api("delete", `/me/favorites/${menuA1}`, customerToken).expect(204);
-  expect(await jumlahBaris()).toBe(0);
+  expect(await countRows()).toBe(0);
   await api("delete", `/me/favorites/${menuA1}`, customerToken).expect(204);
   const bad = await api("delete", "/me/favorites/abc", customerToken).expect(404);
   expect(bad.body.error.message).toBe("Menu tidak ditemukan.");
@@ -59,63 +58,65 @@ test("PUT idempoten 204, GET kartu is_favorite true, DELETE idempoten", async ()
 
 test("is_favorite di katalog; token rusak/logout/penjual tidak 401", async () => {
   await api("put", `/me/favorites/${menuA1}`, customerToken).expect(204);
-  const fav = async (token?: string) => {
-    const daftar = (await api("get", "/menus", token).expect(200)).body.data;
+  const favoriteState = async (token?: string) => {
+    const menus = (await api("get", "/menus", token).expect(200)).body.data;
     const detail = (await api("get", `/menus/${menuA1}`, token).expect(200)).body.data;
     return {
-      daftar: Object.fromEntries(daftar.map((menu: any) => [menu.id, menu.is_favorite])),
+      daftar: Object.fromEntries(menus.map((menu: any) => [menu.id, menu.is_favorite])),
       detail: detail.is_favorite,
     };
   };
-  expect(await fav(customerToken)).toEqual({
+  expect(await favoriteState(customerToken)).toEqual({
     daftar: { [menuA1]: true, [menuA2]: false, [menuB1]: false },
     detail: true,
   });
-  const mati = { daftar: { [menuA1]: false, [menuA2]: false, [menuB1]: false }, detail: false };
-  expect(await fav()).toEqual(mati);
-  expect(await fav("abc")).toEqual(mati);
-  expect(await fav(tokenA)).toEqual(mati);
+  const allFalse = { daftar: { [menuA1]: false, [menuA2]: false, [menuB1]: false }, detail: false };
+  expect(await favoriteState()).toEqual(allFalse);
+  expect(await favoriteState("abc")).toEqual(allFalse);
+  expect(await favoriteState(tokenA)).toEqual(allFalse);
   await api("get", "/menus").set("Authorization", "Basic xyz").expect(200);
   await request(app).post("/api/v1/auth/logout").set("Authorization", `Bearer ${customerToken}`).expect(204);
-  expect(await fav(customerToken)).toEqual(mati);
+  expect(await favoriteState(customerToken)).toEqual(allFalse);
 });
 
 test("galat DB saat membaca sesi, akun nonaktif, sesi kedaluwarsa → katalog 200 sebagai tamu", async () => {
   await api("put", `/me/favorites/${menuA1}`, customerToken).expect(204);
-  const favA1 = async () =>
+  const findMenuA1 = async () =>
     (await api("get", "/menus", customerToken).expect(200)).body.data.find((menu: any) => menu.id === menuA1)
       .is_favorite;
-  expect(await favA1()).toBe(true);
-  const asli = db.query.bind(db);
+  expect(await findMenuA1()).toBe(true);
+  const originalQuery = db.query.bind(db);
   const spy = vi
     .spyOn(db, "query")
     .mockImplementation(((sql: any, ...rest: any[]) =>
-      String(sql).includes("auth_sessions") ? Promise.reject(new Error("putus")) : (asli as any)(sql, ...rest)) as any);
+      String(sql).includes("auth_sessions")
+        ? Promise.reject(new Error("putus"))
+        : (originalQuery as any)(sql, ...rest)) as any);
   try {
-    expect(await favA1()).toBe(false);
+    expect(await findMenuA1()).toBe(false);
     await api("get", "/me/favorites", customerToken).expect(500);
   } finally {
     spy.mockRestore();
   }
   await db.query("UPDATE auth_sessions SET expires_at = '2000-01-01 00:00:00'");
-  expect(await favA1()).toBe(false);
+  expect(await findMenuA1()).toBe(false);
   await db.query("UPDATE auth_sessions SET expires_at = '2999-01-01 00:00:00'");
-  expect(await favA1()).toBe(true);
+  expect(await findMenuA1()).toBe(true);
   await db.query("UPDATE users SET is_active = FALSE WHERE email = 'budi@mail.com'");
-  expect(await favA1()).toBe(false);
+  expect(await findMenuA1()).toBe(false);
 });
 
 test("PUT: menu tersembunyi/id tidak valid 404, toko tutup 204", async () => {
-  const mati = await insertMenu(idA, { name: "Mati", is_active: false });
-  const hapus = await insertMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
+  const inactiveMenu = await insertMenu(idA, { name: "Mati", is_active: false });
+  const deletedMenu = await insertMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
   await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [idB]);
-  for (const id of [mati, hapus, menuB1, "abc", "0", "99999"]) {
+  for (const id of [inactiveMenu, deletedMenu, menuB1, "abc", "0", "99999"]) {
     const res = await api("put", `/me/favorites/${id}`, customerToken).expect(404);
     expect(res.body.error.message).toBe("Menu tidak ditemukan.");
   }
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   await api("put", `/me/favorites/${menuA1}`, customerToken).expect(204);
-  expect(await jumlahBaris()).toBe(1);
+  expect(await countRows()).toBe(1);
 });
 
 test("hanya menu tampil, terbaru dulu, toko tutup & habis tetap ada, paginated", async () => {
@@ -163,10 +164,10 @@ test("auth: tanpa token 401, penjual 403, favorit per pembeli", async () => {
     .post("/api/v1/auth/customer/register")
     .send({ full_name: "Citra", email: "citra@mail.com", phone: "081233334444", password: "rahasia123" })
     .expect(201);
-  const tCitra = await login("citra@mail.com");
-  await api("put", `/me/favorites/${menuA1}`, tCitra).expect(204);
+  const citraToken = await login("citra@mail.com");
+  await api("put", `/me/favorites/${menuA1}`, citraToken).expect(204);
   expect(await favIds()).toEqual([]);
-  expect(await favIds("", tCitra)).toEqual([menuA1]);
+  expect(await favIds("", citraToken)).toEqual([menuA1]);
   await api("delete", `/me/favorites/${menuA1}`, customerToken).expect(204);
-  expect(await favIds("", tCitra)).toEqual([menuA1]);
+  expect(await favIds("", citraToken)).toEqual([menuA1]);
 });

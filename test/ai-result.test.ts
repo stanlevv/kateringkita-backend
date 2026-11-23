@@ -9,9 +9,9 @@ import { login, prepareMerchants } from "./helpers/merchant";
 // Rubrik AI: hasil AI tersimpan tampil di panel admin web dan diverifikasi manual (setujui / tolak + catatan), diaudit.
 let setup: Awaited<ReturnType<typeof prepareMerchants>>;
 let superToken: string, opsToken: string, supportToken: string, opsId: number, budi: number, siti: number;
-const daftar = (query = "", token = superToken) =>
+const listResults = (query = "", token = superToken) =>
   request(app).get(`/api/v1/admin/hasil-ai${query}`).set("Authorization", `Bearer ${token}`);
-const verif = (id: unknown, body: object, token = opsToken) =>
+const verify = (id: unknown, body: object, token = opsToken) =>
   request(app).patch(`/api/v1/admin/hasil-ai/${id}`).set("Authorization", `Bearer ${token}`).send(body);
 const audit = async () =>
   (
@@ -43,7 +43,7 @@ beforeEach(async () => {
   await db.query("DELETE FROM admin_audit_logs");
 });
 
-const isi = async () => {
+const seedResults = async () => {
   const assistantId = await saveAiResult({
     feature: "asisten",
     userId: siti,
@@ -62,8 +62,8 @@ const isi = async () => {
 
 describe("GET /admin/hasil-ai", () => {
   test("terbaru dulu, bentuk lengkap, filter status & fitur, halaman", async () => {
-    const { assistantId, recommendationId } = await isi();
-    const res = await daftar().expect(200);
+    const { assistantId, recommendationId } = await seedResults();
+    const res = await listResults().expect(200);
     expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 2 });
     expect(res.body.data.map((item: any) => item.id)).toEqual([recommendationId, assistantId]);
     expect(res.body.data[1]).toEqual({
@@ -80,28 +80,28 @@ describe("GET /admin/hasil-ai", () => {
       merchant: { id: setup.idA, business_name: "Dapur Siti" },
     });
     expect(res.body.data[0]).toMatchObject({ fitur: "rekomendasi", user: { id: budi, name: "Budi" }, merchant: null });
-    expect((await daftar("?fitur=rekomendasi").expect(200)).body.data.map((item: any) => item.id)).toEqual([
+    expect((await listResults("?fitur=rekomendasi").expect(200)).body.data.map((item: any) => item.id)).toEqual([
       recommendationId,
     ]);
-    await verif(assistantId, { status: "disetujui" }).expect(200);
-    expect((await daftar("?status=menunggu").expect(200)).body.data.map((item: any) => item.id)).toEqual([
+    await verify(assistantId, { status: "disetujui" }).expect(200);
+    expect((await listResults("?status=menunggu").expect(200)).body.data.map((item: any) => item.id)).toEqual([
       recommendationId,
     ]);
-    expect((await daftar("?status=disetujui").expect(200)).body.data.map((item: any) => item.id)).toEqual([
+    expect((await listResults("?status=disetujui").expect(200)).body.data.map((item: any) => item.id)).toEqual([
       assistantId,
     ]);
-    expect((await daftar("?limit=1&page=2").expect(200)).body).toMatchObject({
+    expect((await listResults("?limit=1&page=2").expect(200)).body).toMatchObject({
       meta: { page: 2, limit: 1, total: 2 },
       data: [{ id: assistantId }],
     });
-    expect((await daftar("?status=aneh").expect(400)).body.error.fields.status).toBeDefined();
+    expect((await listResults("?status=aneh").expect(400)).body.error.fields.status).toBeDefined();
   });
 });
 
 describe("PATCH /admin/hasil-ai/:id", () => {
   test("setujui: status, pemverifikasi, waktu; dicatat di audit", async () => {
-    const { assistantId } = await isi();
-    const res = await verif(assistantId, { status: "disetujui", catatan: "  Angka sesuai data toko  " }).expect(200);
+    const { assistantId } = await seedResults();
+    const res = await verify(assistantId, { status: "disetujui", catatan: "  Angka sesuai data toko  " }).expect(200);
     expect(res.body.data).toMatchObject({
       id: assistantId,
       status: "disetujui",
@@ -122,12 +122,12 @@ describe("PATCH /admin/hasil-ai/:id", () => {
   });
 
   test("tolak wajib catatan; keputusan boleh diubah dan tetap diaudit", async () => {
-    const { recommendationId } = await isi();
-    expect((await verif(recommendationId, { status: "ditolak" }).expect(400)).body.error.fields.catatan).toEqual([
+    const { recommendationId } = await seedResults();
+    expect((await verify(recommendationId, { status: "ditolak" }).expect(400)).body.error.fields.catatan).toEqual([
       "Tulis alasan penolakan (3–300 karakter).",
     ]);
-    await verif(recommendationId, { status: "ditolak", catatan: "Menu tidak sesuai pantangan" }).expect(200);
-    await verif(recommendationId, { status: "disetujui" }).expect(200);
+    await verify(recommendationId, { status: "ditolak", catatan: "Menu tidak sesuai pantangan" }).expect(200);
+    await verify(recommendationId, { status: "disetujui" }).expect(200);
     expect((await audit()).map((entry) => [entry.before_json.status, entry.after_json.status])).toEqual([
       ["menunggu", "ditolak"],
       ["ditolak", "disetujui"],
@@ -135,22 +135,22 @@ describe("PATCH /admin/hasil-ai/:id", () => {
   });
 
   test("validasi & tidak ditemukan", async () => {
-    const { assistantId } = await isi();
-    expect((await verif(assistantId, { status: "menunggu" }).expect(400)).body.error.fields.status).toBeDefined();
+    const { assistantId } = await seedResults();
+    expect((await verify(assistantId, { status: "menunggu" }).expect(400)).body.error.fields.status).toBeDefined();
     expect(
-      (await verif(assistantId, { status: "disetujui", catatan: "x".repeat(301) }).expect(400)).body.error.fields
+      (await verify(assistantId, { status: "disetujui", catatan: "x".repeat(301) }).expect(400)).body.error.fields
         .catatan,
     ).toBeDefined();
-    await verif(999999, { status: "disetujui" }).expect(404);
-    await verif("abc", { status: "disetujui" }).expect(404);
+    await verify(999999, { status: "disetujui" }).expect(404);
+    await verify("abc", { status: "disetujui" }).expect(404);
   });
 
   test("akses: support hanya melihat; penjual & pembeli ditolak", async () => {
-    const { assistantId } = await isi();
-    await daftar("", supportToken).expect(200);
-    await verif(assistantId, { status: "disetujui" }, supportToken).expect(403);
-    await daftar("", setup.tokenA).expect(403);
-    await daftar("", setup.customerToken).expect(403);
-    await verif(assistantId, { status: "disetujui" }, superToken).expect(200);
+    const { assistantId } = await seedResults();
+    await listResults("", supportToken).expect(200);
+    await verify(assistantId, { status: "disetujui" }, supportToken).expect(403);
+    await listResults("", setup.tokenA).expect(403);
+    await listResults("", setup.customerToken).expect(403);
+    await verify(assistantId, { status: "disetujui" }, superToken).expect(200);
   });
 });

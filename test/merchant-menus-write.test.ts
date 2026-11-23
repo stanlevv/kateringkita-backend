@@ -11,8 +11,8 @@ const post = (body: object, token = tokenA) =>
 const patch = (id: number, body: object, token = tokenA) =>
   request(app).patch(`/api/v1/merchant/menus/${id}`).set("Authorization", `Bearer ${token}`).send(body);
 const field = async (body: object, fieldName: string) =>
-  (await post({ ...dasar(), ...body }).expect(400)).body.error.fields[fieldName];
-const dasar = () => ({
+  (await post({ ...baseMenu(), ...body }).expect(400)).body.error.fields[fieldName];
+const baseMenu = () => ({
   name: "Nasi Ayam",
   category_id: 1,
   description: "Enak",
@@ -37,13 +37,13 @@ afterEach(() => {
 });
 
 test("POST valid lengkap → 201 bentuk respons menu, kuota hari ini = harian, teks dirapikan", async () => {
-  const foto = photoUrl(`merchants/${idA}/menu/`, "webp");
+  const photo = photoUrl(`merchants/${idA}/menu/`, "webp");
   const res = await post({
-    ...dasar(),
+    ...baseMenu(),
     name: "  Nasi Ayam Bakar ",
     description: "",
     unit_label: " box ",
-    image_url: foto,
+    image_url: photo,
     daily_quota: 25,
     preorder_days: 3,
     options: [
@@ -56,7 +56,7 @@ test("POST valid lengkap → 201 bentuk respons menu, kuota hari ini = harian, t
     name: "Nasi Ayam Bakar",
     description: null,
     unit_label: "box",
-    image_url: foto,
+    image_url: photo,
     price: 15000,
     hpp: 9000,
     margin: 6000,
@@ -77,7 +77,7 @@ test("POST valid lengkap → 201 bentuk respons menu, kuota hari ini = harian, t
     ["Sambal", 0],
   ]);
   expect((await menuRow(createdMenu.id)).merchant_id).toBe(idA);
-  const pre = await post({ ...dasar(), is_preorder: true, preorder_days: 2 }).expect(201);
+  const pre = await post({ ...baseMenu(), is_preorder: true, preorder_days: 2 }).expect(201);
   expect(pre.body.data).toMatchObject({ is_preorder: true, preorder_days: 2 });
 });
 
@@ -112,8 +112,8 @@ test("POST validasi: pesan sama dengan web", async () => {
       "options.1.name",
     ),
   ).toEqual(["Nama opsi sama dengan opsi lain."]);
-  const banyak = Array.from({ length: 21 }, (_, i) => ({ name: `Opsi ${i}`, extra_price: 0 }));
-  expect(await field({ options: banyak }, "options")).toBeDefined();
+  const manyOptions = Array.from({ length: 21 }, (_, i) => ({ name: `Opsi ${i}`, extra_price: 0 }));
+  expect(await field({ options: manyOptions }, "options")).toBeDefined();
   expect(await field({ image_url: "https://evil.example/x.png" }, "image_url")).toEqual([
     "Foto tidak valid. Unggah ulang foto.",
   ]);
@@ -124,7 +124,7 @@ test("POST validasi: pesan sama dengan web", async () => {
 
 test("POST mass assignment: kolom sistem & toko lain dibuang", async () => {
   const res = await post({
-    ...dasar(),
+    ...baseMenu(),
     merchant_id: idB,
     sold_today: 5,
     held_today: 5,
@@ -151,8 +151,8 @@ test("PATCH sebagian: antar-field dibanding nilai tersimpan; kuota harian tidak 
   expect((await patch(id, { price: 19500 }).expect(200)).body.data.margin).toBe(500);
   const bad = await patch(id, { hpp: 25000 }).expect(400);
   expect(bad.body.error.fields.price).toEqual(["Harga jual harus lebih besar dari HPP (Rp 25.000)."]);
-  const kosong = await patch(id, {}).expect(400);
-  expect(kosong.body.error.message).toBe("Tidak ada data yang diubah.");
+  const emptyRes = await patch(id, {}).expect(400);
+  expect(emptyRes.body.error.message).toBe("Tidak ada data yang diubah.");
   expect((await patch(id, { sold_today: 3, merchant_id: idB }).expect(400)).body.error.message).toBe(
     "Tidak ada data yang diubah.",
   );
@@ -201,11 +201,11 @@ test("opsi: sinkron berdasarkan nama, id dipertahankan, yang hilang dinonaktifka
     { id: cheeseOption.id, name: "keju", extra_price: 3000 },
     { id: expect.any(Number), name: "Telur", extra_price: 2000 },
   ]);
-  const [[sambal]] = await db.query<any[]>("SELECT is_active FROM menu_options WHERE id = ?", [sambalOption.id]);
-  expect(sambal.is_active).toBe(0);
+  const [[sambalRow]] = await db.query<any[]>("SELECT is_active FROM menu_options WHERE id = ?", [sambalOption.id]);
+  expect(sambalRow.is_active).toBe(0);
   // mengaktifkan lagi opsi yang pernah dinonaktifkan mempertahankan id-nya
-  const lagi = await patch(id, { options: [{ name: "Sambal", extra_price: 500 }] }).expect(200);
-  expect(lagi.body.data.options).toEqual([{ id: sambalOption.id, name: "Sambal", extra_price: 500 }]);
+  const again = await patch(id, { options: [{ name: "Sambal", extra_price: 500 }] }).expect(200);
+  expect(again.body.data.options).toEqual([{ id: sambalOption.id, name: "Sambal", extra_price: 500 }]);
   expect(
     (await db.query<any[]>("SELECT COUNT(*) AS n FROM menu_options WHERE menu_id = ? AND name = 'Sambal'", [id]))[0][0]
       .n,
@@ -216,7 +216,7 @@ test("opsi: sinkron berdasarkan nama, id dipertahankan, yang hilang dinonaktifka
 test("data lama: foto bukan R2 & kategori nonaktif yang sama dengan tersimpan diterima", async () => {
   const id = await insertMenu(idA, { image_url: "/menu/1.png", category_id: 3 });
   await db.query("UPDATE categories SET is_active = FALSE WHERE id = 3");
-  const res = await patch(id, { ...dasar(), category_id: 3, image_url: "/menu/1.png", description: "Lama" }).expect(
+  const res = await patch(id, { ...baseMenu(), category_id: 3, image_url: "/menu/1.png", description: "Lama" }).expect(
     200,
   );
   expect(res.body.data).toMatchObject({ image_url: "/menu/1.png", category: { id: 3 } });

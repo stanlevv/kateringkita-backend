@@ -11,7 +11,7 @@ const MIGRATIONS = path.join(__dirname, "../database/migrations");
 
 describe("migrasi 002_admin", () => {
   let url: string;
-  let lamaId: number;
+  let legacyMerchantId: number;
 
   beforeAll(async () => {
     url = await resetTestDatabase();
@@ -27,7 +27,7 @@ describe("migrasi 002_admin", () => {
       "INSERT INTO merchants (user_id, merchant_type_id, business_name, slug, address, wa_number) VALUES (?,1,'Toko Lama','toko-lama','Jl. A','081200000001')",
       [userResult.insertId],
     );
-    lamaId = merchantResult.insertId;
+    legacyMerchantId = merchantResult.insertId;
     await conn.end();
     expect(await migrate(url)).toEqual(
       fs
@@ -79,7 +79,9 @@ describe("migrasi 002_admin", () => {
   });
 
   test("penjual sebelum 002 → verified dengan verified_at", async () => {
-    const [merchant] = await query("SELECT verification_status s, verified_at v FROM merchants WHERE id = ?", [lamaId]);
+    const [merchant] = await query("SELECT verification_status s, verified_at v FROM merchants WHERE id = ?", [
+      legacyMerchantId,
+    ]);
     expect(merchant.s).toBe("verified");
     expect(merchant.v).not.toBeNull();
   });

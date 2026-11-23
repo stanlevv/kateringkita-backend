@@ -12,13 +12,13 @@ import { login, placeOrder, prepareCheckout } from "./helpers/merchant";
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let adminToken: string;
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
-const hariIni = getWibDate();
-const selesai = async (code: string) => {
+const today = getWibDate();
+const completeOrder = async (code: string) => {
   for (const action of ["confirm", "cook", "ready", "complete"])
     await request(app).post(`/api/v1/merchant/orders/${code}/${action}`).set(authHeader(setup.tokenA)).expect(200);
 };
 // voucher platform hanya untuk non-tunai: pesanan VA ditandai lunas lewat SQL sebelum diproses penjual
-const pesanPromo = async (promo_code: string, payment_method = "cod") => {
+const placePromoOrder = async (promo_code: string, payment_method = "cod") => {
   const code = (
     await request(app)
       .post("/api/v1/orders")
@@ -51,9 +51,9 @@ beforeAll(async () => {
     .expect(201);
   await db.query(`INSERT INTO promos (merchant_id, code, type, value, min_subtotal, per_user_limit, starts_at, ends_at)
     VALUES (NULL, 'GRATIS', 'free_service_fee', 0, 0, 1, '2020-01-01', '2099-01-01')`);
-  await selesai(await pesanPromo("TOKO2K"));
+  await completeOrder(await placePromoOrder("TOKO2K"));
   env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
-  await selesai(await pesanPromo("GRATIS", "va"));
+  await completeOrder(await placePromoOrder("GRATIS", "va"));
   env.MIDTRANS_SERVER_KEY = undefined;
   await placeOrder(setup.customerToken, setup.menu); // holding: tidak dihitung
 });
@@ -64,10 +64,10 @@ afterAll(() => {
 describe("rekap keuangan", () => {
   test("per toko + total; diskon toko vs platform; hanya completed", async () => {
     const res = await request(app)
-      .get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`)
+      .get(`/api/v1/admin/finance?from=${today}&to=${today}`)
       .set(authHeader(adminToken))
       .expect(200);
-    const baris = {
+    const expectedRow = {
       orders: 2,
       subtotal: 30000,
       discount_merchant: 2000,
@@ -78,8 +78,8 @@ describe("rekap keuangan", () => {
       platform_net: 1000,
     };
     expect(res.body.data).toEqual({
-      rows: [{ merchant_id: setup.idA, business_name: "Dapur Siti", ...baris }],
-      totals: baris,
+      rows: [{ merchant_id: setup.idA, business_name: "Dapur Siti", ...expectedRow }],
+      totals: expectedRow,
     });
   });
 
@@ -109,9 +109,6 @@ describe("rekap keuangan", () => {
           .expect(400)
       ).body.error.fields.to,
     ).toEqual(["Rentang maksimal 92 hari."]);
-    await request(app)
-      .get(`/api/v1/admin/finance?from=${hariIni}&to=${hariIni}`)
-      .set(authHeader(setup.tokenA))
-      .expect(403);
+    await request(app).get(`/api/v1/admin/finance?from=${today}&to=${today}`).set(authHeader(setup.tokenA)).expect(403);
   });
 });

@@ -9,7 +9,7 @@ import { createCustomer, prepareCheckout } from "./helpers/merchant";
 // GET /orders/:code/whatsapp: tautan WhatsApp pembeli ke toko
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
-const pesan = async (overrides: Record<string, unknown> = {}) => {
+const postOrder = async (overrides: Record<string, unknown> = {}) => {
   const res = await request(app)
     .post("/api/v1/orders")
     .set("Authorization", `Bearer ${setup.customerToken}`)
@@ -28,20 +28,20 @@ const pesan = async (overrides: Record<string, unknown> = {}) => {
 };
 const getWhatsapp = (code: string, token = setup.customerToken) =>
   request(app).get(`/api/v1/orders/${code}/whatsapp`).set("Authorization", `Bearer ${token}`);
-const teks = (url: string) => decodeURIComponent(url.split("text=")[1]);
+const decodeText = (url: string) => decodeURIComponent(url.split("text=")[1]);
 
 beforeEach(async () => {
   setup = await prepareCheckout();
 });
 
 test("pesan tetap bersuara pembeli, tautan wa.me 62…", async () => {
-  const code = await pesan({ note: "Pedas" });
+  const code = await postOrder({ note: "Pedas" });
   const res = await getWhatsapp(code).expect(200);
   const data = res.body.data;
   expect(Object.keys(data).sort()).toEqual(["message", "url", "wa_number"]);
   expect(data.wa_number).toBe("081298765432");
   expect(data.url.startsWith("https://wa.me/6281298765432?text=")).toBe(true);
-  expect(teks(data.url)).toBe(data.message);
+  expect(decodeText(data.url)).toBe(data.message);
   expect(data.message).toBe(
     `Halo Dapur Siti, saya Budi memesan lewat KateringKita.\n\nKode: ${code}\nMenu: 2x Nasi Ayam, 1x Es Teh\nTotal: Rp 41.000\n` +
       "Cara bayar: Tunai\nAmbil di: Gedung Vokasi UB (Lt. 2)\nWaktu ambil: Secepatnya\nCatatan: Pedas",
@@ -52,7 +52,7 @@ test("tanpa catatan → tanpa baris Catatan; pickup_at 13:30 WIB → 13.30 WIB; 
   await db.query("UPDATE merchants SET wa_template = 'Halo {nama}, pesanan {kode} diterima.' WHERE id = ?", [
     setup.idA,
   ]);
-  const code = await pesan({ pickup_at: `${getWibDate()}T13:30:00+07:00` });
+  const code = await postOrder({ pickup_at: `${getWibDate()}T13:30:00+07:00` });
   const { message } = (await getWhatsapp(code).expect(200)).body.data;
   expect(message).not.toContain("Catatan");
   expect(message).toContain("Waktu ambil: 13.30 WIB");
@@ -60,35 +60,37 @@ test("tanpa catatan → tanpa baris Catatan; pickup_at 13:30 WIB → 13.30 WIB; 
 });
 
 test("karakter khusus di catatan ter-encode", async () => {
-  const code = await pesan({ note: "A & B #1\nbaris dua" });
+  const code = await postOrder({ note: "A & B #1\nbaris dua" });
   const { url, message } = (await getWhatsapp(code).expect(200)).body.data;
   const encodedText = url.split("text=")[1];
   expect(encodedText).not.toMatch(/[&#\n ]/);
-  expect(teks(url)).toBe(message);
+  expect(decodeText(url)).toBe(message);
   expect(message).toContain("Catatan: A & B #1\nbaris dua");
 });
 
 test("nomor WA 628… / +628… dinormalkan ke 628…", async () => {
-  const code = await pesan();
-  for (const nomor of ["6281298765432", "+6281298765432", "081298765432"]) {
-    await db.query("UPDATE merchants SET wa_number = ? WHERE id = ?", [nomor, setup.idA]);
+  const code = await postOrder();
+  for (const phone of ["6281298765432", "+6281298765432", "081298765432"]) {
+    await db.query("UPDATE merchants SET wa_number = ? WHERE id = ?", [phone, setup.idA]);
     const { url } = (await getWhatsapp(code).expect(200)).body.data;
     expect(url.startsWith("https://wa.me/6281298765432?text=")).toBe(true);
   }
 });
 
 test("ambil bukan hari ini → tanggal ikut ditulis", async () => {
-  const lusa = new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + 2 * 86400e3);
-  const code = await pesan({ pickup_at: lusa.toISOString() });
+  const dayAfterTomorrow = new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + 2 * 86400e3);
+  const code = await postOrder({ pickup_at: dayAfterTomorrow.toISOString() });
   const { message } = (await getWhatsapp(code).expect(200)).body.data;
-  const tgl = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "long" }).format(
-    lusa,
-  );
-  expect(message).toContain(`Waktu ambil: ${tgl} 10.00 WIB`);
+  const dateLabel = new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "long",
+  }).format(dayAfterTomorrow);
+  expect(message).toContain(`Waktu ambil: ${dateLabel} 10.00 WIB`);
 });
 
 test("pembeli lain 404, penjual 403", async () => {
-  const code = await pesan();
+  const code = await postOrder();
   const res = await getWhatsapp(code, await createCustomer(1)).expect(404);
   expect(res.body.error.message).toBe("Pesanan tidak ditemukan.");
   await getWhatsapp(code, setup.tokenA).expect(403);

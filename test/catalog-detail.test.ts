@@ -7,7 +7,7 @@ import { PRIVATE_KEYS, freezeClock, prepareMerchants, insertMenu, makeVisible } 
 let idA: number, idB: number, slugA: string, slugB: string, menu: number;
 
 const get = (path: string) => request(app).get(`/api/v1${path}`);
-const KUNCI = [
+const DETAIL_KEYS = [
   "available",
   "badge",
   "category",
@@ -28,8 +28,17 @@ const KUNCI = [
   "rating_count",
   "unit_label",
 ];
-const KUNCI_TOKO = ["business_name", "close_time", "id", "is_open", "logo_url", "open_time", "pickup_points", "slug"];
-const KUNCI_PROFIL = [
+const MERCHANT_KEYS = [
+  "business_name",
+  "close_time",
+  "id",
+  "is_open",
+  "logo_url",
+  "open_time",
+  "pickup_points",
+  "slug",
+];
+const PROFILE_KEYS = [
   "business_name",
   "close_time",
   "cover_url",
@@ -48,9 +57,9 @@ const KUNCI_PROFIL = [
 ];
 const slug = async (id: number) =>
   ((await db.query<any[]>("SELECT slug FROM merchants WHERE id = ?", [id]))[0] as any[])[0].slug as string;
-const tolak = async (path: string, pesan = "Menu tidak ditemukan.") => {
+const expectNotFound = async (path: string, message = "Menu tidak ditemukan.") => {
   const res = await get(path).expect(404);
-  expect(res.body.error.message).toBe(pesan);
+  expect(res.body.error.message).toBe(message);
 };
 
 beforeEach(async () => {
@@ -79,8 +88,8 @@ beforeEach(async () => {
 test("GET /menus/:id: bentuk detail publik, opsi & titik temu aktif saja, tanpa angka internal", async () => {
   const res = await get(`/menus/${menu}`).expect(200);
   const data = res.body.data;
-  expect(Object.keys(data).sort()).toEqual(KUNCI);
-  expect(Object.keys(data.merchant).sort()).toEqual(KUNCI_TOKO);
+  expect(Object.keys(data).sort()).toEqual(DETAIL_KEYS);
+  expect(Object.keys(data.merchant).sort()).toEqual(MERCHANT_KEYS);
   expect(data).toMatchObject({
     id: menu,
     name: "Nasi Ayam",
@@ -117,19 +126,19 @@ test("toko tutup (saklar atau jam) tetap 200 dengan is_open false", async () => 
 });
 
 test("menu tersembunyi atau id tidak valid → 404", async () => {
-  const mati = await insertMenu(idA, { name: "Mati", is_active: false });
-  const hapus = await insertMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
-  for (const id of [mati, hapus, "abc", "0", "99999"]) await tolak(`/menus/${id}`);
+  const inactiveMenu = await insertMenu(idA, { name: "Mati", is_active: false });
+  const deletedMenu = await insertMenu(idA, { name: "Hapus", deleted_at: "2026-01-01 00:00:00" });
+  for (const id of [inactiveMenu, deletedMenu, "abc", "0", "99999"]) await expectNotFound(`/menus/${id}`);
   await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [idA]);
-  await tolak(`/menus/${menu}`);
+  await expectNotFound(`/menus/${menu}`);
   await db.query("UPDATE merchants SET verification_status = 'verified' WHERE id = ?", [idA]);
   await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [idA]);
-  await tolak(`/menus/${menu}`);
+  await expectNotFound(`/menus/${menu}`);
 });
 
 test("stock_date lama → available = daily_quota", async () => {
-  const basi = await insertMenu(idA, { stock_date: "2000-01-01", daily_quota: 30, quota_today: 5, sold_today: 5 });
-  expect((await get(`/menus/${basi}`).expect(200)).body.data).toMatchObject({ available: 30, badge: "available" });
+  const staleMenu = await insertMenu(idA, { stock_date: "2000-01-01", daily_quota: 30, quota_today: 5, sold_today: 5 });
+  expect((await get(`/menus/${staleMenu}`).expect(200)).body.data).toMatchObject({ available: 30, badge: "available" });
 });
 
 test("ulasan publik terbaru dulu, nama disamarkan, paginated", async () => {
@@ -138,7 +147,7 @@ test("ulasan publik terbaru dulu, nama disamarkan, paginated", async () => {
   );
   const [[rahma]] = await db.query<any[]>("SELECT id FROM users WHERE phone = '081200000001'");
   const [[budi]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
-  const ulas = async (i: number, uid: number, rating: number, createdAt: string) => {
+  const postReview = async (i: number, uid: number, rating: number, createdAt: string) => {
     const [result] = await db.query<any>(
       `INSERT INTO orders (code, customer_id, merchant_id, pickup_point_id, status, customer_name, customer_phone, subtotal, total,
         payment_method, hold_until) VALUES (?, ?, ?, 1, 'completed', 'x', 'x', 15000, 15000, 'cod', UTC_TIMESTAMP())`,
@@ -149,9 +158,9 @@ test("ulasan publik terbaru dulu, nama disamarkan, paginated", async () => {
       [result.insertId, menu, uid, rating, `ulasan ${i}`, createdAt],
     );
   };
-  await ulas(1, rahma.id, 5, "2026-01-01 01:00:00");
-  await ulas(2, budi.id, 4, "2026-01-03 01:00:00");
-  await ulas(3, rahma.id, 3, "2026-01-02 01:00:00");
+  await postReview(1, rahma.id, 5, "2026-01-01 01:00:00");
+  await postReview(2, budi.id, 4, "2026-01-03 01:00:00");
+  await postReview(3, rahma.id, 3, "2026-01-02 01:00:00");
   const res = await get(`/menus/${menu}/reviews`).expect(200);
   expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 3 });
   expect(res.body.data).toEqual([
@@ -161,14 +170,14 @@ test("ulasan publik terbaru dulu, nama disamarkan, paginated", async () => {
   ]);
   const page2 = await get(`/menus/${menu}/reviews?limit=2&page=2`).expect(200);
   expect(page2.body.data.map((review: any) => review.comment)).toEqual(["ulasan 1"]);
-  const kosong = await insertMenu(idA, { name: "Baru" });
-  expect((await get(`/menus/${kosong}/reviews`).expect(200)).body).toEqual({
+  const noReviewMenu = await insertMenu(idA, { name: "Baru" });
+  expect((await get(`/menus/${noReviewMenu}/reviews`).expect(200)).body).toEqual({
     data: [],
     meta: { page: 1, limit: 20, total: 0 },
   });
-  await tolak("/menus/abc/reviews");
+  await expectNotFound("/menus/abc/reviews");
   await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [idA]);
-  await tolak(`/menus/${menu}/reviews`);
+  await expectNotFound(`/menus/${menu}/reviews`);
 });
 
 test("profil toko publik tanpa alamat/WA/status verifikasi", async () => {
@@ -177,7 +186,7 @@ test("profil toko publik tanpa alamat/WA/status verifikasi", async () => {
     [idA],
   );
   const res = await get(`/merchants/${slugA}`).expect(200);
-  expect(Object.keys(res.body.data).sort()).toEqual(KUNCI_PROFIL);
+  expect(Object.keys(res.body.data).sort()).toEqual(PROFILE_KEYS);
   expect(res.body.data).toEqual({
     id: idA,
     slug: slugA,
@@ -200,8 +209,8 @@ test("profil toko publik tanpa alamat/WA/status verifikasi", async () => {
   await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [idA]);
   expect((await get(`/merchants/${slugA}`).expect(200)).body.data.is_open).toBe(false);
   await db.query("UPDATE merchants SET verification_status = 'pending' WHERE id = ?", [idB]);
-  await tolak(`/merchants/${slugB}`, "Toko tidak ditemukan.");
+  await expectNotFound(`/merchants/${slugB}`, "Toko tidak ditemukan.");
   await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [idA]);
-  await tolak(`/merchants/${slugA}`, "Toko tidak ditemukan.");
-  await tolak("/merchants/tidak-ada", "Toko tidak ditemukan.");
+  await expectNotFound(`/merchants/${slugA}`, "Toko tidak ditemukan.");
+  await expectNotFound("/merchants/tidak-ada", "Toko tidak ditemukan.");
 });

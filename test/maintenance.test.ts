@@ -8,7 +8,7 @@ import { login, prepareMerchants } from "./helpers/merchant";
 // Mode pemeliharaan — admin super menyalakan; penjual & pembeli dapat 503, admin/login/webhook tetap jalan.
 let adminToken: string, opsToken: string, tokenA: string, customerToken: string;
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
-const nyalakan = (body: object, token = adminToken) =>
+const setMaintenance = (body: object, token = adminToken) =>
   request(app).put("/api/v1/admin/settings/maintenance").set(authHeader(token)).send(body);
 
 beforeAll(async () => {
@@ -36,15 +36,15 @@ describe("mati (bawaan)", () => {
 
 describe("mengubah", () => {
   test("validasi, admin ops ditolak, tanpa token 401", async () => {
-    await nyalakan({ aktif: "ya" }).expect(400);
-    await nyalakan({ aktif: true, pesan: "x".repeat(201) }).expect(400);
-    await nyalakan({ aktif: true }, opsToken).expect(403);
+    await setMaintenance({ aktif: "ya" }).expect(400);
+    await setMaintenance({ aktif: true, pesan: "x".repeat(201) }).expect(400);
+    await setMaintenance({ aktif: true }, opsToken).expect(403);
     await request(app).put("/api/v1/admin/settings/maintenance").send({ aktif: true }).expect(401);
     expect((await request(app).get("/api/v1/meta/settings")).body.data.maintenance.aktif).toBe(false);
   });
 
   test("nyala → tercatat di log audit, pesan ikut", async () => {
-    const res = await nyalakan({ aktif: true, pesan: "  Pembaruan sistem sampai 14.00 WIB.  " }).expect(200);
+    const res = await setMaintenance({ aktif: true, pesan: "  Pembaruan sistem sampai 14.00 WIB.  " }).expect(200);
     expect(res.body.data).toEqual({ maintenance: { aktif: true, pesan: "Pembaruan sistem sampai 14.00 WIB." } });
     const [log] = await db.query<any[]>("SELECT * FROM admin_audit_logs WHERE action = 'settings.maintenance'");
     expect(log).toHaveLength(1);
@@ -57,18 +57,18 @@ describe("mengubah", () => {
 
 describe("saat nyala", () => {
   test("penjual, pembeli, tamu meja, dan katalog publik → 503 MAINTENANCE + Retry-After", async () => {
-    const cek = async (res: request.Response) => {
+    const expectMaintenance = async (res: request.Response) => {
       expect(res.status).toBe(503);
       expect(res.body.error).toMatchObject({ code: "MAINTENANCE", message: "Pembaruan sistem sampai 14.00 WIB." });
       expect(res.headers["retry-after"]).toBe("300");
     };
-    await cek(await request(app).get("/api/v1/merchant/profile").set(authHeader(tokenA)));
-    await cek(await request(app).get("/api/v1/Merchant/Profile/").set(authHeader(tokenA)));
-    await cek(await request(app).get("/api/v1/me/orders").set(authHeader(customerToken)));
-    await cek(await request(app).post("/api/v1/orders").set(authHeader(customerToken)).send({}));
-    await cek(await request(app).get("/api/v1/menus"));
-    await cek(await request(app).get("/api/v1/tables/abc"));
-    await cek(await request(app).post("/api/v1/auth/customer/register").send({}));
+    await expectMaintenance(await request(app).get("/api/v1/merchant/profile").set(authHeader(tokenA)));
+    await expectMaintenance(await request(app).get("/api/v1/Merchant/Profile/").set(authHeader(tokenA)));
+    await expectMaintenance(await request(app).get("/api/v1/me/orders").set(authHeader(customerToken)));
+    await expectMaintenance(await request(app).post("/api/v1/orders").set(authHeader(customerToken)).send({}));
+    await expectMaintenance(await request(app).get("/api/v1/menus"));
+    await expectMaintenance(await request(app).get("/api/v1/tables/abc"));
+    await expectMaintenance(await request(app).post("/api/v1/auth/customer/register").send({}));
     await new Promise((resolve) => setTimeout(resolve, 200)); // saveServerLog berjalan setelah respons selesai
     const [[{ n: count }]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM server_logs WHERE status = 503");
     expect(count).toBe(0);
@@ -95,11 +95,11 @@ describe("saat nyala", () => {
   });
 
   test("dimatikan → semua normal, pesan kosong = pesan bawaan saat nyala lagi", async () => {
-    await nyalakan({ aktif: false }).expect(200);
+    await setMaintenance({ aktif: false }).expect(200);
     await request(app).get("/api/v1/merchant/profile").set(authHeader(tokenA)).expect(200);
-    await nyalakan({ aktif: true, pesan: "" }).expect(200);
+    await setMaintenance({ aktif: true, pesan: "" }).expect(200);
     const res = await request(app).get("/api/v1/menus").expect(503);
     expect(res.body.error.message).toBe("KateringKita sedang dalam pemeliharaan. Silakan coba lagi nanti.");
-    await nyalakan({ aktif: false }).expect(200);
+    await setMaintenance({ aktif: false }).expect(200);
   });
 });

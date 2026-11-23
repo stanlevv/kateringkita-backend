@@ -11,11 +11,11 @@ import { getWibDate } from "../src/services/merchant-quota.service";
 import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
-let kode: string;
-const hariIni = getWibDate();
+let orderCode: string;
+const today = getWibDate();
 const get = (path: string, token = setup.tokenA) =>
   request(app).get(`/api/v1/merchant/reports/${path}`).set("Authorization", `Bearer ${token}`);
-const selesaikan = async (code: string) => {
+const completeOrder = async (code: string) => {
   for (const action of ["confirm", "cook", "ready", "complete"]) {
     await request(app)
       .post(`/api/v1/merchant/orders/${code}/${action}`)
@@ -41,10 +41,10 @@ beforeAll(async () => {
       payment_method: "cod",
     })
     .expect(201);
-  kode = res.body.data.code;
-  await selesaikan(kode);
+  orderCode = res.body.data.code;
+  await completeOrder(orderCode);
   // pesanan 2: Es Teh ×1 selesai; pesanan 3 masih holding (tidak dihitung)
-  await selesaikan(await placeOrder(setup.customerToken, setup.menu2));
+  await completeOrder(await placeOrder(setup.customerToken, setup.menu2));
   await placeOrder(setup.customerToken, setup.menu);
 });
 afterAll(() => {
@@ -53,7 +53,7 @@ afterAll(() => {
 
 describe("summary", () => {
   test("hanya completed; target = target harian × hari", async () => {
-    const res = await get(`summary?from=${hariIni}&to=${hariIni}`).expect(200);
+    const res = await get(`summary?from=${today}&to=${today}`).expect(200);
     expect(res.body.data).toEqual({
       target: 50000,
       revenue: 40000,
@@ -62,12 +62,12 @@ describe("summary", () => {
       achievement_pct: 80,
       orders: 2,
     });
-    const minggu = new Date(Date.parse(`${hariIni}T00:00:00Z`) - 6 * 86400e3).toISOString().slice(0, 10);
-    expect((await get(`summary?from=${minggu}&to=${hariIni}`)).body.data).toMatchObject({ target: 350000, orders: 2 });
+    const weekStart = new Date(Date.parse(`${today}T00:00:00Z`) - 6 * 86400e3).toISOString().slice(0, 10);
+    expect((await get(`summary?from=${weekStart}&to=${today}`)).body.data).toMatchObject({ target: 350000, orders: 2 });
   });
 
   test("toko lain nol; target 0 → capaian 0", async () => {
-    expect((await get(`summary?from=${hariIni}&to=${hariIni}`, setup.tokenB)).body.data).toEqual({
+    expect((await get(`summary?from=${today}&to=${today}`, setup.tokenB)).body.data).toEqual({
       target: 0,
       revenue: 0,
       hpp_total: 0,
@@ -78,35 +78,35 @@ describe("summary", () => {
   });
 
   test("validasi rentang tanggal dan peran", async () => {
-    const salah = await get("summary?from=2026-01-10&to=2026-01-01").expect(400);
-    expect(salah.body.error.fields.to).toEqual(["Tanggal akhir harus setelah tanggal awal."]);
+    const invalidRes = await get("summary?from=2026-01-10&to=2026-01-01").expect(400);
+    expect(invalidRes.body.error.fields.to).toEqual(["Tanggal akhir harus setelah tanggal awal."]);
     expect((await get("summary?from=2026-01-01&to=2026-06-01").expect(400)).body.error.fields.to).toEqual([
       "Rentang maksimal 92 hari.",
     ]);
     expect((await get("summary?from=kemarin&to=2026-01-01").expect(400)).body.error.fields.from).toEqual([
       "Tanggal tidak valid.",
     ]);
-    await get(`summary?from=${hariIni}&to=${hariIni}`, setup.customerToken).expect(403);
+    await get(`summary?from=${today}&to=${today}`, setup.customerToken).expect(403);
   });
 });
 
 describe("hourly & transactions", () => {
   test("per jam WIB: satu jam, 2 pesanan, 4 porsi", async () => {
-    const res = await get(`hourly?date=${hariIni}`).expect(200);
-    const jam = new Date(Date.now() + 7 * 3600e3).getUTCHours();
-    expect(res.body.data).toEqual([{ hour: jam, orders: 2, portions: 4, revenue: 40000 }]);
+    const res = await get(`hourly?date=${today}`).expect(200);
+    const hour = new Date(Date.now() + 7 * 3600e3).getUTCHours();
+    expect(res.body.data).toEqual([{ hour: hour, orders: 2, portions: 4, revenue: 40000 }]);
     await get("hourly").expect(400);
   });
 
   test("satu baris per menu, hpp per baris, tanpa pesanan holding", async () => {
-    const res = await get(`transactions?from=${hariIni}&to=${hariIni}`).expect(200);
+    const res = await get(`transactions?from=${today}&to=${today}`).expect(200);
     expect(res.body.data).toHaveLength(3);
-    const baris = res.body.data.filter((row: { code: string }) => row.code === kode);
-    expect(baris.map((row: Record<string, unknown>) => [row.menu_name, row.qty, row.total, row.hpp_total])).toEqual([
+    const rows = res.body.data.filter((row: { code: string }) => row.code === orderCode);
+    expect(rows.map((row: Record<string, unknown>) => [row.menu_name, row.qty, row.total, row.hpp_total])).toEqual([
       ["Nasi Ayam", 2, 30000, 18000],
       ["Es Teh", 1, 5000, 2000],
     ]);
-    expect(baris[0]).toMatchObject({ customer_name: "Budi", payment_method: "cod", status: "completed" });
-    expect(baris[0].completed_at).not.toBeNull();
+    expect(rows[0]).toMatchObject({ customer_name: "Budi", payment_method: "cod", status: "completed" });
+    expect(rows[0].completed_at).not.toBeNull();
   });
 });

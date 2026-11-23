@@ -44,7 +44,7 @@ const body = (extra: Record<string, unknown>) => ({
 }); // subtotal 30.000
 const quote = (extra: Record<string, unknown>) =>
   request(app).post("/api/v1/orders/quote").set("Authorization", `Bearer ${setup.customerToken}`).send(body(extra));
-const pesan = (extra: Record<string, unknown>, payment_method = "va") =>
+const postOrder = (extra: Record<string, unknown>, payment_method = "va") =>
   request(app)
     .post("/api/v1/orders")
     .set("Authorization", `Bearer ${setup.customerToken}`)
@@ -55,11 +55,17 @@ const promoRow = async (id: number) =>
 const order = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 
-let toko10: number, hemat3k: number;
+let merchantPromo: number, platformPromo: number;
 beforeAll(async () => {
   setup = await prepareCheckout();
-  toko10 = await promo({ merchant_id: setup.idA, code: "TOKO10", type: "percent", value: 10, max_discount: 5000 });
-  hemat3k = await promo({ code: "HEMAT3K", type: "fixed", value: 3000 });
+  merchantPromo = await promo({
+    merchant_id: setup.idA,
+    code: "TOKO10",
+    type: "percent",
+    value: 10,
+    max_discount: 5000,
+  });
+  platformPromo = await promo({ code: "HEMAT3K", type: "fixed", value: 3000 });
   await promo({ merchant_id: setup.idA, code: "TOKO5", type: "fixed", value: 500 });
   await promo({ merchant_id: setup.idB, code: "LAINB", type: "fixed", value: 1000 });
 });
@@ -79,8 +85,8 @@ describe("quote dua voucher", () => {
     expect(data).toMatchObject({ subtotal: 30000, merchant_discount: 3000, platform_discount: 3000, discount: 6000 });
     expect(data.total).toBe(30000 + data.service_fee - 6000);
     expect(data.vouchers_applied).toEqual([
-      { id: toko10, code: "TOKO10", slot: "toko", amount: 3000 },
-      { id: hemat3k, code: "HEMAT3K", slot: "platform", amount: 3000 },
+      { id: merchantPromo, code: "TOKO10", slot: "toko", amount: 3000 },
+      { id: platformPromo, code: "HEMAT3K", slot: "platform", amount: 3000 },
     ]);
   });
 
@@ -126,26 +132,26 @@ describe("quote dua voucher", () => {
 
 describe("pesanan dua voucher", () => {
   test("tersimpan per slot, promo_id NULL, kuota & redemption per voucher", async () => {
-    const before = [await promoRow(toko10), await promoRow(hemat3k)];
-    const code = (await pesan({ promo_codes: ["TOKO10", "HEMAT3K"] }).expect(201)).body.data.code;
+    const before = [await promoRow(merchantPromo), await promoRow(platformPromo)];
+    const code = (await postOrder({ promo_codes: ["TOKO10", "HEMAT3K"] }).expect(201)).body.data.code;
     expect(await order(code)).toMatchObject({
       promo_id: null,
-      merchant_promo_id: toko10,
+      merchant_promo_id: merchantPromo,
       merchant_discount: 3000,
-      platform_promo_id: hemat3k,
+      platform_promo_id: platformPromo,
       platform_discount: 3000,
       discount: 6000,
     });
-    expect((await promoRow(toko10)).used_count).toBe(before[0].used_count + 1);
-    expect((await promoRow(hemat3k)).used_count).toBe(before[1].used_count + 1);
+    expect((await promoRow(merchantPromo)).used_count).toBe(before[0].used_count + 1);
+    expect((await promoRow(platformPromo)).used_count).toBe(before[1].used_count + 1);
     const [red] = await db.query<any[]>(
       "SELECT r.promo_id, r.amount FROM promo_redemptions r JOIN orders o ON o.id = r.order_id WHERE o.code = ? ORDER BY r.promo_id",
       [code],
     );
     expect(red).toEqual(
       [
-        { promo_id: toko10, amount: 3000 },
-        { promo_id: hemat3k, amount: 3000 },
+        { promo_id: merchantPromo, amount: 3000 },
+        { promo_id: platformPromo, amount: 3000 },
       ].sort((left, right) => left.promo_id - right.promo_id),
     );
   });
@@ -166,7 +172,7 @@ describe("pesanan dua voucher", () => {
       quota: 5,
       per_user_limit: 1,
     });
-    const code = (await pesan({ promo_codes: ["SEKALITOKO", "SEKALIPLAT"] }).expect(201)).body.data.code;
+    const code = (await postOrder({ promo_codes: ["SEKALITOKO", "SEKALIPLAT"] }).expect(201)).body.data.code;
     await request(app)
       .post(`/api/v1/orders/${code}/cancel`)
       .set("Authorization", `Bearer ${setup.customerToken}`)
@@ -180,7 +186,7 @@ describe("pesanan dua voucher", () => {
       platformPromoId,
     ]);
     expect(Number(countRow.n)).toBe(0);
-    await pesan({ promo_codes: ["SEKALITOKO", "SEKALIPLAT"] }).expect(201);
+    await postOrder({ promo_codes: ["SEKALITOKO", "SEKALIPLAT"] }).expect(201);
   });
 
   test("kuota voucher platform habis → seluruh pesanan ditolak, kuota voucher toko tidak bertambah", async () => {
@@ -192,15 +198,15 @@ describe("pesanan dua voucher", () => {
       quota: 10,
     });
     await promo({ code: "PLATHABIS", type: "fixed", value: 1000, quota: 1, used_count: 1 });
-    const res = await pesan({ promo_codes: ["TOKOAMAN", "PLATHABIS"] }).expect(422);
+    const res = await postOrder({ promo_codes: ["TOKOAMAN", "PLATHABIS"] }).expect(422);
     expect(res.body.error.fields.promo_codes).toEqual(["Kuota promo sudah habis."]);
     expect((await promoRow(merchantPromoId)).used_count).toBe(0);
   });
 
   test("voucher platform ditolak untuk tunai; voucher toko tetap boleh", async () => {
-    const res = await pesan({ promo_codes: ["HEMAT3K"] }, "cod").expect(422);
+    const res = await postOrder({ promo_codes: ["HEMAT3K"] }, "cod").expect(422);
     expect(res.body.error.fields.promo_codes).toEqual(["Voucher platform hanya untuk bayar non-tunai."]);
-    await pesan({ promo_codes: ["TOKO5"] }, "cod").expect(201);
+    await postOrder({ promo_codes: ["TOKO5"] }, "cod").expect(201);
   });
 
   test("voucher platform yang membuat total Rp 0 ditolak (non-tunai tidak bisa dibayar Rp 0); kuota tidak terpakai", async () => {
@@ -214,7 +220,7 @@ describe("pesanan dua voucher", () => {
         (await quote({ promo_codes: ["TOKOPENUH", "LAYANANGRATIS"] }).expect(422)).body.error.fields.promo_codes,
       ).toEqual(msg);
       expect(
-        (await pesan({ promo_codes: ["TOKOPENUH", "LAYANANGRATIS"] }).expect(422)).body.error.fields.promo_codes,
+        (await postOrder({ promo_codes: ["TOKOPENUH", "LAYANANGRATIS"] }).expect(422)).body.error.fields.promo_codes,
       ).toEqual(msg);
       expect([(await promoRow(merchantPromoId)).used_count, (await promoRow(freeFeePromoId)).used_count]).toEqual([
         0, 0,
@@ -226,7 +232,7 @@ describe("pesanan dua voucher", () => {
 
   test("promo toko yang pernah dipakai pesanan batal bisa dihapus; pesanan lama tetap utuh", async () => {
     const id = await promo({ merchant_id: setup.idA, code: "HAPUSAKU", type: "fixed", value: 1000 });
-    const code = (await pesan({ promo_codes: ["HAPUSAKU"] }).expect(201)).body.data.code;
+    const code = (await postOrder({ promo_codes: ["HAPUSAKU"] }).expect(201)).body.data.code;
     await request(app)
       .post(`/api/v1/orders/${code}/cancel`)
       .set("Authorization", `Bearer ${setup.customerToken}`)

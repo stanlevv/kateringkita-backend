@@ -17,7 +17,7 @@ const promo = async (merchantId: number | null, code: string) => {
   );
   return result.insertId as number;
 };
-const pesanan = async (code: string) =>
+const orderRow = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
 
 beforeAll(async () => {
@@ -30,7 +30,7 @@ describe("migrasi 014 voucher", () => {
     const [[promoRow]] = await db.query<any[]>("SELECT is_public FROM promos WHERE id = ?", [id]);
     expect(Boolean(promoRow.is_public)).toBe(true);
     const code = await placeOrder(setup.customerToken, setup.menu);
-    expect(await pesanan(code)).toMatchObject({
+    expect(await orderRow(code)).toMatchObject({
       merchant_promo_id: null,
       merchant_discount: 0,
       platform_promo_id: null,
@@ -44,33 +44,33 @@ describe("migrasi 014 voucher", () => {
     // dua voucher per pesanan → dua baris redemption; promo yang sama dua kali di pesanan yang sama tetap ditolak
     const id2 = await promo(null, "BARU2");
     const [[order]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [code]);
-    const tebus = (promoId: number) =>
+    const redeem = (promoId: number) =>
       db.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, 1)", [
         promoId,
         order.id,
         user.id,
       ]);
-    await tebus(id);
-    await tebus(id2);
-    await expect(tebus(id)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+    await redeem(id);
+    await redeem(id2);
+    await expect(redeem(id)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
   });
 
   test("backfill: promo_id lama → slot toko atau platform sesuai pemilik promo", async () => {
     expect(BACKFILL).toMatch(/^UPDATE orders/);
-    const toko = await promo(setup.idA, "LAMATOKO");
+    const merchantPromo = await promo(setup.idA, "LAMATOKO");
     const platform = await promo(null, "LAMAPLAT");
     const firstCode = await placeOrder(setup.customerToken, setup.menu);
     const secondCode = await placeOrder(setup.customerToken, setup.menu2);
-    await db.query("UPDATE orders SET promo_id = ?, discount = 3000 WHERE code = ?", [toko, firstCode]);
+    await db.query("UPDATE orders SET promo_id = ?, discount = 3000 WHERE code = ?", [merchantPromo, firstCode]);
     await db.query("UPDATE orders SET promo_id = ?, discount = 2500 WHERE code = ?", [platform, secondCode]);
     await db.query(BACKFILL);
-    expect(await pesanan(firstCode)).toMatchObject({
-      merchant_promo_id: toko,
+    expect(await orderRow(firstCode)).toMatchObject({
+      merchant_promo_id: merchantPromo,
       merchant_discount: 3000,
       platform_promo_id: null,
       platform_discount: 0,
     });
-    expect(await pesanan(secondCode)).toMatchObject({
+    expect(await orderRow(secondCode)).toMatchObject({
       merchant_promo_id: null,
       merchant_discount: 0,
       platform_promo_id: platform,

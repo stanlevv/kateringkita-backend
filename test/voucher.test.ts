@@ -45,12 +45,13 @@ const promo = async (code: string, options: PromoOptions = {}) => {
   ids[code] = result.insertId;
   return result.insertId as number;
 };
-const klaim = (code: string, token = setup.customerToken) =>
+const claim = (code: string, token = setup.customerToken) =>
   request(app)
     .post(`/api/v1/me/vouchers/${ids[code] ?? code}/claim`)
     .set(authHeader(token))
     .send();
-const saya = (query = "") => request(app).get(`/api/v1/me/vouchers${query}`).set(authHeader(setup.customerToken));
+const getMyVouchers = (query = "") =>
+  request(app).get(`/api/v1/me/vouchers${query}`).set(authHeader(setup.customerToken));
 
 beforeAll(async () => {
   setup = await prepareCheckout();
@@ -95,8 +96,8 @@ describe("voucher di halaman toko", () => {
 
 describe("klaim", () => {
   test("idempoten; halaman toko menandai claimed untuk pembeli itu", async () => {
-    expect((await klaim("PUBLIKA").expect(200)).body.data).toMatchObject({ id: ids.PUBLIKA, claimed: true });
-    await klaim("PUBLIKA").expect(200);
+    expect((await claim("PUBLIKA").expect(200)).body.data).toMatchObject({ id: ids.PUBLIKA, claimed: true });
+    await claim("PUBLIKA").expect(200);
     const [[countRow]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM promo_claims WHERE promo_id = ?", [
       ids.PUBLIKA,
     ]);
@@ -109,12 +110,12 @@ describe("klaim", () => {
 
   test("tidak tersedia 409, kuota habis 409, tidak ada 404, bukan pembeli 403", async () => {
     for (const code of ["RAHASIA", "MATI", "LEWAT", "NANTI", "PLATRAHASIA"]) {
-      expect((await klaim(code).expect(409)).body.error.message).toBe("Voucher sedang tidak tersedia.");
+      expect((await claim(code).expect(409)).body.error.message).toBe("Voucher sedang tidak tersedia.");
     }
-    expect((await klaim("HABIS").expect(409)).body.error.message).toBe("Kuota voucher sudah habis.");
-    expect((await klaim("999999").expect(404)).body.error.message).toBe("Voucher tidak ditemukan.");
-    await klaim("abc").expect(404);
-    await klaim("PUBLIKB", setup.tokenA).expect(403);
+    expect((await claim("HABIS").expect(409)).body.error.message).toBe("Kuota voucher sudah habis.");
+    expect((await claim("999999").expect(404)).body.error.message).toBe("Voucher tidak ditemukan.");
+    await claim("abc").expect(404);
+    await claim("PUBLIKB", setup.tokenA).expect(403);
   });
 });
 
@@ -126,31 +127,35 @@ describe("voucher platform & Voucher Saya", () => {
   });
 
   test("Voucher Saya: alasan tidak bisa dipakai sesuai keranjang & metode bayar", async () => {
-    await klaim("PLATFORM1").expect(200);
-    await klaim("PUBLIKB").expect(200);
-    const semua = (await saya().expect(200)).body.data;
-    expect(semua.map((voucher: any) => voucher.code).sort()).toEqual(["PLATFORM1", "PUBLIKA", "PUBLIKB"]);
-    expect(semua.every((voucher: any) => voucher.usable && voucher.reason === null)).toBe(true);
-    const vouchers = (await saya(`?merchant_id=${setup.idA}&subtotal=10000&payment_method=cod`).expect(200)).body.data;
-    const alasan = Object.fromEntries(vouchers.map((voucher: any) => [voucher.code, [voucher.usable, voucher.reason]]));
-    expect(alasan).toEqual({
+    await claim("PLATFORM1").expect(200);
+    await claim("PUBLIKB").expect(200);
+    const allVouchers = (await getMyVouchers().expect(200)).body.data;
+    expect(allVouchers.map((voucher: any) => voucher.code).sort()).toEqual(["PLATFORM1", "PUBLIKA", "PUBLIKB"]);
+    expect(allVouchers.every((voucher: any) => voucher.usable && voucher.reason === null)).toBe(true);
+    const vouchers = (await getMyVouchers(`?merchant_id=${setup.idA}&subtotal=10000&payment_method=cod`).expect(200))
+      .body.data;
+    const reasons = Object.fromEntries(
+      vouchers.map((voucher: any) => [voucher.code, [voucher.usable, voucher.reason]]),
+    );
+    expect(reasons).toEqual({
       PUBLIKA: [false, "Minimal belanja Rp 20.000"],
       PUBLIKB: [false, "Khusus Dapur Andi"],
       PLATFORM1: [false, "Voucher platform hanya untuk bayar non-tunai."],
     });
-    const usable = (await saya(`?merchant_id=${setup.idA}&subtotal=30000&payment_method=va`).expect(200)).body.data;
+    const usable = (await getMyVouchers(`?merchant_id=${setup.idA}&subtotal=30000&payment_method=va`).expect(200)).body
+      .data;
     expect(
       usable
         .filter((voucher: any) => voucher.usable)
         .map((voucher: any) => voucher.code)
         .sort(),
     ).toEqual(["PLATFORM1", "PUBLIKA"]);
-    expect((await saya("?subtotal=abc").expect(400)).body.error.fields.subtotal).toBeDefined();
+    expect((await getMyVouchers("?subtotal=abc").expect(400)).body.error.fields.subtotal).toBeDefined();
   });
 
   test("klaim yang sudah berakhir tetap tampil sebagai tidak bisa dipakai", async () => {
     await db.query("UPDATE promos SET ends_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE id = ?", [ids.PUBLIKB]);
-    const voucher = (await saya().expect(200)).body.data.find((item: any) => item.code === "PUBLIKB");
+    const voucher = (await getMyVouchers().expect(200)).body.data.find((item: any) => item.code === "PUBLIKB");
     expect([voucher.usable, voucher.reason]).toEqual([false, "Voucher sudah berakhir."]);
   });
 });
@@ -171,7 +176,7 @@ describe("pengaturan promo", () => {
   });
 
   test("promo toko: tanpa gratis biaya layanan; is_public bisa dimatikan", async () => {
-    const isi = {
+    const promoBody = {
       type: "fixed",
       value: 1000,
       min_subtotal: 0,
@@ -182,13 +187,13 @@ describe("pengaturan promo", () => {
     const res = await request(app)
       .post("/api/v1/merchant/promos")
       .set(authHeader(setup.tokenA))
-      .send({ ...isi, code: "GRATISTOKO", type: "free_service_fee" })
+      .send({ ...promoBody, code: "GRATISTOKO", type: "free_service_fee" })
       .expect(400);
     expect(res.body.error.fields.type).toEqual(["Promo toko hanya potongan persen atau nominal."]);
     const okRes = await request(app)
       .post("/api/v1/merchant/promos")
       .set(authHeader(setup.tokenA))
-      .send({ ...isi, code: "TOKOBARU" })
+      .send({ ...promoBody, code: "TOKOBARU" })
       .expect(201);
     expect(okRes.body.data.is_public).toBe(true);
     await request(app)
@@ -207,7 +212,7 @@ describe("pengaturan promo", () => {
   });
 
   test("promo platform admin: is_public bisa diatur, gratis biaya layanan tetap boleh", async () => {
-    const isi = {
+    const promoBody = {
       code: "ADMINGRATIS",
       type: "free_service_fee",
       value: 0,
@@ -219,7 +224,7 @@ describe("pengaturan promo", () => {
     const res = await request(app)
       .post("/api/v1/admin/promos")
       .set(authHeader(adminToken))
-      .send({ ...isi, is_public: false })
+      .send({ ...promoBody, is_public: false })
       .expect(201);
     expect(res.body.data.is_public).toBe(false);
     const patchRes = await request(app)

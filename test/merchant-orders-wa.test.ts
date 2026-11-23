@@ -13,7 +13,7 @@ let code: string;
 
 const getWhatsapp = (orderCode = code, token = setup.tokenA) =>
   request(app).get(`/api/v1/merchant/orders/${orderCode}/whatsapp`).set("Authorization", `Bearer ${token}`);
-const teks = (url: string) => decodeURIComponent(url.split("?text=")[1]);
+const decodeText = (url: string) => decodeURIComponent(url.split("?text=")[1]);
 
 beforeAll(async () => {
   setup = await prepareCheckout();
@@ -32,7 +32,7 @@ test("templat bawaan (wa_template NULL) → pesan ke nomor pembeli", async () =>
   for (const line of ["Menu: 2x Nasi Ayam", "Total: Rp 30.000", "Cara bayar: Tunai", "Waktu ambil: Secepatnya"])
     expect(data.message).toContain(line);
   expect(data.url.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
-  expect(teks(data.url)).toBe(data.message);
+  expect(decodeText(data.url)).toBe(data.message);
 });
 
 test("templat toko dipakai; placeholder asing dibiarkan; nama dengan & # ter-encode", async () => {
@@ -42,15 +42,15 @@ test("templat toko dipakai; placeholder asing dibiarkan; nama dengan & # ter-enc
   const data = (await getWhatsapp().expect(200)).body.data;
   expect(data.url).not.toMatch(/[&#] ?1/);
   expect(data.url).toContain("%26");
-  expect(teks(data.url)).toBe(`Pesanan ${code} siap, Budi & #1. {asing}`);
+  expect(decodeText(data.url)).toBe(`Pesanan ${code} siap, Budi & #1. {asing}`);
 });
 
 test("DEFAULT_WA_TEMPLATE sama persis dengan fe/lib/wa-template.ts", () => {
   // salinan repo tim menaruh frontend di folder fe/, salinan lokal lain bisa memakai folder frontend/
-  const berkas = ["fe", "frontend"]
+  const templatePath = ["fe", "frontend"]
     .map((folder) => join(__dirname, "../..", folder, "lib/wa-template.ts"))
     .find((filePath) => existsSync(filePath));
-  const feSource = readFileSync(berkas ?? join(__dirname, "../../fe/lib/wa-template.ts"), "utf8");
+  const feSource = readFileSync(templatePath ?? join(__dirname, "../../fe/lib/wa-template.ts"), "utf8");
   const literal = /export const TEMPLATE_BAWAAN = `([^`]*)`;/.exec(feSource)![1].replace(/\r\n/g, "\n");
   expect(DEFAULT_WA_TEMPLATE).toBe(literal);
 });

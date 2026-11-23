@@ -13,7 +13,7 @@ import { login, prepareMerchants } from "./helpers/merchant";
 // log server: 5xx & request lambat tercatat (fire-and-forget), dashboard admin, pembersihan > 30 hari
 let setup: Awaited<ReturnType<typeof prepareMerchants>>;
 let adminToken = "";
-const uji = express()
+const testApp = express()
   .use(requestId, recordServerLog)
   .get("/rusak", () => {
     throw new Error("kode pesanan bentrok");
@@ -30,7 +30,7 @@ const uji = express()
   })
   .use(errorHandler);
 // pencatatan berjalan setelah respons selesai → tunggu barisnya muncul
-async function tungguLog(rid: string) {
+async function waitForLog(rid: string) {
   for (let i = 0; i < 50; i++) {
     const [[row]] = await db.query<any[]>("SELECT * FROM server_logs WHERE request_id = ?", [rid]);
     if (row) return row;
@@ -47,21 +47,21 @@ beforeAll(async () => {
 
 describe("pencatatan", () => {
   test("500 & 502 tercatat dengan request ID, path tanpa query, pesan; 404 tidak", async () => {
-    await request(uji).get("/rusak?token=rahasia").set("X-Request-Id", "uji-500").expect(500);
-    expect(await tungguLog("uji-500")).toMatchObject({
+    await request(testApp).get("/rusak?token=rahasia").set("X-Request-Id", "uji-500").expect(500);
+    expect(await waitForLog("uji-500")).toMatchObject({
       level: "error",
       method: "GET",
       path: "/rusak",
       status: 500,
       message: "kode pesanan bentrok",
     });
-    await request(uji).get("/upstream").set("X-Request-Id", "uji-502").expect(502);
-    expect(await tungguLog("uji-502")).toMatchObject({
+    await request(testApp).get("/upstream").set("X-Request-Id", "uji-502").expect(502);
+    expect(await waitForLog("uji-502")).toMatchObject({
       level: "error",
       status: 502,
       message: "BAD_GATEWAY: Penyedia tidak menjawab.",
     });
-    await request(uji).get("/tidak-ada").set("X-Request-Id", "uji-404").expect(404);
+    await request(testApp).get("/tidak-ada").set("X-Request-Id", "uji-404").expect(404);
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(
       await db.query<any[]>("SELECT id FROM server_logs WHERE request_id = 'uji-404'").then(([rows]) => rows),
@@ -69,8 +69,8 @@ describe("pencatatan", () => {
   });
 
   test("request lebih dari 2 detik tercatat sebagai lambat", async () => {
-    await request(uji).get("/lambat").set("X-Request-Id", "uji-lambat").expect(200);
-    const row = await tungguLog("uji-lambat");
+    await request(testApp).get("/lambat").set("X-Request-Id", "uji-lambat").expect(200);
+    const row = await waitForLog("uji-lambat");
     expect(row).toMatchObject({ level: "slow", status: 200 });
     expect(row.duration_ms).toBeGreaterThanOrEqual(2000);
   });
@@ -86,13 +86,15 @@ describe("pencatatan", () => {
 
 describe("dashboard admin", () => {
   test("daftar + cari request ID/path + filter level; status server 24 jam; penjual 403", async () => {
-    const cari = (query: string) =>
+    const searchLogs = (query: string) =>
       request(app).get(`/api/v1/admin/server-logs?${query}`).set("Authorization", `Bearer ${adminToken}`).expect(200);
-    expect((await cari("q=uji-500")).body.data.map((log: { request_id: string }) => log.request_id)).toEqual([
+    expect((await searchLogs("q=uji-500")).body.data.map((log: { request_id: string }) => log.request_id)).toEqual([
       "uji-500",
     ]);
-    expect((await cari("q=lamb")).body.data[0].request_id).toBe("uji-lambat");
-    expect((await cari("level=slow")).body.data.every((log: { level: string }) => log.level === "slow")).toBe(true);
+    expect((await searchLogs("q=lamb")).body.data[0].request_id).toBe("uji-lambat");
+    expect((await searchLogs("level=slow")).body.data.every((log: { level: string }) => log.level === "slow")).toBe(
+      true,
+    );
     await request(app)
       .get("/api/v1/admin/server-logs?level=info")
       .set("Authorization", `Bearer ${adminToken}`)
@@ -109,13 +111,13 @@ describe("dashboard admin", () => {
   });
 
   test("urut waktu terbaru dulu, bukan id (AUTO_INCREMENT TiDB tidak urut antar-node)", async () => {
-    const sisip = (rid: string, menit: number) =>
+    const insertLog = (rid: string, minutes: number) =>
       db.query(
         "INSERT INTO server_logs (request_id, level, method, path, status, duration_ms, created_at) VALUES (?, 'slow', 'GET', '/urut-uji', 200, 2500, UTC_TIMESTAMP() - INTERVAL ? MINUTE)",
-        [rid, menit],
+        [rid, minutes],
       );
-    await sisip("urut-baru", 5);
-    await sisip("urut-lama", 180); // id lebih besar, waktu lebih tua
+    await insertLog("urut-baru", 5);
+    await insertLog("urut-lama", 180); // id lebih besar, waktu lebih tua
     const res = await request(app)
       .get("/api/v1/admin/server-logs?q=/urut-uji")
       .set("Authorization", `Bearer ${adminToken}`)

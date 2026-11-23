@@ -159,8 +159,10 @@ test(
       );
       for (let i = 0; i < 100; i++) {
         // innodb_trx tidak menampilkan transaksi admin yang menunggu di sini; data_lock_waits andal (TiDB: di information_schema)
-        const tabel = process.env.DATABASE_URL?.includes("tidbcloud.com") ? "information_schema" : "performance_schema";
-        const [waits] = await db.query<any[]>(`SELECT COUNT(*) AS n FROM ${tabel}.data_lock_waits`);
+        const schemaName = process.env.DATABASE_URL?.includes("tidbcloud.com")
+          ? "information_schema"
+          : "performance_schema";
+        const [waits] = await db.query<any[]>(`SELECT COUNT(*) AS n FROM ${schemaName}.data_lock_waits`);
         if (Number(waits[0].n) > 0) break;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -179,7 +181,7 @@ test("updated_at: edit kolom saat titik temu sama tetap menggeser; simpan ulang 
   await patch({ pickup_point_ids: [1] }).expect(200);
   await admin(request(app).post(`/api/v1/admin/merchants/${idA}/request-fix`).send({ reason: "Lengkapi" })).expect(200);
   await db.query("UPDATE admin_audit_logs SET created_at = DATE_SUB(created_at, INTERVAL 1 MINUTE)");
-  const mundur = () =>
+  const moveUpdatedAtBack = () =>
     db.query(
       "UPDATE merchants SET updated_at = DATE_SUB((SELECT MIN(created_at) FROM admin_audit_logs), INTERVAL 1 MINUTE) WHERE id = ?",
       [idA],
@@ -188,12 +190,12 @@ test("updated_at: edit kolom saat titik temu sama tetap menggeser; simpan ulang 
     (await admin(request(app).get("/api/v1/admin/verification-queue"))).body.data.find(
       (merchant: any) => merchant.id === idA,
     ).updated_after_note;
-  await mundur();
+  await moveUpdatedAtBack();
   await patch({ pickup_point_ids: [1] }).expect(200);
   expect(await note()).toBe(false);
   await patch({ business_name: "Nama Baru", pickup_point_ids: [1] }).expect(200);
   expect(await note()).toBe(true);
-  await mundur();
+  await moveUpdatedAtBack();
   await patch({ address: "Jl. Baru 9" }).expect(200);
   expect(await note()).toBe(true);
 });
@@ -206,11 +208,11 @@ test("jam tersimpan tidak valid (via SQL) tidak menghalangi simpan field lain", 
 
 test("checklist admin: titik temu nonaktif tidak dihitung", async () => {
   await patch({ pickup_point_ids: [2] }).expect(200);
-  const cek = async () =>
+  const checkPickupPoint = async () =>
     (await admin(request(app).get(`/api/v1/admin/merchants/${idA}`))).body.data.checklist.pickup_point;
-  expect(await cek()).toBe(true);
+  expect(await checkPickupPoint()).toBe(true);
   await db.query("UPDATE pickup_points SET is_active = FALSE WHERE id = 2");
-  expect(await cek()).toBe(false);
+  expect(await checkPickupPoint()).toBe(false);
 });
 
 test("ganti sebagian titik temu: yang dipertahankan tetap, selisih saja berubah", async () => {

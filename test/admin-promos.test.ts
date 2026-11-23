@@ -8,7 +8,7 @@ import { loginLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 
 let token: string;
-let tokoPromoId: number;
+let merchantPromoId: number;
 const authHeader = () => ({ Authorization: `Bearer ${token}` });
 const get = (path: string) => request(app).get(`/api/v1/admin${path}`).set(authHeader());
 const post = (path: string, body: object = {}) =>
@@ -58,7 +58,7 @@ beforeAll(async () => {
     "INSERT INTO promos (merchant_id, code, type, value, starts_at, ends_at) VALUES (?, 'TOKO1', 'fixed', 1000, '2030-01-01', '2030-02-01')",
     [merchant[0].id],
   );
-  tokoPromoId = ins.insertId;
+  merchantPromoId = ins.insertId;
 });
 
 test("buat promo platform: kode kapital, log create", async () => {
@@ -128,8 +128,8 @@ test("daftar hanya promo platform", async () => {
 });
 
 test("promo toko tak terjangkau → 404", async () => {
-  await patch(`/promos/${tokoPromoId}`, valid).expect(404);
-  await post(`/promos/${tokoPromoId}/deactivate`).expect(404);
+  await patch(`/promos/${merchantPromoId}`, valid).expect(404);
+  await post(`/promos/${merchantPromoId}/deactivate`).expect(404);
   await post(`/promos/abc/activate`).expect(404);
 });
 
@@ -190,8 +190,8 @@ test("log: filter admin, action, target, tanggal; nilai tak valid 400", async ()
   expect(all.data[0].admin_name).toBe("Admin Uji");
   const byAction = (await get("/audit-logs?action=promo.create").expect(200)).body;
   expect(byAction.meta.total).toBe(3);
-  const byT = (await get("/audit-logs?target_type=settings").expect(200)).body;
-  expect(byT.data.every((entry: any) => entry.target_type === "settings")).toBe(true);
+  const byTargetType = (await get("/audit-logs?target_type=settings").expect(200)).body;
+  expect(byTargetType.data.every((entry: any) => entry.target_type === "settings")).toBe(true);
   expect((await get("/audit-logs?target_type=promo&target_id=999").expect(200)).body.data).toEqual([]);
   expect((await get("/audit-logs?admin=1").expect(200)).body.meta.total).toBe(all.meta.total);
   expect((await get("/audit-logs?admin=999").expect(200)).body.data).toEqual([]);
@@ -219,8 +219,8 @@ test("waktu dengan offset +07:00 tersimpan sebagai instan UTC yang benar", async
 });
 
 test("kode kosong dilaporkan bersama galat lain dalam satu 400", async () => {
-  const { code: _code, ...tanpaKode } = valid;
-  const res = await post("/promos", { ...tanpaKode, value: 0, quota: 0 }).expect(400);
+  const { code: _code, ...withoutCode } = valid;
+  const res = await post("/promos", { ...withoutCode, value: 0, quota: 0 }).expect(400);
   expect(Object.keys(res.body.error.fields).sort()).toEqual(["code", "quota", "value"]);
   expect(res.body.error.fields.code).toEqual(["Kode wajib diisi."]);
 });

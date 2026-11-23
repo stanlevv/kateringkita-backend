@@ -12,15 +12,15 @@ let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const KEY = "SB-Mid-server-uji";
 const VA_NUMBER = "8127000012345";
 
-const pesanVa = () =>
+const placeVaOrder = () =>
   request(app)
     .post("/api/v1/orders")
     .set("Authorization", `Bearer ${setup.customerToken}`)
     .set("Idempotency-Key", randomUUID())
     .send({ items: [{ menu_id: setup.menu, qty: 2 }], pickup_point_id: 1, payment_method: "va" });
-const mintaVa = (code: string, bank: unknown = "bca") =>
+const requestVa = (code: string, bank: unknown = "bca") =>
   request(app).post(`/api/v1/orders/${code}/va`).set("Authorization", `Bearer ${setup.customerToken}`).send({ bank });
-const notif = (fields: Record<string, string>, key = KEY, jujur = true) =>
+const postNotification = (fields: Record<string, string>, key = KEY, honest = true) =>
   sendNotification(
     {
       status_code: "200",
@@ -30,7 +30,7 @@ const notif = (fields: Record<string, string>, key = KEY, jujur = true) =>
       ...fields,
     },
     key,
-    jujur,
+    honest,
   );
 // Response baru tiap panggilan: body Response hanya bisa dibaca sekali (charge lalu Get Status)
 const midtrans = (code: string) =>
@@ -47,18 +47,18 @@ const midtrans = (code: string) =>
         }),
       ),
   );
-const pesanan = async (code: string) =>
+const orderRow = async (code: string) =>
   ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
-const bayar = async (code: string) =>
+const pay = async (code: string) =>
   (
     await db.query<any[]>("SELECT p.* FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?", [code])
   )[0] as any[];
 // pesanan VA dengan VA tertunda
-const siapVa = async () => {
+const prepareVaOrder = async () => {
   env.MIDTRANS_SERVER_KEY = KEY;
-  const code = (await pesanVa().expect(201)).body.data.code;
+  const code = (await placeVaOrder().expect(201)).body.data.code;
   vi.stubGlobal("fetch", midtrans(code));
-  await mintaVa(code).expect(200);
+  await requestVa(code).expect(200);
   return code as string;
 };
 
@@ -81,7 +81,7 @@ afterAll(() => {
 
 describe("membuat VA", () => {
   test("tanpa MIDTRANS_SERVER_KEY → checkout VA 409, stok tidak ditahan", async () => {
-    const res = await pesanVa().expect(409);
+    const res = await placeVaOrder().expect(409);
     expect(res.body.error).toEqual({
       code: "CONFLICT",
       message: "Pembayaran Virtual Account belum tersedia. Pilih metode lain.",
@@ -91,15 +91,15 @@ describe("membuat VA", () => {
 
   test("VA dibuat sekali: request Midtrans benar, Order memuat nomor VA, permintaan ulang tanpa charge baru", async () => {
     env.MIDTRANS_SERVER_KEY = KEY;
-    const res = await pesanVa().expect(201);
+    const res = await placeVaOrder().expect(201);
     const code = res.body.data.code;
     expect(res.body.data.payment).toEqual({ method: "va", status: "unpaid", amount: 30000, va: null });
     const fetch = midtrans(code);
     vi.stubGlobal("fetch", fetch);
-    expect((await mintaVa(code, "mandiri").expect(400)).body.error.fields.bank).toEqual([
+    expect((await requestVa(code, "mandiri").expect(400)).body.error.fields.bank).toEqual([
       "Pilih bank BCA, BNI, atau BRI.",
     ]);
-    const vaRes = await mintaVa(code).expect(200);
+    const vaRes = await requestVa(code).expect(200);
     expect(vaRes.body.data.payment).toMatchObject({
       method: "va",
       status: "pending",
@@ -119,21 +119,21 @@ describe("membuat VA", () => {
     expect(body.custom_expiry.unit).toBe("minute");
     expect(body.custom_expiry.expiry_duration).toBeGreaterThanOrEqual(1);
     // idempoten: VA lama dikembalikan walau bank lain diminta, Midtrans tidak dipanggil lagi
-    expect((await mintaVa(code, "bni").expect(200)).body.data.payment.va.va_number).toBe(VA_NUMBER);
+    expect((await requestVa(code, "bni").expect(200)).body.data.payment.va.va_number).toBe(VA_NUMBER);
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(await bayar(code)).toHaveLength(1);
+    expect(await pay(code)).toHaveLength(1);
     // pesanan tunai tidak bisa minta VA
-    await mintaVa(await placeOrder(setup.customerToken, setup.menu)).expect(409);
+    await requestVa(await placeOrder(setup.customerToken, setup.menu)).expect(409);
   });
 });
 
 describe("notifikasi Midtrans", () => {
   test("settlement sah → confirmed, lunas, stok terjual; notifikasi berulang aman", async () => {
-    const code = await siapVa();
-    const sebelum = await menuRow(setup.menu);
-    await notif({ order_id: code }).expect(200);
-    expect(await pesanan(code)).toMatchObject({ status: "confirmed", payment_status: "paid" });
-    const [payment] = await bayar(code);
+    const code = await prepareVaOrder();
+    const before = await menuRow(setup.menu);
+    await postNotification({ order_id: code }).expect(200);
+    expect(await orderRow(code)).toMatchObject({ status: "confirmed", payment_status: "paid" });
+    const [payment] = await pay(code);
     expect(payment).toMatchObject({
       status: "paid",
       provider: "midtrans",
@@ -142,31 +142,33 @@ describe("notifikasi Midtrans", () => {
       provider_ref: `trx-${code}`,
     });
     expect(payment.paid_at).not.toBeNull();
-    const sesudah = await menuRow(setup.menu);
-    expect(sesudah.held_today).toBe(sebelum.held_today - 2);
-    expect(sesudah.sold_today).toBe(sebelum.sold_today + 2);
-    await notif({ order_id: code }).expect(200);
-    expect((await pesanan(code)).status).toBe("confirmed");
-    expect(await bayar(code)).toHaveLength(1);
+    const after = await menuRow(setup.menu);
+    expect(after.held_today).toBe(before.held_today - 2);
+    expect(after.sold_today).toBe(before.sold_today + 2);
+    await postNotification({ order_id: code }).expect(200);
+    expect((await orderRow(code)).status).toBe("confirmed");
+    expect(await pay(code)).toHaveLength(1);
   });
 
   test("signature salah → 403; nominal beda / pending tidak melunasi; expire menandai VA kedaluwarsa", async () => {
-    const code = await siapVa();
-    expect((await notif({ order_id: code }, "kunci-palsu").expect(403)).body.error.code).toBe("FORBIDDEN");
-    await notif({ order_id: code, gross_amount: "1000.00" }).expect(200);
-    await notif({ order_id: code, transaction_status: "pending" }).expect(200);
-    expect(await pesanan(code)).toMatchObject({ status: "holding", payment_status: "pending" });
-    expect((await bayar(code))[0].status).toBe("pending");
-    await notif({ order_id: code, transaction_status: "expire" }).expect(200);
-    expect((await bayar(code))[0].status).toBe("expired");
+    const code = await prepareVaOrder();
+    expect((await postNotification({ order_id: code }, "kunci-palsu").expect(403)).body.error.code).toBe("FORBIDDEN");
+    await postNotification({ order_id: code, gross_amount: "1000.00" }).expect(200);
+    await postNotification({ order_id: code, transaction_status: "pending" }).expect(200);
+    expect(await orderRow(code)).toMatchObject({ status: "holding", payment_status: "pending" });
+    expect((await pay(code))[0].status).toBe("pending");
+    await postNotification({ order_id: code, transaction_status: "expire" }).expect(200);
+    expect((await pay(code))[0].status).toBe("expired");
   });
 
   // Cek ulang status: transaction_status tidak ikut ditandatangani; body pending asli (201) yang statusnya diganti tidak boleh melunasi
   test("body bertanda tangan sah dengan status diganti settlement → dicek ke Get Status Midtrans (masih pending), tidak lunas", async () => {
-    const code = await siapVa();
-    await notif({ order_id: code, status_code: "201", transaction_status: "settlement" }, KEY, false).expect(200);
-    expect(await pesanan(code)).toMatchObject({ status: "holding", payment_status: "pending" });
-    expect((await bayar(code))[0].status).toBe("pending");
+    const code = await prepareVaOrder();
+    await postNotification({ order_id: code, status_code: "201", transaction_status: "settlement" }, KEY, false).expect(
+      200,
+    );
+    expect(await orderRow(code)).toMatchObject({ status: "holding", payment_status: "pending" });
+    expect((await pay(code))[0].status).toBe("pending");
     expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toBe(`https://api.sandbox.midtrans.com/v2/${code}/status`);
   });
 });

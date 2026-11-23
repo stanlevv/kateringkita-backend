@@ -28,9 +28,9 @@ test("isOpenAt: jam WIB, lewat tengah malam", () => {
   expect(isOpenAt(morning, "11:00:00", "16:00:00")).toBe(false);
   expect(isOpenAt(morning, "22:00:00", "11:00:00")).toBe(true);
   expect(isOpenAt(morning, "10:30:00", "02:00:00")).toBe(false);
-  const malam = Date.parse("2026-05-09T18:00:00Z"); // 01:00 WIB
-  expect(isOpenAt(malam, "18:00:00", "02:00:00")).toBe(true);
-  expect(isOpenAt(malam, "18:00:00", "00:30:00")).toBe(false);
+  const night = Date.parse("2026-05-09T18:00:00Z"); // 01:00 WIB
+  expect(isOpenAt(night, "18:00:00", "02:00:00")).toBe(true);
+  expect(isOpenAt(night, "18:00:00", "00:30:00")).toBe(false);
 });
 
 beforeAll(async () => {

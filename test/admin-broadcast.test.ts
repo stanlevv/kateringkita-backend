@@ -10,7 +10,7 @@ let setup: Awaited<ReturnType<typeof prepareMerchants>>;
 let adminToken: string;
 let otherToken: string;
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
-const notif = async (token: string) =>
+const getNotifications = async (token: string) =>
   (await request(app).get("/api/v1/me/notifications").set(authHeader(token)).expect(200)).body.data as {
     type: string;
     title: string;
@@ -37,12 +37,12 @@ describe("pengumuman", () => {
       .send({ audience: "customer", title: " Libur ", body: "Kampus libur 17 Agustus." })
       .expect(201);
     expect(res.body.data).toEqual({ sent: 1 });
-    expect((await notif(setup.customerToken))[0]).toMatchObject({
+    expect((await getNotifications(setup.customerToken))[0]).toMatchObject({
       type: "info",
       title: "Libur",
       body: "Kampus libur 17 Agustus.",
     });
-    expect(await notif(setup.tokenA)).toEqual([]);
+    expect(await getNotifications(setup.tokenA)).toEqual([]);
     await db.query("UPDATE users SET is_active = TRUE WHERE email = 'pembeli1@mail.com'");
     expect(
       (
@@ -83,7 +83,7 @@ describe("notifikasi promo toko", () => {
     await db.query("INSERT INTO favorites (user_id, menu_id) SELECT id, ? FROM users WHERE email = 'budi@mail.com'", [
       menu,
     ]);
-    const isi = {
+    const promoBody = {
       type: "fixed",
       value: 1000,
       min_subtotal: 0,
@@ -94,20 +94,24 @@ describe("notifikasi promo toko", () => {
     const res = await request(app)
       .post("/api/v1/merchant/promos")
       .set(authHeader(setup.tokenA))
-      .send({ ...isi, code: "HEMAT1K", description: "Potong Rp 1.000" })
+      .send({ ...promoBody, code: "HEMAT1K", description: "Potong Rp 1.000" })
       .expect(201);
-    expect((await notif(setup.customerToken)).filter((notification) => notification.type === "promo")).toEqual([
+    expect(
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo"),
+    ).toEqual([
       expect.objectContaining({ title: "Promo baru dari Dapur Siti", body: "Pakai kode HEMAT1K: Potong Rp 1.000" }),
     ]);
-    expect((await notif(otherToken)).filter((notification) => notification.type === "promo")).toEqual([]);
-    const mati = await request(app)
+    expect((await getNotifications(otherToken)).filter((notification) => notification.type === "promo")).toEqual([]);
+    const inactiveRes = await request(app)
       .post("/api/v1/merchant/promos")
       .set(authHeader(setup.tokenA))
-      .send({ ...isi, code: "DIAM", is_active: false })
+      .send({ ...promoBody, code: "DIAM", is_active: false })
       .expect(201);
-    expect((await notif(setup.customerToken)).filter((notification) => notification.type === "promo")).toHaveLength(1);
+    expect(
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo"),
+    ).toHaveLength(1);
     await request(app)
-      .patch(`/api/v1/merchant/promos/${mati.body.data.id}`)
+      .patch(`/api/v1/merchant/promos/${inactiveRes.body.data.id}`)
       .set(authHeader(setup.tokenA))
       .send({ is_active: true })
       .expect(200);
@@ -116,12 +120,14 @@ describe("notifikasi promo toko", () => {
       .set(authHeader(setup.tokenA))
       .send({ value: 1500 })
       .expect(200);
-    expect((await notif(setup.customerToken)).filter((notification) => notification.type === "promo")).toHaveLength(2);
+    expect(
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo"),
+    ).toHaveLength(2);
   });
 
   // kode tersembunyi hanya dibagikan penjual sendiri; toko yang tidak tampil (suspend) tidak bisa menyiarkan
   test("promo tersembunyi dan promo toko yang di-suspend tidak dikirim", async () => {
-    const isi = {
+    const promoBody = {
       type: "fixed",
       value: 1000,
       min_subtotal: 0,
@@ -129,28 +135,28 @@ describe("notifikasi promo toko", () => {
       starts_at: "2020-01-01T00:00:00Z",
       ends_at: "2099-01-01T00:00:00Z",
     };
-    const jumlah = async () =>
-      (await notif(setup.customerToken)).filter((notification) => notification.type === "promo").length;
-    const awal = await jumlah();
+    const countPromoNotifications = async () =>
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo").length;
+    const initialCount = await countPromoNotifications();
     await request(app)
       .post("/api/v1/merchant/promos")
       .set(authHeader(setup.tokenA))
-      .send({ ...isi, code: "RAHASIA", is_public: false })
+      .send({ ...promoBody, code: "RAHASIA", is_public: false })
       .expect(201);
-    expect(await jumlah()).toBe(awal);
+    expect(await countPromoNotifications()).toBe(initialCount);
     await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [setup.idA]);
     await request(app)
       .post("/api/v1/merchant/promos")
       .set(authHeader(setup.tokenA))
-      .send({ ...isi, code: "SUSPEN" })
+      .send({ ...promoBody, code: "SUSPEN" })
       .expect(201);
-    expect(await jumlah()).toBe(awal);
+    expect(await countPromoNotifications()).toBe(initialCount);
     await makeVisible(setup.idA);
   });
 
   // mati-nyala berulang tidak boleh membanjiri pemfavorit; satu notifikasi per promo per penerima per 24 jam
   test("5 siklus mati-nyala promo → satu notifikasi per penerima", async () => {
-    const isi = {
+    const promoBody = {
       type: "fixed",
       value: 1000,
       min_subtotal: 0,
@@ -158,15 +164,15 @@ describe("notifikasi promo toko", () => {
       starts_at: "2020-01-01T00:00:00Z",
       ends_at: "2099-01-01T00:00:00Z",
     };
-    const jumlah = async () =>
-      (await notif(setup.customerToken)).filter(
+    const countPromoNotifications = async () =>
+      (await getNotifications(setup.customerToken)).filter(
         (notification) => notification.type === "promo" && notification.body.startsWith("Pakai kode ULANG"),
       ).length;
     const id = (
       await request(app)
         .post("/api/v1/merchant/promos")
         .set(authHeader(setup.tokenA))
-        .send({ ...isi, code: "ULANG" })
+        .send({ ...promoBody, code: "ULANG" })
         .expect(201)
     ).body.data.id;
     for (let i = 0; i < 5; i++) {
@@ -181,7 +187,7 @@ describe("notifikasi promo toko", () => {
         .send({ is_active: true })
         .expect(200);
     }
-    expect(await jumlah()).toBe(1);
+    expect(await countPromoNotifications()).toBe(1);
     // lewat 24 jam → boleh dikabarkan lagi
     await db.query("UPDATE notifications SET created_at = created_at - INTERVAL 25 HOUR WHERE type = 'promo'");
     await request(app)
@@ -194,7 +200,7 @@ describe("notifikasi promo toko", () => {
       .set(authHeader(setup.tokenA))
       .send({ is_active: true })
       .expect(200);
-    expect(await jumlah()).toBe(2);
+    expect(await countPromoNotifications()).toBe(2);
   });
 });
 

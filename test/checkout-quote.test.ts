@@ -13,23 +13,23 @@ const quote = (body: unknown, token = setup.customerToken) =>
     .post("/api/v1/orders/quote")
     .set("Authorization", `Bearer ${token}`)
     .send(body as object);
-const satu = (overrides: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
+const singleItemBody = (overrides: Record<string, unknown> = {}, item: Record<string, unknown> = {}) => ({
   items: [{ menu_id: setup.menu, qty: 1, ...item }],
   pickup_point_id: 1,
   ...overrides,
 });
-const tolak400 = async (body: unknown, field: string, pesan: string) => {
+const expect400 = async (body: unknown, field: string, message: string) => {
   const res = await quote(body).expect(400);
   expect(res.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid." });
-  expect(res.body.error.fields[field]).toEqual([pesan]);
+  expect(res.body.error.fields[field]).toEqual([message]);
 };
-const tolak409 = async (body: unknown, code: string, pesan: string) => {
+const expect409 = async (body: unknown, code: string, message: string) => {
   const res = await quote(body).expect(409);
-  expect(res.body.error).toMatchObject({ code, message: pesan });
+  expect(res.body.error).toMatchObject({ code, message: message });
 };
 // Waktu WIB d hari dari "sekarang" yang dibekukan (10:00 WIB hari ini)
-const wib = (dayOffset: number, jam = "10:00") =>
-  `${getWibDate(new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + dayOffset * 86400e3))}T${jam}:00+07:00`;
+const wib = (dayOffset: number, time = "10:00") =>
+  `${getWibDate(new Date(Date.parse(`${getWibDate()}T10:00:00+07:00`) + dayOffset * 86400e3))}T${time}:00+07:00`;
 
 beforeEach(async () => {
   setup = await prepareCheckout();
@@ -70,7 +70,7 @@ test("harga dihitung server: opsi + biaya layanan, field harga client diabaikan,
 
 test("biaya layanan bukan angka → 0", async () => {
   await db.query("UPDATE app_settings SET setting_value = 'abc' WHERE setting_key = 'service_fee'");
-  const res = await quote(satu()).expect(200);
+  const res = await quote(singleItemBody()).expect(200);
   expect(res.body.data).toMatchObject({ subtotal: 15000, service_fee: 0, total: 15000 });
 });
 
@@ -92,35 +92,35 @@ test("menu sama dua baris (opsi berbeda) → dua item, stok dijumlah", async () 
 
 test("stok kurang → 200 dengan warnings; stock_date lama → kuota harian, DB tidak ditulis", async () => {
   await db.query("UPDATE menus SET quota_today = 5, held_today = 4 WHERE id = ?", [setup.menu]);
-  const res = await quote(satu({}, { qty: 3 })).expect(200);
+  const res = await quote(singleItemBody({}, { qty: 3 })).expect(200);
   expect(res.body.data.warnings).toEqual([
     { code: "OUT_OF_STOCK", menu_id: setup.menu, available: 1, message: "Sisa Nasi Ayam tinggal 1 porsi." },
   ]);
   expect(res.body.data.items[0].available).toBe(1);
 
   await db.query("UPDATE menus SET stock_date = '2000-01-01', daily_quota = 8 WHERE id = ?", [setup.menu]);
-  const sebelum = await menuRow(setup.menu);
-  const res2 = await quote(satu()).expect(200);
+  const before = await menuRow(setup.menu);
+  const res2 = await quote(singleItemBody()).expect(200);
   expect(res2.body.data.items[0].available).toBe(8);
-  expect(await menuRow(setup.menu)).toEqual(sebelum);
+  expect(await menuRow(setup.menu)).toEqual(before);
 });
 
 describe("validasi body (zod)", () => {
   test("items kosong / qty / opsi / titik temu / catatan / nama / HP / waktu", async () => {
-    await tolak400({ items: [], pickup_point_id: 1 }, "items", "Pilih 1–20 menu.");
-    await tolak400({ pickup_point_id: 1 }, "items", "Pilih 1–20 menu.");
-    await tolak400(satu({}, { qty: 0 }), "items.0.qty", "Jumlah harus 1–1000.");
-    await tolak400(satu({}, { qty: "2" }), "items.0.qty", "Jumlah harus 1–1000.");
-    await tolak400(satu({}, { option_ids: ["x"] }), "items.0.option_ids", "Pilihan tidak valid.");
-    await tolak400(satu({ pickup_point_id: null }), "pickup_point_id", "Pilih titik temu.");
-    await tolak400(satu({ note: "x".repeat(256) }), "note", "Catatan maksimal 255 karakter.");
-    await tolak400(satu({ customer_name: "x".repeat(151) }), "customer_name", "Nama 1–150 karakter.");
-    await tolak400(
-      satu({ customer_phone: "0812" }),
+    await expect400({ items: [], pickup_point_id: 1 }, "items", "Pilih 1–20 menu.");
+    await expect400({ pickup_point_id: 1 }, "items", "Pilih 1–20 menu.");
+    await expect400(singleItemBody({}, { qty: 0 }), "items.0.qty", "Jumlah harus 1–1000.");
+    await expect400(singleItemBody({}, { qty: "2" }), "items.0.qty", "Jumlah harus 1–1000.");
+    await expect400(singleItemBody({}, { option_ids: ["x"] }), "items.0.option_ids", "Pilihan tidak valid.");
+    await expect400(singleItemBody({ pickup_point_id: null }), "pickup_point_id", "Pilih titik temu.");
+    await expect400(singleItemBody({ note: "x".repeat(256) }), "note", "Catatan maksimal 255 karakter.");
+    await expect400(singleItemBody({ customer_name: "x".repeat(151) }), "customer_name", "Nama 1–150 karakter.");
+    await expect400(
+      singleItemBody({ customer_phone: "0812" }),
       "customer_phone",
       "Nomor HP harus diawali 08 dan berisi 10–13 angka.",
     );
-    await tolak400(satu({ pickup_at: "besok" }), "pickup_at", "Waktu ambil tidak valid.");
+    await expect400(singleItemBody({ pickup_at: "besok" }), "pickup_at", "Waktu ambil tidak valid.");
   });
 });
 
@@ -139,23 +139,23 @@ test("body bukan objek / kosong → pesan Indonesia", async () => {
 
 test("total melewati batas angka → 400 items", async () => {
   await db.query("UPDATE menus SET price = 3000000, hpp = 0 WHERE id = ?", [setup.menu]);
-  await tolak400(satu({}, { qty: 1000 }), "items", "Total pesanan terlalu besar. Kurangi jumlah pesanan.");
+  await expect400(singleItemBody({}, { qty: 1000 }), "items", "Total pesanan terlalu besar. Kurangi jumlah pesanan.");
   await db.query("UPDATE menus SET price = 2000000 WHERE id = ?", [setup.menu]);
-  await quote(satu({}, { qty: 1000 })).expect(200);
+  await quote(singleItemBody({}, { qty: 1000 })).expect(200);
 });
 
 describe("urutan validasi", () => {
   test("menu nonaktif / terhapus / tidak ada → items.0.menu_id", async () => {
-    const mati = await insertMenu(setup.idA, { is_active: false });
-    const hapus = await insertMenu(setup.idA, { deleted_at: new Date() });
-    for (const id of [mati, hapus, 99999])
-      await tolak400(satu({}, { menu_id: id }), "items.0.menu_id", "Menu tidak tersedia.");
+    const inactiveMenu = await insertMenu(setup.idA, { is_active: false });
+    const deletedMenu = await insertMenu(setup.idA, { deleted_at: new Date() });
+    for (const id of [inactiveMenu, deletedMenu, 99999])
+      await expect400(singleItemBody({}, { menu_id: id }), "items.0.menu_id", "Menu tidak tersedia.");
   });
 
   test("menu dari dua toko → items", async () => {
     await makeVisible(setup.idB);
     const menuB = await insertMenu(setup.idB);
-    await tolak400(
+    await expect400(
       {
         items: [
           { menu_id: setup.menu, qty: 1 },
@@ -171,33 +171,37 @@ describe("urutan validasi", () => {
   test("toko pending / suspended / pemilik nonaktif → MERCHANT_UNAVAILABLE", async () => {
     for (const status of ["pending", "suspended"]) {
       await db.query("UPDATE merchants SET verification_status = ? WHERE id = ?", [status, setup.idA]);
-      await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
+      await expect409(singleItemBody(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
     }
     await makeVisible(setup.idA);
     await db.query("UPDATE users SET is_active = FALSE WHERE id = (SELECT user_id FROM merchants WHERE id = ?)", [
       setup.idA,
     ]);
-    await tolak409(satu(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
+    await expect409(singleItemBody(), "MERCHANT_UNAVAILABLE", "Toko ini sedang tidak menerima pesanan.");
   });
 
   test("saklar mati / di luar jam → MERCHANT_CLOSED dengan jam buka", async () => {
     await db.query("UPDATE merchants SET is_open = FALSE WHERE id = ?", [setup.idA]);
-    await tolak409(satu(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 07.00–16.00 WIB.");
+    await expect409(singleItemBody(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 07.00–16.00 WIB.");
     await makeVisible(setup.idA, { open: false });
-    await tolak409(satu(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.");
+    await expect409(singleItemBody(), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.");
     // dua galat sekaligus: toko tutup menang atas titik temu salah
-    await tolak409(satu({ pickup_point_id: 2 }), "MERCHANT_CLOSED", "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.");
+    await expect409(
+      singleItemBody({ pickup_point_id: 2 }),
+      "MERCHANT_CLOSED",
+      "Toko sedang tutup. Buka pukul 11.00–12.00 WIB.",
+    );
   });
 
   test("titik temu tidak dilayani / nonaktif → pickup_point_id", async () => {
-    await tolak400(satu({ pickup_point_id: 2 }), "pickup_point_id", "Titik temu tidak dilayani toko ini.");
+    await expect400(singleItemBody({ pickup_point_id: 2 }), "pickup_point_id", "Titik temu tidak dilayani toko ini.");
     await db.query("UPDATE pickup_points SET is_active = FALSE WHERE id = 1");
-    await tolak400(satu(), "pickup_point_id", "Titik temu tidak dilayani toko ini.");
+    await expect400(singleItemBody(), "pickup_point_id", "Titik temu tidak dilayani toko ini.");
   });
 
   test("qty di bawah minimum → items.0.qty", async () => {
     await db.query("UPDATE menus SET min_order_qty = 3 WHERE id = ?", [setup.menu]);
-    await tolak400(satu({}, { qty: 2 }), "items.0.qty", "Minimal pesan 3 porsi.");
+    await expect400(singleItemBody({}, { qty: 2 }), "items.0.qty", "Minimal pesan 3 porsi.");
   });
 
   test("opsi nonaktif / milik menu lain → items.0.option_ids", async () => {
@@ -206,35 +210,35 @@ describe("urutan validasi", () => {
       [setup.menu2],
     );
     for (const id of [setup.basi, result.insertId]) {
-      await tolak400(satu({}, { option_ids: [id] }), "items.0.option_ids", "Pilihan tidak tersedia.");
+      await expect400(singleItemBody({}, { option_ids: [id] }), "items.0.option_ids", "Pilihan tidak tersedia.");
     }
   });
 
   test("promo tak dikenal → 422 PROMO_INVALID; promo kosong diabaikan", async () => {
-    const res = await quote(satu({ promo_code: "HEMAT" })).expect(422);
+    const res = await quote(singleItemBody({ promo_code: "HEMAT" })).expect(422);
     expect(res.body.error).toMatchObject({ code: "PROMO_INVALID", message: "Kode promo tidak ditemukan." });
-    await quote(satu({ promo_code: "  " })).expect(200);
+    await quote(singleItemBody({ promo_code: "  " })).expect(200);
   });
 });
 
 describe("pickup_at", () => {
-  const RENTANG = "Waktu ambil harus di masa depan, paling lambat 7 hari lagi.";
+  const PICKUP_RANGE_MSG = "Waktu ambil harus di masa depan, paling lambat 7 hari lagi.";
   test("kemarin / +8 hari → 400; besok → 200", async () => {
-    await tolak400(satu({ pickup_at: wib(-1) }), "pickup_at", RENTANG);
-    await tolak400(satu({ pickup_at: wib(8) }), "pickup_at", RENTANG);
-    await quote(satu({ pickup_at: wib(1) })).expect(200);
+    await expect400(singleItemBody({ pickup_at: wib(-1) }), "pickup_at", PICKUP_RANGE_MSG);
+    await expect400(singleItemBody({ pickup_at: wib(8) }), "pickup_at", PICKUP_RANGE_MSG);
+    await quote(singleItemBody({ pickup_at: wib(1) })).expect(200);
   });
 
   test("pre-order H-2: tanpa waktu / besok → 400; lusa → 200", async () => {
     await db.query("UPDATE menus SET is_preorder = TRUE, preorder_days = 2 WHERE id = ?", [setup.menu]);
     const PREORDER_MSG = "Menu pre-order harus diambil paling cepat H-2.";
-    await tolak400(satu(), "pickup_at", PREORDER_MSG);
-    await tolak400(satu({ pickup_at: wib(1, "15:00") }), "pickup_at", PREORDER_MSG);
-    await quote(satu({ pickup_at: wib(2) })).expect(200);
+    await expect400(singleItemBody(), "pickup_at", PREORDER_MSG);
+    await expect400(singleItemBody({ pickup_at: wib(1, "15:00") }), "pickup_at", PREORDER_MSG);
+    await quote(singleItemBody({ pickup_at: wib(2) })).expect(200);
   });
 });
 
 test("auth: tanpa token 401, penjual 403", async () => {
-  await request(app).post("/api/v1/orders/quote").send(satu()).expect(401);
-  await quote(satu(), setup.tokenA).expect(403);
+  await request(app).post("/api/v1/orders/quote").send(singleItemBody()).expect(401);
+  await quote(singleItemBody(), setup.tokenA).expect(403);
 });

@@ -14,28 +14,28 @@ import { placeOrder, prepareCheckout, insertMenu, makeVisible } from "./helpers/
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 const codes: Record<string, string> = {};
 
-const atur = (code: string, values: Record<string, unknown>) =>
+const updateOrder = (code: string, values: Record<string, unknown>) =>
   db.query("UPDATE orders SET ? WHERE code = ?", [values, code]);
 const wib = (date: string, time: string) => new Date(Date.parse(`${date}T${time}+07:00`));
-const geser = (date: string, days: number) =>
+const addDays = (date: string, days: number) =>
   new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400e3).toISOString().slice(0, 10);
-const HARI = getWibDate();
+const TODAY = getWibDate();
 const HOURLY_TEST_DAY = "2026-03-20"; // hari uji laporan per jam; completed_at disimpan UTC (WIB − 7 jam)
 // Hari uji tetap di masa lalu: batas WIB sama dengan "kemarin 17:30 UTC = hari ini 00:30 WIB" tanpa mencemari data hari ini
 const BOUNDARY_TEST_DAY = "2026-03-10";
-const get = (jalur: string, query: string, token = setup.tokenA) =>
-  request(app).get(`/api/v1/merchant/reports/${jalur}?${query}`).set("Authorization", `Bearer ${token}`);
-const ringkasan = (startDate: string, endDate = startDate) => get("summary", `from=${startDate}&to=${endDate}`);
-const salahTanggal = async (query: string, pesan: string[]) => {
+const get = (endpoint: string, query: string, token = setup.tokenA) =>
+  request(app).get(`/api/v1/merchant/reports/${endpoint}?${query}`).set("Authorization", `Bearer ${token}`);
+const getSummary = (startDate: string, endDate = startDate) => get("summary", `from=${startDate}&to=${endDate}`);
+const expectInvalidDate = async (query: string, messages: string[]) => {
   const res = await get("hourly", query).expect(400);
   expect(res.body.error).toMatchObject({
     code: "VALIDATION_ERROR",
     message: "Data tidak valid.",
-    fields: { date: pesan },
+    fields: { date: messages },
   });
   expect(Object.keys(res.body.error.fields)).toEqual(["date"]);
 };
-const KUNCI_TRX = [
+const TRANSACTION_KEYS = [
   "code",
   "completed_at",
   "created_at",
@@ -49,7 +49,7 @@ const KUNCI_TRX = [
 ];
 
 // pesanan dua menu: 2× Nasi Ayam (15.000/HPP 9.000) + 1× Es Teh (5.000/HPP 2.000)
-async function pesanDua(token: string): Promise<string> {
+async function placeTwoOrders(token: string): Promise<string> {
   const res = await request(app)
     .post("/api/v1/orders")
     .set("Authorization", `Bearer ${token}`)
@@ -71,35 +71,38 @@ beforeAll(async () => {
   await makeVisible(setup.idB);
   await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [setup.idB]);
   const menuB = await insertMenu(setup.idB, { name: "Soto" });
-  const pagi = wib(HARI, "09:00:00");
-  const siang = wib(HARI, "12:00:00");
-  codes.multi = await pesanDua(setup.customerToken);
-  await atur(codes.multi, { status: "completed", completed_at: pagi });
+  const morning = wib(TODAY, "09:00:00");
+  const noon = wib(TODAY, "12:00:00");
+  codes.multi = await placeTwoOrders(setup.customerToken);
+  await updateOrder(codes.multi, { status: "completed", completed_at: morning });
   codes.satu = await placeOrder(setup.customerToken, setup.menu2, 3);
-  await atur(codes.satu, { status: "completed", completed_at: siang });
+  await updateOrder(codes.satu, { status: "completed", completed_at: noon });
   // tiga status lain punya item dan completed_at, tetap tidak boleh dihitung
   for (const status of ["cancelled", "expired", "ready"]) {
     codes[status] = await placeOrder(setup.customerToken, setup.menu);
-    await atur(codes[status], { status, completed_at: siang });
+    await updateOrder(codes[status], { status, completed_at: noon });
   }
   codes.merchantB = await placeOrder(setup.customerToken, menuB, 4);
-  await atur(codes.merchantB, { status: "completed", completed_at: siang });
+  await updateOrder(codes.merchantB, { status: "completed", completed_at: noon });
 
   // fixture per jam di hari uji tersendiri (WIB = UTC + 7)
-  const first = await pesanDua(setup.customerToken); // 2× Nasi Ayam 30.000 + 1× Es Teh 5.000, 08.10 WIB
-  await atur(first, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T01:10:00Z`) });
+  const first = await placeTwoOrders(setup.customerToken); // 2× Nasi Ayam 30.000 + 1× Es Teh 5.000, 08.10 WIB
+  await updateOrder(first, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T01:10:00Z`) });
   const second = await placeOrder(setup.customerToken, setup.menu2, 3); // 15.000, 08.50 WIB (jam yang sama)
-  await atur(second, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T01:50:00Z`) });
+  await updateOrder(second, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T01:50:00Z`) });
   const third = await placeOrder(setup.customerToken, setup.menu2, 1); // 5.000, 12.05 WIB
-  await atur(third, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T05:05:00Z`) });
-  const tengahMalam = await placeOrder(setup.customerToken, setup.menu2); // 5.000, 00.20 WIB
-  await atur(tengahMalam, { status: "completed", completed_at: new Date(`${geser(HOURLY_TEST_DAY, -1)}T17:20:00Z`) });
-  const akhirHari = await placeOrder(setup.customerToken, setup.menu2); // 5.000, 23.59 WIB
-  await atur(akhirHari, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T16:59:00Z`) });
-  const batal = await placeOrder(setup.customerToken, setup.menu2); // status lain, jam 20.00 WIB, tidak boleh muncul
-  await atur(batal, { status: "cancelled", completed_at: new Date(`${HOURLY_TEST_DAY}T13:00:00Z`) });
-  const tokoB = await placeOrder(setup.customerToken, menuB, 4); // toko lain, jam 10.00 WIB, tidak boleh muncul
-  await atur(tokoB, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T03:00:00Z`) });
+  await updateOrder(third, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T05:05:00Z`) });
+  const midnight = await placeOrder(setup.customerToken, setup.menu2); // 5.000, 00.20 WIB
+  await updateOrder(midnight, {
+    status: "completed",
+    completed_at: new Date(`${addDays(HOURLY_TEST_DAY, -1)}T17:20:00Z`),
+  });
+  const endOfDay = await placeOrder(setup.customerToken, setup.menu2); // 5.000, 23.59 WIB
+  await updateOrder(endOfDay, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T16:59:00Z`) });
+  const cancelled = await placeOrder(setup.customerToken, setup.menu2); // status lain, jam 20.00 WIB, tidak boleh muncul
+  await updateOrder(cancelled, { status: "cancelled", completed_at: new Date(`${HOURLY_TEST_DAY}T13:00:00Z`) });
+  const otherMerchant = await placeOrder(setup.customerToken, menuB, 4); // toko lain, jam 10.00 WIB, tidak boleh muncul
+  await updateOrder(otherMerchant, { status: "completed", completed_at: new Date(`${HOURLY_TEST_DAY}T03:00:00Z`) });
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -110,9 +113,9 @@ describe("GET /merchant/reports/summary", () => {
     const [[row]] = await db.query<any[]>(
       `SELECT SUM(oi.line_total) AS r, SUM(oi.hpp * oi.qty) AS h FROM order_items oi JOIN orders o ON o.id = oi.order_id
        WHERE o.merchant_id = ? AND o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ?`,
-      [setup.idA, ...toUtcRange({ from: HARI, to: HARI })],
+      [setup.idA, ...toUtcRange({ from: TODAY, to: TODAY })],
     );
-    const res = await ringkasan(HARI).expect(200);
+    const res = await getSummary(TODAY).expect(200);
     expect(res.body.data).toEqual({
       target: 0,
       revenue: 50000,
@@ -126,39 +129,39 @@ describe("GET /merchant/reports/summary", () => {
   });
 
   test("rentang tanpa pesanan selesai → semua 0", async () => {
-    const res = await ringkasan("2026-01-01").expect(200);
+    const res = await getSummary("2026-01-01").expect(200);
     expect(res.body.data).toEqual({ target: 0, revenue: 0, hpp_total: 0, profit: 0, achievement_pct: 0, orders: 0 });
   });
 
   test("target = target harian × jumlah hari; achievement_pct dibulatkan, boleh > 100; target 0 → 0", async () => {
     await db.query("UPDATE merchants SET daily_revenue_target = 100000 WHERE id = ?", [setup.idA]);
-    const res = await ringkasan(geser(HARI, -2), HARI).expect(200);
+    const res = await getSummary(addDays(TODAY, -2), TODAY).expect(200);
     expect(res.body.data).toMatchObject({
       target: 300000,
       revenue: 50000,
       achievement_pct: Math.round((50000 / 300000) * 100),
     });
     await db.query("UPDATE merchants SET daily_revenue_target = 20000 WHERE id = ?", [setup.idA]);
-    expect((await ringkasan(HARI).expect(200)).body.data).toMatchObject({ target: 20000, achievement_pct: 250 });
+    expect((await getSummary(TODAY).expect(200)).body.data).toMatchObject({ target: 20000, achievement_pct: 250 });
     await db.query("UPDATE merchants SET daily_revenue_target = 0 WHERE id = ?", [setup.idA]);
-    expect((await ringkasan(HARI).expect(200)).body.data).toMatchObject({ target: 0, achievement_pct: 0 });
+    expect((await getSummary(TODAY).expect(200)).body.data).toMatchObject({ target: 0, achievement_pct: 0 });
   });
 
   test("tanggal = completed_at WIB: 00:30 WIB masuk hari itu, 23:59:59 WIB hari sebelumnya; pre-order dibuat sebelumnya masuk hari selesai", async () => {
-    const hari = geser(BOUNDARY_TEST_DAY, -1);
+    const day = addDays(BOUNDARY_TEST_DAY, -1);
     codes.justAfterMidnight = await placeOrder(setup.customerToken, setup.menu2); // 00:30 WIB tanggal BOUNDARY_TEST_DAY
-    await atur(codes.justAfterMidnight, { status: "completed", completed_at: new Date(`${hari}T17:30:00Z`) });
+    await updateOrder(codes.justAfterMidnight, { status: "completed", completed_at: new Date(`${day}T17:30:00Z`) });
     codes.justBeforeMidnight = await placeOrder(setup.customerToken, setup.menu2); // 23:59:59 WIB sehari sebelum BOUNDARY_TEST_DAY
-    await atur(codes.justBeforeMidnight, { status: "completed", completed_at: new Date(`${hari}T16:59:59Z`) });
+    await updateOrder(codes.justBeforeMidnight, { status: "completed", completed_at: new Date(`${day}T16:59:59Z`) });
     codes.preorder = await placeOrder(setup.customerToken, setup.menu2); // dibuat dua hari sebelum BOUNDARY_TEST_DAY, selesai di hari itu
-    await atur(codes.preorder, {
+    await updateOrder(codes.preorder, {
       status: "completed",
-      created_at: wib(geser(BOUNDARY_TEST_DAY, -2), "10:00:00"),
+      created_at: wib(addDays(BOUNDARY_TEST_DAY, -2), "10:00:00"),
       completed_at: wib(BOUNDARY_TEST_DAY, "09:00:00"),
     });
-    expect((await ringkasan(BOUNDARY_TEST_DAY).expect(200)).body.data).toMatchObject({ revenue: 10000, orders: 2 });
-    expect((await ringkasan(hari).expect(200)).body.data).toMatchObject({ revenue: 5000, orders: 1 });
-    expect((await ringkasan(geser(BOUNDARY_TEST_DAY, -2)).expect(200)).body.data).toMatchObject({
+    expect((await getSummary(BOUNDARY_TEST_DAY).expect(200)).body.data).toMatchObject({ revenue: 10000, orders: 2 });
+    expect((await getSummary(day).expect(200)).body.data).toMatchObject({ revenue: 5000, orders: 1 });
+    expect((await getSummary(addDays(BOUNDARY_TEST_DAY, -2)).expect(200)).body.data).toMatchObject({
       revenue: 0,
       orders: 0,
     });
@@ -168,15 +171,15 @@ describe("GET /merchant/reports/summary", () => {
     await db.query("UPDATE menus SET price = 90000, hpp = 80000, deleted_at = NOW() WHERE merchant_id = ?", [
       setup.idA,
     ]);
-    const res = await ringkasan(HARI).expect(200);
+    const res = await getSummary(TODAY).expect(200);
     expect(res.body.data).toMatchObject({ revenue: 50000, hpp_total: 26000, profit: 24000 });
   });
 });
 
 describe("GET /merchant/reports/transactions", () => {
   test("satu baris per item, kunci persis, urut completed_at terbaru; toko B & status lain tidak ikut", async () => {
-    const res = await get("transactions", `from=${HARI}&to=${HARI}`).expect(200);
-    for (const row of res.body.data) expect(Object.keys(row).sort()).toEqual(KUNCI_TRX);
+    const res = await get("transactions", `from=${TODAY}&to=${TODAY}`).expect(200);
+    for (const row of res.body.data) expect(Object.keys(row).sort()).toEqual(TRANSACTION_KEYS);
     expect(res.body.data.map((row: any) => [row.code, row.menu_name])).toEqual([
       [codes.satu, "Es Teh"],
       [codes.multi, "Nasi Ayam"],
@@ -189,13 +192,13 @@ describe("GET /merchant/reports/transactions", () => {
       total: 15000,
       hpp_total: 6000,
       status: "completed",
-      completed_at: wib(HARI, "12:00:00").toISOString(),
+      completed_at: wib(TODAY, "12:00:00").toISOString(),
     });
     expect(res.body.data[1]).toMatchObject({
       qty: 2,
       total: 30000,
       hpp_total: 18000,
-      completed_at: wib(HARI, "09:00:00").toISOString(),
+      completed_at: wib(TODAY, "09:00:00").toISOString(),
     });
     expect(typeof res.body.data[1].created_at).toBe("string");
   });
@@ -206,43 +209,49 @@ describe("GET /merchant/reports/transactions", () => {
 });
 
 describe("validasi query & penjaga", () => {
-  const salah = async (query: string, fields: Record<string, string[]>, jalur = "summary") => {
-    const res = await get(jalur, query).expect(400);
+  const expectInvalid = async (query: string, fields: Record<string, string[]>, endpoint = "summary") => {
+    const res = await get(endpoint, query).expect(400);
     expect(res.body.error).toMatchObject({ code: "VALIDATION_ERROR", message: "Data tidak valid.", fields });
     expect(Object.keys(res.body.error.fields).sort()).toEqual(Object.keys(fields).sort());
   };
 
   test("tanggal tidak sah / hilang", async () => {
-    await salah(`from=2026-13-01&to=${HARI}`, { from: ["Tanggal tidak valid."] });
-    await salah(`to=${HARI}`, { from: ["Tanggal tidak valid."] });
-    await salah(`from=${HARI}`, { to: ["Tanggal tidak valid."] }, "transactions");
+    await expectInvalid(`from=2026-13-01&to=${TODAY}`, { from: ["Tanggal tidak valid."] });
+    await expectInvalid(`to=${TODAY}`, { from: ["Tanggal tidak valid."] });
+    await expectInvalid(`from=${TODAY}`, { to: ["Tanggal tidak valid."] }, "transactions");
   });
 
   test("to < from", async () => {
-    await salah(`from=${HARI}&to=${geser(HARI, -1)}`, { to: ["Tanggal akhir harus setelah tanggal awal."] });
+    await expectInvalid(`from=${TODAY}&to=${addDays(TODAY, -1)}`, {
+      to: ["Tanggal akhir harus setelah tanggal awal."],
+    });
   });
 
   test("92 hari diterima, 93 hari ditolak", async () => {
-    await get("summary", `from=${geser(HARI, -91)}&to=${HARI}`).expect(200);
-    await salah(`from=${geser(HARI, -92)}&to=${HARI}`, { to: ["Rentang maksimal 92 hari."] });
-    await salah(`from=${geser(HARI, -92)}&to=${HARI}`, { to: ["Rentang maksimal 92 hari."] }, "transactions");
+    await get("summary", `from=${addDays(TODAY, -91)}&to=${TODAY}`).expect(200);
+    await expectInvalid(`from=${addDays(TODAY, -92)}&to=${TODAY}`, { to: ["Rentang maksimal 92 hari."] });
+    await expectInvalid(
+      `from=${addDays(TODAY, -92)}&to=${TODAY}`,
+      { to: ["Rentang maksimal 92 hari."] },
+      "transactions",
+    );
   });
 
   test("tanggal setelah hari ini", async () => {
-    await salah(`from=${HARI}&to=${geser(HARI, 1)}`, { to: ["Tanggal tidak boleh melewati hari ini."] });
+    await expectInvalid(`from=${TODAY}&to=${addDays(TODAY, 1)}`, { to: ["Tanggal tidak boleh melewati hari ini."] });
   });
 
   test("tanggal awal di masa depan: from dan to sama-sama ditolak", async () => {
-    const besok = geser(HARI, 1);
-    const pesan = ["Tanggal tidak boleh melewati hari ini."];
-    await salah(`from=${besok}&to=${besok}`, { from: pesan, to: pesan });
-    await salah(`from=${besok}&to=${besok}`, { from: pesan, to: pesan }, "transactions");
+    const tomorrow = addDays(TODAY, 1);
+    const messages = ["Tanggal tidak boleh melewati hari ini."];
+    await expectInvalid(`from=${tomorrow}&to=${tomorrow}`, { from: messages, to: messages });
+    await expectInvalid(`from=${tomorrow}&to=${tomorrow}`, { from: messages, to: messages }, "transactions");
   });
 
   test("token pembeli → 403, tanpa token → 401", async () => {
-    await get("summary", `from=${HARI}&to=${HARI}`, setup.customerToken).expect(403);
-    await get("transactions", `from=${HARI}&to=${HARI}`, setup.customerToken).expect(403);
-    await request(app).get(`/api/v1/merchant/reports/summary?from=${HARI}&to=${HARI}`).expect(401);
+    await get("summary", `from=${TODAY}&to=${TODAY}`, setup.customerToken).expect(403);
+    await get("transactions", `from=${TODAY}&to=${TODAY}`, setup.customerToken).expect(403);
+    await request(app).get(`/api/v1/merchant/reports/summary?from=${TODAY}&to=${TODAY}`).expect(401);
   });
 });
 
@@ -258,7 +267,7 @@ describe("GET /merchant/reports/hourly", () => {
       { hour: 23, orders: 1, portions: 1, revenue: 5000 },
     ]);
     const total = res.body.data.reduce((sum: number, hourRow: any) => sum + hourRow.revenue, 0);
-    expect(total).toBe((await ringkasan(HOURLY_TEST_DAY).expect(200)).body.data.revenue);
+    expect(total).toBe((await getSummary(HOURLY_TEST_DAY).expect(200)).body.data.revenue);
   });
 
   test("hari tanpa transaksi → []", async () => {
@@ -266,12 +275,12 @@ describe("GET /merchant/reports/hourly", () => {
   });
 
   test("date tidak sah / hilang / masa depan → 400", async () => {
-    await salahTanggal("date=2026-13-01", ["Tanggal tidak valid."]);
-    await salahTanggal("", ["Tanggal tidak valid."]);
-    await salahTanggal(`date=${geser(HARI, 1)}`, ["Tanggal tidak boleh melewati hari ini."]);
+    await expectInvalidDate("date=2026-13-01", ["Tanggal tidak valid."]);
+    await expectInvalidDate("", ["Tanggal tidak valid."]);
+    await expectInvalidDate(`date=${addDays(TODAY, 1)}`, ["Tanggal tidak boleh melewati hari ini."]);
   });
 
   test("token pembeli → 403", async () => {
-    await hourly(HARI, setup.customerToken).expect(403);
+    await hourly(TODAY, setup.customerToken).expect(403);
   });
 });
