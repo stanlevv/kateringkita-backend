@@ -206,7 +206,7 @@ export const transitionMerchantOrderHandler: RequestHandler = async (req, res, n
 
 /**
  * GET /merchant/reports/summary: ringkasan laporan penjualan toko untuk rentang tanggal.
- * @param req request dengan query `from` dan `to` (diperiksa rentangSchema di sini)
+ * @param req request dengan query `from` dan `to` (diperiksa reportRangeSchema di sini)
  * @param res respons `{ data }` berisi ringkasan laporan
  * @returns tidak ada; hasil dikirim lewat `res`
  */
@@ -216,7 +216,7 @@ export const getReportSummaryHandler: RequestHandler = async (req, res) => {
 
 /**
  * GET /merchant/reports/hourly: penjualan toko per jam untuk satu tanggal.
- * @param req request dengan query `date` (diperiksa tanggalSchema di sini)
+ * @param req request dengan query `date` (diperiksa reportDateSchema di sini)
  * @param res respons `{ data }` berisi penjualan per jam
  * @returns tidak ada; hasil dikirim lewat `res`
  */
@@ -226,7 +226,7 @@ export const getHourlyReportHandler: RequestHandler = async (req, res) => {
 
 /**
  * GET /merchant/reports/transactions: daftar transaksi toko untuk rentang tanggal.
- * @param req request dengan query `from` dan `to` (diperiksa rentangSchema di sini)
+ * @param req request dengan query `from` dan `to` (diperiksa reportRangeSchema di sini)
  * @param res respons `{ data }` berisi daftar transaksi
  * @returns tidak ada; hasil dikirim lewat `res`
  */
@@ -286,7 +286,7 @@ export const listMerchantReviewsHandler: RequestHandler = async (req, res) => {
 };
 
 /**
- * POST /merchant/assistant: pertanyaan penjual ke asisten AI toko. Body sudah diperiksa tanyaSchema di route.
+ * POST /merchant/assistant: pertanyaan penjual ke asisten AI toko. Body sudah diperiksa askAssistantSchema di route.
  * @param req request dengan body `{ question }`
  * @param res respons `{ data }` berisi jawaban asisten
  * @returns tidak ada; hasil dikirim lewat `res`

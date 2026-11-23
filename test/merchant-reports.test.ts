@@ -13,7 +13,7 @@ const codes: Record<string, string> = {};
 
 const atur = (code: string, values: Record<string, unknown>) =>
   db.query("UPDATE orders SET ? WHERE code = ?", [values, code]);
-const wib = (date: string, hms: string) => new Date(Date.parse(`${date}T${hms}+07:00`));
+const wib = (date: string, time: string) => new Date(Date.parse(`${date}T${time}+07:00`));
 const geser = (date: string, days: number) =>
   new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400e3).toISOString().slice(0, 10);
 const HARI = getWibDate();
@@ -79,8 +79,8 @@ beforeAll(async () => {
     codes[status] = await placeOrder(setup.customerToken, setup.menu);
     await atur(codes[status], { status, completed_at: siang });
   }
-  codes.b = await placeOrder(setup.customerToken, menuB, 4);
-  await atur(codes.b, { status: "completed", completed_at: siang });
+  codes.merchantB = await placeOrder(setup.customerToken, menuB, 4);
+  await atur(codes.merchantB, { status: "completed", completed_at: siang });
 
   // fixture per jam di hari uji tersendiri (WIB = UTC + 7)
   const first = await pesanDua(setup.customerToken); // 2× Nasi Ayam 30.000 + 1× Es Teh 5.000, 08.10 WIB
@@ -143,12 +143,12 @@ describe("GET /merchant/reports/summary", () => {
 
   test("tanggal = completed_at WIB: 00:30 WIB masuk hari itu, 23:59:59 WIB hari sebelumnya; pre-order dibuat sebelumnya masuk hari selesai", async () => {
     const hari = geser(BOUNDARY_TEST_DAY, -1);
-    codes.x = await placeOrder(setup.customerToken, setup.menu2); // 00:30 WIB tanggal D
-    await atur(codes.x, { status: "completed", completed_at: new Date(`${hari}T17:30:00Z`) });
-    codes.y = await placeOrder(setup.customerToken, setup.menu2); // 23:59:59 WIB tanggal D-1
-    await atur(codes.y, { status: "completed", completed_at: new Date(`${hari}T16:59:59Z`) });
-    codes.z = await placeOrder(setup.customerToken, setup.menu2); // dibuat D-2, selesai D
-    await atur(codes.z, {
+    codes.justAfterMidnight = await placeOrder(setup.customerToken, setup.menu2); // 00:30 WIB tanggal BOUNDARY_TEST_DAY
+    await atur(codes.justAfterMidnight, { status: "completed", completed_at: new Date(`${hari}T17:30:00Z`) });
+    codes.justBeforeMidnight = await placeOrder(setup.customerToken, setup.menu2); // 23:59:59 WIB sehari sebelum BOUNDARY_TEST_DAY
+    await atur(codes.justBeforeMidnight, { status: "completed", completed_at: new Date(`${hari}T16:59:59Z`) });
+    codes.preorder = await placeOrder(setup.customerToken, setup.menu2); // dibuat dua hari sebelum BOUNDARY_TEST_DAY, selesai di hari itu
+    await atur(codes.preorder, {
       status: "completed",
       created_at: wib(geser(BOUNDARY_TEST_DAY, -2), "10:00:00"),
       completed_at: wib(BOUNDARY_TEST_DAY, "09:00:00"),
