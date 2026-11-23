@@ -1,11 +1,19 @@
+// Pelepasan porsi stok menu yang ditahan pesanan. Layanan paling dalam: dipanggil order-status.service
+// saat transisi (konfirmasi, batal, tolak, kadaluarsa), tidak dipanggil handler secara langsung.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 
-// D14 (R-01, R-03, R-12): lepas porsi yang ditahan pesanan. "terjual" = konfirmasi (F07), "kembali" = batal/tolak/kadaluarsa (F07/F08).
-// F07 D4: "batal" = tolak/batal setelah dikonfirmasi → porsi terjual dikembalikan (held tidak disentuh), dijepit ≥ 0.
-// Pemanggil (F07 konfirmasi/batal, F08 kadaluarsa) mengunci baris `orders` dulu, lalu fungsi ini mengunci menu urut id.
-// Penghitung harian hanya disentuh bila tanggal stok menu = tanggal stok pesanan (hold kemarin tidak mengurangi hari ini);
-// orders.stock_date NULL (sebelum F06) tidak pernah cocok. Tanpa filter deleted_at/is_active agar menu terhapus tetap dilepas.
+/**
+ * D14 (R-01, R-03, R-12): lepas porsi yang ditahan pesanan. "terjual" = konfirmasi (F07), "kembali" = batal/tolak/kadaluarsa (F07/F08).
+ * F07 D4: "batal" = tolak/batal setelah dikonfirmasi → porsi terjual dikembalikan (held tidak disentuh), dijepit ≥ 0.
+ * Pemanggil (F07 konfirmasi/batal, F08 kadaluarsa) mengunci baris `orders` dulu, lalu fungsi ini mengunci menu urut id.
+ * Penghitung harian hanya disentuh bila tanggal stok menu = tanggal stok pesanan (hold kemarin tidak mengurangi hari ini);
+ * orders.stock_date NULL (sebelum F06) tidak pernah cocok. Tanpa filter deleted_at/is_active agar menu terhapus tetap dilepas.
+ *
+ * @param conn koneksi di dalam transaksi pemanggil
+ * @param orderId id pesanan yang porsinya dilepas
+ * @param outcome nasib porsi: `terjual` (held → sold), `kembali` (held dikurangi), `batal` (sold dikurangi)
+ */
 export async function releaseStock(
   conn: Pick<PoolConnection, "query">,
   orderId: number,

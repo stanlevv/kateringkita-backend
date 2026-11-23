@@ -1,3 +1,5 @@
+// Layanan pesanan untuk penjual: daftar, detail, aksi status (terima, masak, siap, selesai, tolak), dan chat WhatsApp
+// ke pembeli. Lapisan services dari routes/merchant.ts → handlers/merchant.handler.ts → di sini → database.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { dalamTransaksi } from "./admin-audit.service";
@@ -25,7 +27,10 @@ const MERCHANT_ORDER_SELECT = `${ORDER_COLUMNS}, o.customer_name, o.customer_pho
   o.confirmed_at, o.cooking_at, o.ready_at, o.completed_at, o.cancelled_at
   FROM orders o LEFT JOIN pickup_points p ON p.id = o.pickup_point_id LEFT JOIN merchant_tables mt ON mt.id = o.table_id`;
 
-// MerchantOrder §7 (D13): Order tanpa merchant/can_*, plus data pembeli & jejak waktu; pesanan meja: pickup_point null, table terisi
+/**
+ * Bentuk respons pesanan untuk penjual.
+ * MerchantOrder §7 (D13): Order tanpa merchant/can_*, plus data pembeli & jejak waktu; pesanan meja: pickup_point null, table terisi.
+ */
 export const mapMerchantOrder = (o: RowDataPacket, items: Item[]) => ({
   ...mapOrderBase(o, items),
   pickup_point: o.pickup_point_id ? { id: o.pickup_point_id, name: o.p_name } : null,
@@ -39,7 +44,13 @@ export const mapMerchantOrder = (o: RowDataPacket, items: Item[]) => ({
   cancelled_at: o.cancelled_at,
 });
 
-// D11, D12: updated_since mengabaikan status; date = tanggal WIB created_at → rentang UTC agar indeks terpakai
+/**
+ * Daftar pesanan toko milik penjual yang login, dengan filter status, tanggal dibuat (WIB), dan pencarian kode/nama pembeli.
+ * D11, D12: updated_since mengabaikan status; date = tanggal WIB created_at → rentang UTC agar indeks terpakai.
+ *
+ * @returns `{ data, meta }` seperti paginateOrders, tiap baris berbentuk {@link mapMerchantOrder}
+ * @throws AppError 404 NOT_FOUND bila akun belum punya toko
+ */
 export async function listMerchantOrders(userId: number, f: MerchantOrdersQuery) {
   const where = ["o.merchant_id = ?"];
   const args: unknown[] = [await idToko(userId)];
@@ -62,6 +73,11 @@ export async function listMerchantOrders(userId: number, f: MerchantOrdersQuery)
   return paginateOrders(MERCHANT_ORDER_SELECT, where, args, f, mapMerchantOrder);
 }
 
+/**
+ * Detail satu pesanan milik toko penjual (R-10: toko diambil dari token, pesanan toko lain = 404).
+ *
+ * @throws AppError 404 NOT_FOUND bila toko atau pesanan tidak ditemukan
+ */
 export async function getMerchantOrder(userId: number, code: string) {
   const [[o]] = await db.query<RowDataPacket[]>(
     `SELECT ${MERCHANT_ORDER_SELECT} WHERE o.code = ? AND o.merchant_id = ?`,
@@ -72,10 +88,19 @@ export async function getMerchantOrder(userId: number, code: string) {
 }
 
 // F26: "pay" (verifikasi QRIS manual) dihapus; pembayaran non-tunai dilunasi notifikasi Midtrans
+/** Aksi yang boleh dikirim penjual lewat `POST /merchant/orders/:code/:aksi`; aksi lain diteruskan ke 404. */
 export const MERCHANT_ACTIONS = ["confirm", "cook", "ready", "complete", "reject"] as const;
+/** Satu nilai dari {@link MERCHANT_ACTIONS}. */
 export type MerchantAction = (typeof MERCHANT_ACTIONS)[number];
 
-// M-04, M-08 (D1, D8): transisi dengan aktor penjual lalu bentuk terkini; tolak wajib beralasan
+/**
+ * Jalankan aksi penjual pada pesanan tokonya lewat mesin status, lalu kembalikan bentuk terkini.
+ * M-04, M-08 (D1, D8): transisi dengan aktor penjual lalu bentuk terkini; tolak wajib beralasan.
+ *
+ * @param body body request mentah; hanya `reason` untuk aksi `reject` yang dibaca
+ * @returns detail pesanan seperti {@link getMerchantOrder}
+ * @throws AppError 400 VALIDATION_ERROR bila tolak tanpa alasan, 404 NOT_FOUND, 409 CONFLICT bila aksi tidak sah
+ */
 export async function transitionMerchantOrder(userId: number, code: string, action: MerchantAction, body: unknown) {
   // body hanya bermakna untuk tolak; aksi lain mengabaikannya
   const reason = action === "reject" ? parse(reasonSchema, bodyObject(body)).reason : null;
@@ -87,7 +112,10 @@ export async function transitionMerchantOrder(userId: number, code: string, acti
   return getMerchantOrder(userId, code);
 }
 
-// D17: salinan persis fe/lib/wa-template.ts#TEMPLATE_BAWAAN (dijaga test merchant-orders-wa)
+/**
+ * Templat WhatsApp penjual → pembeli bila toko belum mengisi `wa_template`.
+ * D17: salinan persis fe/lib/wa-template.ts#TEMPLATE_BAWAAN (dijaga test merchant-orders-wa).
+ */
 export const DEFAULT_WA_TEMPLATE = `Halo {nama}, pesanan {kode} sudah kami terima.
 
 Menu: {menu}
@@ -98,7 +126,14 @@ Waktu ambil: {waktu_ambil}
 
 Terima kasih sudah memesan.`;
 
-// M-04, M-11 (D17): chat penjual → pembeli memakai templat toko
+/**
+ * Pesan WhatsApp penjual ke pembeli untuk satu pesanan tokonya.
+ * M-04, M-11 (D17): chat penjual → pembeli memakai templat toko (atau {@link DEFAULT_WA_TEMPLATE}).
+ * Pesanan meja memakai "Meja <label>" sebagai titik temu.
+ *
+ * @returns `wa_number` pembeli, `message` yang sudah diisi, dan `url` wa.me
+ * @throws AppError 404 NOT_FOUND; 409 CONFLICT bila pembeli (tamu meja) tidak mencantumkan nomor
+ */
 export async function getMerchantOrderWhatsapp(userId: number, code: string) {
   const [[o]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.customer_name, o.customer_phone, o.total, o.pickup_at, o.payment_method, o.note, m.business_name, m.wa_template,

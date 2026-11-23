@@ -1,3 +1,6 @@
+// Layanan pesanan pembeli: quote, checkout, detail, daftar, batal/selesai, pesan WhatsApp, dan pesan lagi.
+// Lapisan services dari alur routes/order.ts → handlers/order.handler.ts → di sini → database; sebagian fungsinya
+// (kode pesanan, tahan stok, mapper, paginasi, templat WA) dipakai ulang oleh table.service dan merchant-order.service.
 import { createHash, randomInt } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
@@ -22,7 +25,12 @@ import { Status, transitionOrder } from "./order-status.service";
 
 // F06 pesanan pembeli (C-09, C-11, C-13)
 
-// D2: validasi sama dengan pesanan, tanpa tulis/kunci; stok kurang = peringatan
+/**
+ * Hitung pratinjau pesanan (`POST /orders/quote`): harga per baris, subtotal, diskon voucher, biaya layanan, dan total.
+ * D2: validasi sama dengan pesanan, tanpa tulis/kunci; stok kurang = peringatan (`warnings` OUT_OF_STOCK), bukan galat.
+ *
+ * @throws AppError 400 VALIDATION_ERROR, 409 MERCHANT_UNAVAILABLE / MERCHANT_CLOSED, 422 PROMO_INVALID
+ */
 export async function quote(userId: number, data: QuoteInput) {
   const ms = jam.sekarang();
   const h = validateCart(await loadCart(db, data, { segarkan: false, hari: hariIniWib(new Date(ms)), ms }), data, ms);
@@ -56,17 +64,28 @@ export async function quote(userId: number, data: QuoteInput) {
 
 // D7: base32 Crockford; `acak` diganti test untuk memaksa tabrakan
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/** Pembangkit 4 karakter acak kode pesanan; dibungkus objek agar `acak` bisa diganti test. */
 export const codeGenerator = { acak: (): string => Array.from({ length: 4 }, () => ALPHABET[randomInt(32)]).join("") };
+/** Kode pesanan `KK-YYYYMMDD-XXXX` dari tanggal WIB `YYYY-MM-DD` dan 4 karakter acak (D7). */
 export const generateOrderCode = (date: string) => `KK-${date.replace(/-/g, "")}-${codeGenerator.acak()}`;
 
 const orderNotFound = () => new AppError(404, "NOT_FOUND", "Pesanan tidak ditemukan.");
 const dup = (e: unknown) => (e as { code?: string } | null)?.code === "ER_DUP_ENTRY";
 
 // AUD-31/32: porsi yang boleh ditahan sekaligus, agar satu akun atau satu meja QR tidak memborong sisa stok toko
+/** Batas porsi tertahan (pesanan holding) per pembeli (AUD-31). */
 export const MAX_CUSTOMER_PORTIONS = 20;
+/** Batas porsi tertahan per meja QR (AUD-32). */
 export const MAX_TABLE_PORTIONS = 30;
+/** Jumlah porsi (total `qty`) dari daftar baris. */
 export const totalPortions = (items: { qty: number }[]) => items.reduce((s, i) => s + i.qty, 0);
-// baca berkunci (FOR UPDATE) seperti hitungan pesanan menunggu: data terbaru, dan pemanggil sudah serial per pembeli/meja
+/**
+ * Total porsi yang sedang ditahan pesanan holding yang belum lewat waktu milik satu pembeli atau satu meja.
+ * Baca berkunci (FOR UPDATE) seperti hitungan pesanan menunggu: data terbaru, dan pemanggil sudah serial per pembeli/meja.
+ *
+ * @param column kolom pemilik: `customer_id` atau `table_id`
+ * @param id id pembeli atau meja
+ */
 export async function getHeldPortions(
   conn: PoolConnection,
   column: "customer_id" | "table_id",
@@ -83,6 +102,7 @@ export async function getHeldPortions(
 const isCodeCollision = (e: unknown) => dup(e) && /for key '(orders\.)?code'/.test(String((e as Error).message));
 const CLAIM_EXISTS = Symbol("klaim");
 
+/** Galat 409 OUT_OF_STOCK dengan pesan sisa porsi per baris (`items.<index>.qty`) untuk tiap kekurangan stok. */
 export const outOfStockError = (shortages: Shortage[]) =>
   new AppError(
     409,
@@ -93,8 +113,15 @@ export const outOfStockError = (shortages: Shortage[]) =>
     ),
   );
 
-// D7: galat duplikat hanya membatalkan pernyataan, bukan transaksi → coba kode baru, maks 5 kali. `nilai(kode)` = parameter INSERT.
-// Dipakai checkout pembeli (F06) dan pesanan meja (F21).
+/**
+ * Jalankan INSERT orders dengan kode pesanan baru.
+ * D7: galat duplikat hanya membatalkan pernyataan, bukan transaksi → coba kode baru, maks 5 kali. `buildParams(orderCode)` = parameter INSERT.
+ * Dipakai checkout pembeli (F06) dan pesanan meja (F21).
+ *
+ * @param date tanggal WIB untuk kode pesanan
+ * @returns id pesanan baru dan kodenya
+ * @throws Error bila kode bentrok 5 kali berturut-turut; galat DB lain diteruskan
+ */
 export async function insertOrder(
   conn: PoolConnection,
   date: string,
@@ -113,9 +140,15 @@ export async function insertOrder(
   }
 }
 
-// R-02: tahan porsi dengan UPDATE bersyarat atomik, urut id (kunci menu baru diambil di sini, sesingkat mungkin).
-// stock_date = hari: penghitung yang dinaikkan selalu milik tanggal stok pesanan (aman dari balapan tengah malam, D14).
-// Harus sebelum INSERT order_items: FK item → menus mengambil kunci bersama yang lalu minta dinaikkan → deadlock.
+/**
+ * Tahan porsi tiap menu lalu simpan baris order_items untuk pesanan `orderId`.
+ * R-02: tahan porsi dengan UPDATE bersyarat atomik, urut id (kunci menu baru diambil di sini, sesingkat mungkin).
+ * stock_date = stockDate: penghitung yang dinaikkan selalu milik tanggal stok pesanan (aman dari balapan tengah malam, D14).
+ * Harus sebelum INSERT order_items: FK item → menus mengambil kunci bersama yang lalu minta dinaikkan → deadlock.
+ * R-05: order_items menyimpan salinan nama, harga, hpp, dan opsi saat dipesan.
+ *
+ * @throws AppError 409 OUT_OF_STOCK dengan sisa terbaru bila satu menu tidak cukup; pemanggil me-rollback transaksi
+ */
 export async function holdStockAndInsertItems(conn: PoolConnection, orderId: number, h: PricedCart, stockDate: string) {
   const perMenu = new Map<number, number>();
   for (const b of h.baris) perMenu.set(b.menu_id, (perMenu.get(b.menu_id) ?? 0) + b.qty);
@@ -153,9 +186,22 @@ export async function holdStockAndInsertItems(conn: PoolConnection, orderId: num
   );
 }
 
-// D3–D8, D11, D12 dalam satu transaksi. Urutan kunci: users (pembeli) → klaim idempotensi → menu (UPDATE bersyarat, urut id).
-// READ COMMITTED: hitung holding (baca berkunci) tanpa gap lock; di REPEATABLE READ gap lock indeks pesanan pembeli baru
-// saling mengunci INSERT orders → deadlock (terbukti di uji paralel). Stok dijaga UPDATE bersyarat, tidak butuh snapshot.
+/**
+ * Checkout pembeli (F06, C-09): buat pesanan `holding` yang menahan stok sampai `hold_until` (menit tahan toko).
+ * Aturan yang dijaga: maks 3 pesanan menunggu per pembeli (D11) dan maks {@link MAX_CUSTOMER_PORTIONS} porsi
+ * tertahan (AUD-31), stok cukup (R-02), voucher sah dan kuotanya diklaim atomik (F12), metode non-tunai butuh
+ * Midtrans aktif (F26), serta salinan nama/harga/hpp/opsi menu di order_items (R-05).
+ * Idempotensi (D6): `Idempotency-Key` yang sama dengan isi sama mengembalikan pesanan yang sama, isi berbeda → 409.
+ *
+ * D3–D8, D11, D12 dalam satu transaksi. Urutan kunci: users (pembeli) → klaim idempotensi → menu (UPDATE bersyarat, urut id).
+ * READ COMMITTED: hitung holding (baca berkunci) tanpa gap lock; di REPEATABLE READ gap lock indeks pesanan pembeli baru
+ * saling mengunci INSERT orders → deadlock (terbukti di uji paralel). Stok dijaga UPDATE bersyarat, tidak butuh snapshot.
+ *
+ * @param idempotencyKey nilai header Idempotency-Key (UUID huruf kecil)
+ * @returns detail pesanan seperti {@link getMyOrder}
+ * @throws AppError 400 VALIDATION_ERROR, 409 CONFLICT (batas menunggu, metode bayar belum tersedia, kunci dipakai isi
+ *   lain), 409 OUT_OF_STOCK, 409 MERCHANT_UNAVAILABLE / MERCHANT_CLOSED, 422 PROMO_INVALID
+ */
 export async function createOrder(userId: number, idempotencyKey: string, data: OrderInput) {
   const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex");
   let code: string;
@@ -292,7 +338,7 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
   return getMyOrder(userId, code);
 }
 
-// Kolom bersama Order (pembeli) & MerchantOrder (penjual); o = orders, p = pickup_points
+/** Kolom SELECT bersama Order (pembeli) & MerchantOrder (penjual); o = orders, p = pickup_points. */
 export const ORDER_COLUMNS = `o.id, o.code, o.status, o.payment_method, o.payment_status, o.hold_until, o.pickup_at,
   GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, o.pickup_point_id, p.name AS p_name,
   o.subtotal, o.discount, o.service_fee, o.total, o.note, o.cancel_reason, o.cancelled_by, o.created_at, o.updated_at`;
@@ -301,6 +347,7 @@ const CUSTOMER_ORDER_SELECT = `${ORDER_COLUMNS}, o.merchant_id, m.business_name,
     (SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.menu_id = i.menu_id)) AS belum_diulas
   FROM orders o JOIN merchants m ON m.id = o.merchant_id JOIN pickup_points p ON p.id = o.pickup_point_id`;
 
+/** Item pesanan di respons API: salinan nama, harga, dan opsi saat dipesan (R-05), tanpa hpp. */
 export type Item = {
   menu_id: number;
   menu_name: string;
@@ -310,7 +357,12 @@ export type Item = {
   line_total: number;
 };
 
-// Item seluruh halaman dalam satu kueri (tanpa N+1); mapper eksplisit tanpa hpp (R-11)
+/**
+ * Item seluruh halaman dalam satu kueri (tanpa N+1); mapper eksplisit tanpa hpp (R-11).
+ *
+ * @param ids id pesanan
+ * @returns peta id pesanan → item (urut id item); pesanan tanpa item tidak ada di peta
+ */
 export async function loadOrderItems(ids: number[]): Promise<Map<number, Item[]>> {
   const per = new Map<number, Item[]>();
   if (!ids.length) return per;
@@ -332,7 +384,10 @@ export async function loadOrderItems(ids: number[]): Promise<Map<number, Item[]>
   return per;
 }
 
-// D13: bagian yang sama untuk Order & MerchantOrder; hold_until/seconds_left null bila bukan holding
+/**
+ * Bagian respons yang sama untuk pesanan pembeli dan penjual (D13), dari baris yang memuat {@link ORDER_COLUMNS}.
+ * hold_until/seconds_left null bila bukan holding. Mapper eksplisit: kolom lain tidak ikut keluar (R-11).
+ */
 export const mapOrderBase = (o: RowDataPacket, items: Item[]) => {
   const holding = o.status === "holding";
   return {
@@ -357,7 +412,11 @@ export const mapOrderBase = (o: RowDataPacket, items: Item[]) => {
   };
 };
 
-// Order §1 (tanpa payment). D2: holding yang lewat waktu tidak bisa dibatalkan
+/**
+ * Bentuk respons pesanan untuk pembeli (Order §1, tanpa payment): {@link mapOrderBase} + data toko + flag aksi
+ * `can_cancel`, `can_complete`, `can_review` agar aplikasi tidak menebak aturan sendiri.
+ * D2: holding yang lewat waktu tidak bisa dibatalkan; confirmed hanya bisa dibatalkan bila tunai.
+ */
 export const mapCustomerOrder = (o: RowDataPacket, items: Item[]) => ({
   ...mapOrderBase(o, items),
   merchant: { id: o.merchant_id, business_name: o.business_name, wa_number: o.wa_number },
@@ -368,11 +427,22 @@ export const mapCustomerOrder = (o: RowDataPacket, items: Item[]) => ({
   can_review: o.status === "completed" && Number(o.belum_diulas) > 0,
 });
 
-// pola LIKE sebagian dengan % _ \ di-escape; pemanggil membandingkan LOWER(kolom) LIKE LOWER(?) karena TiDB bawaan utf8mb4_bin (peka huruf)
+/**
+ * Pola LIKE "mengandung `q`" dengan % _ \ di-escape. Dipakai juga moderasi dan tiket admin.
+ * Pemanggil membandingkan LOWER(kolom) LIKE LOWER(?) karena TiDB bawaan utf8mb4_bin (peka huruf).
+ */
 export const likePattern = (q: string) => `%${q.replace(/[\\%_]/g, "\\$&")}%`;
 
-// D10–D12: satu COUNT + satu halaman + satu kueri item; urut terbaru. Dengan updated_since urut updated_at naik agar klien yang
-// maju memakai updated_at terbesar halaman sebelumnya tidak melompati perubahan.
+/**
+ * Ambil satu halaman pesanan untuk daftar pembeli dan penjual.
+ * D10–D12: satu COUNT + satu halaman + satu kueri item; urut terbaru. Dengan updated_since urut updated_at naik agar klien yang
+ * maju memakai updated_at terbesar halaman sebelumnya tidak melompati perubahan.
+ *
+ * @param selectFrom daftar kolom + klausa FROM (alias tabel orders wajib `o`)
+ * @param where syarat SQL yang digabung AND; `args` = nilai parameternya
+ * @param mapRow pengubah baris DB + item menjadi bentuk respons
+ * @returns `{ data, meta: { page, limit, total } }`
+ */
 export async function paginateOrders<T>(
   selectFrom: string,
   where: string[],
@@ -400,7 +470,12 @@ const TAB: Record<MyOrdersQuery["tab"], Status[]> = {
   cancelled: ["cancelled", "expired"],
 };
 
-// C-14 (D10, D11): updated_since mengabaikan tab agar pesanan yang pindah tab tetap terkirim
+/**
+ * Daftar pesanan pembeli per tab (aktif, selesai, batal/kadaluarsa) dengan pencarian kode atau nama menu.
+ * C-14 (D10, D11): updated_since mengabaikan tab agar pesanan yang pindah tab tetap terkirim.
+ *
+ * @returns `{ data, meta }` seperti {@link paginateOrders}, tiap baris berbentuk {@link mapCustomerOrder}
+ */
 export async function listMyOrders(userId: number, f: MyOrdersQuery) {
   const where = ["o.customer_id = ?"];
   const args: unknown[] = [userId];
@@ -420,7 +495,14 @@ export async function listMyOrders(userId: number, f: MyOrdersQuery) {
   return paginateOrders(CUSTOMER_ORDER_SELECT, where, args, f, mapCustomerOrder);
 }
 
-// D16: Order §1 + payment; R-10 customer_id dari sesi, bukan milik → 404
+/**
+ * Detail satu pesanan pembeli: bentuk {@link mapCustomerOrder} ditambah `payment` (metode, status, jumlah). Untuk metode
+ * `online` ditambah `payment_url` Snap dan `qris`; untuk `va` ditambah data VA. Keduanya null bila belum dibuat atau
+ * pesanan tidak menunggu bayar lagi.
+ * D16: Order §1 + payment; R-10 customer_id dari sesi, bukan milik → 404.
+ *
+ * @throws AppError 404 NOT_FOUND bila pesanan tidak ada atau milik pembeli lain
+ */
 export async function getMyOrder(userId: number, code: string) {
   const [[o]] = await db.query<RowDataPacket[]>(
     `SELECT ${CUSTOMER_ORDER_SELECT} WHERE o.code = ? AND o.customer_id = ?`,
@@ -473,8 +555,21 @@ const transitionMyOrder = async (
   await dalamTransaksi((c) => transitionOrder(c, code, action, { jenis: "customer", userId }, reason));
   return getMyOrder(userId, code);
 };
+/**
+ * Pembeli membatalkan pesanannya (C-15): boleh saat holding belum lewat waktu, atau confirmed bila tunai.
+ * Porsi stok dan kuota promo dikembalikan oleh transisi.
+ *
+ * @returns detail pesanan terkini seperti {@link getMyOrder}
+ * @throws AppError 404 NOT_FOUND, 409 CONFLICT bila status tidak bisa dibatalkan
+ */
 export const cancelMyOrder = (userId: number, code: string, reason: string | null) =>
   transitionMyOrder(userId, code, "cancel", reason);
+/**
+ * Pembeli menandai pesanan `ready` sudah diambil (C-16); pesanan tunai sekalian ditandai lunas.
+ *
+ * @returns detail pesanan terkini seperti {@link getMyOrder}
+ * @throws AppError 404 NOT_FOUND, 409 CONFLICT bila pesanan belum siap ambil
+ */
 export const completeMyOrder = (userId: number, code: string) => transitionMyOrder(userId, code, "complete");
 
 // D15 (C-13): teks tetap bersuara pembeli; wa_template toko (bersuara penjual) dipakai GET /merchant/orders/:code/whatsapp di F07
@@ -489,7 +584,12 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   online: "Bayar online",
 };
 
-// Nilai placeholder; format sama dengan fe/lib/wa-template.ts (Rp 30.000, HH.MM WIB / Secepatnya, Tunai)
+/**
+ * Nilai placeholder templat WhatsApp (`kode`, `nama`, `toko`, `menu`, `total`, `titik_temu`, `waktu_ambil`,
+ * `metode_bayar`, `catatan`) dari data pesanan. Dipakai pesan pembeli dan pesan penjual.
+ * Format sama dengan fe/lib/wa-template.ts (Rp 30.000, HH.MM WIB / Secepatnya, Tunai); tanggal ambil ditulis
+ * hanya bila bukan hari ini (WIB).
+ */
 export function buildWaValues(o: {
   code: string;
   customer_name: string;
@@ -521,14 +621,27 @@ const wibDateFormat = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta
 const pickupDayPrefix = (d: Date) =>
   hariIniWib(d) === hariIniWib(new Date(jam.sekarang())) ? "" : `${wibDateFormat.format(d)} `;
 
-// Placeholder dikenal diganti, yang tidak dikenal dibiarkan (sama dengan fe renderTemplate)
+/**
+ * Isi templat WhatsApp: `{nama}` diganti `values.nama`.
+ * Placeholder dikenal diganti, yang tidak dikenal dibiarkan (sama dengan fe renderTemplate).
+ */
 export const render = (template: string, values: Record<string, string>) =>
   template.replace(/\{[^{}\n]+\}/g, (k) => values[k.slice(1, -1)] ?? k);
 
-// wa_number 08… / 628… / +628… → 628… (wa.me butuh kode negara tanpa +)
+/**
+ * Tautan `https://wa.me/<nomor>?text=<pesan>`.
+ * wa_number 08… / 628… / +628… → 628… (wa.me butuh kode negara tanpa +)
+ */
 export const waLink = (phone: string, text: string) =>
   `https://wa.me/${phone.replace(/\D/g, "").replace(/^0/, "62")}?text=${encodeURIComponent(text)}`;
 
+/**
+ * Pesan WhatsApp pembeli ke toko untuk pesanan miliknya (C-13, D15), memakai templat bersuara pembeli;
+ * baris catatan hanya ditambah bila pesanan punya catatan.
+ *
+ * @returns `wa_number` toko, `message` yang sudah diisi, dan `url` wa.me
+ * @throws AppError 404 NOT_FOUND bila pesanan tidak ada atau bukan milik pembeli
+ */
 export async function getMyOrderWhatsapp(userId: number, code: string) {
   const [[o]] = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.code, o.customer_name, o.total, o.pickup_at, o.payment_method, o.note, m.business_name, m.wa_number,
@@ -549,8 +662,13 @@ export async function getMyOrderWhatsapp(userId: number, code: string) {
   return { wa_number: o.wa_number, message, url: waLink(o.wa_number, message) };
 }
 
-// F14 pesan lagi: isi pesanan lama disusun ulang lalu dicek quote (harga, opsi, stok, promo terkini; tanpa tulis).
-// Klien menambah payment_method lalu mengirim `request` ke POST /orders.
+/**
+ * F14 pesan lagi: isi pesanan lama disusun ulang lalu dicek quote (harga, opsi, stok, promo terkini; tanpa tulis).
+ * Klien menambah payment_method lalu mengirim `request` ke POST /orders.
+ *
+ * @returns `request` (body quote dari menu, opsi, titik temu, dan catatan pesanan lama) dan `quote` hasil {@link quote}
+ * @throws AppError 404 NOT_FOUND bila pesanan bukan milik pembeli; galat quote (menu tidak tersedia, toko tutup, dll.)
+ */
 export async function reorder(userId: number, code: string) {
   const [[o]] = await db.query<RowDataPacket[]>(
     "SELECT id, pickup_point_id, note FROM orders WHERE code = ? AND customer_id = ?",

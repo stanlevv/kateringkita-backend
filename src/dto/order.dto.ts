@@ -1,3 +1,5 @@
+// Skema zod untuk body/query rute pesanan pembeli (quote, checkout, bayar, batal, daftar, ulasan).
+// Dipakai di routes (validate) dan handlers (parse) sebelum data diteruskan ke services. Kunci objek = kontrak JSON API.
 import { z } from "zod";
 import { BANK_VA } from "../utils/midtrans";
 
@@ -19,6 +21,11 @@ const optionalText = (message: string, max: number) =>
     .nullish()
     .transform((s) => s || null);
 
+/**
+ * Body `POST /orders/quote` sekaligus dasar body checkout: 1–20 baris menu (qty 1–1000, maks 10 opsi per baris),
+ * titik temu, catatan, kode voucher (`promo_codes` maks 2, `promo_code` lama), nama/nomor pemesan, dan waktu ambil ISO.
+ * Harga dan total dari klien sengaja tidak dideklarasikan sehingga dibuang (R-07); server menghitung ulang.
+ */
 export const quoteSchema = z.object(
   {
     items: z
@@ -70,26 +77,34 @@ export const quoteSchema = z.object(
 // F10/F26: tunai, VA Midtrans (bank dipilih di POST /orders/:code/va), atau bayar online lewat halaman Snap Midtrans
 // (QRIS, e-wallet, VA; POST /orders/:code/online). QRIS statis toko dengan verifikasi manual dihapus di F26.
 const PAYMENT_METHOD = "Pilih bayar tunai, Virtual Account, atau bayar online.";
+/** Body `POST /orders` (checkout): isi quote ditambah `payment_method` wajib (`cod`, `va`, atau `online`). */
 export const orderSchema = quoteSchema.extend({
   payment_method: z.enum(["cod", "va", "online"], { error: PAYMENT_METHOD }),
 });
+/** Body `POST /orders/:code/va`: bank Virtual Account pilihan pembeli (BCA, BNI, atau BRI). */
 export const vaSchema = z.object(
   { bank: z.enum(BANK_VA, { error: "Pilih bank BCA, BNI, atau BRI." }) },
   { error: "Pilih bank BCA, BNI, atau BRI." },
 );
-// body boleh kosong (aplikasi mobile); `kembali` = halaman web setelah bayar, dicek asalnya di service
+/**
+ * Body `POST /orders/:code/online` (F26). Body boleh kosong (aplikasi mobile); `kembali` = URL halaman web
+ * setelah bayar, asalnya dicek terhadap CORS_ORIGIN di service.
+ */
 export const payOnlineSchema = z.object({ kembali: z.url({ error: "Alamat kembali tidak valid." }).optional() });
 
-// D6: Idempotency-Key UUID, huruf kecil
+/** Header `Idempotency-Key` checkout (D6): wajib UUID, disimpan huruf kecil agar kiriman ulang dikenali sama. */
 export const idempotencyKeySchema = z
   .uuid({ error: "Muat ulang aplikasi lalu coba lagi." })
   .transform((s) => s.toLowerCase());
 
+/** Data quote yang sudah lolos {@link quoteSchema} (opsi sudah unik dan terurut, teks kosong menjadi null). */
 export type QuoteInput = z.infer<typeof quoteSchema>;
+/** Data checkout yang sudah lolos {@link orderSchema}. */
 export type OrderInput = z.infer<typeof orderSchema>;
 
 // F07 D8: alasan batal/tolak; kosong → null (wajib-nya tolak dicek pemanggil)
 const REASON = "Alasan maksimal 255 karakter.";
+/** Body batal (pembeli) dan tolak (penjual): `reason` opsional maks 255 karakter, kosong menjadi null. */
 export const reasonSchema = z.object({
   reason: z
     .string({ error: REASON })
@@ -98,12 +113,19 @@ export const reasonSchema = z.object({
     .nullish()
     .transform((s) => s || null),
 });
-// D8: body bukan objek (kosong, teks) dianggap {}
+/**
+ * D8: body yang bukan objek (kosong, teks, array) dianggap `{}` agar skema yang semua field-nya opsional tetap lolos.
+ * Dipakai juga oleh handler notifikasi dan tiket.
+ */
 export const bodyObject = (b: unknown) => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
 
 // F07 D10–D12: query daftar pesanan (pembeli & penjual)
 const PAGE = "Halaman tidak valid.";
 const SEARCH = "Pencarian maksimal 50 karakter.";
+/**
+ * Field query daftar yang dipakai bersama (pesanan pembeli, pesanan toko, notifikasi): `q` pencarian maks 50 karakter,
+ * `updated_since` ISO untuk sinkron bertahap, `page` mulai 1, dan `limit` 1–100 (bawaan 20).
+ */
 export const listQueryBase = {
   q: z
     .string({ error: SEARCH })
@@ -115,15 +137,18 @@ export const listQueryBase = {
   page: z.coerce.number({ error: PAGE }).int(PAGE).min(1, PAGE).default(1),
   limit: z.coerce.number({ error: PAGE }).int(PAGE).min(1, PAGE).max(100, PAGE).default(20),
 };
+/** Query `GET /me/orders` (C-14): `tab` aktif/selesai/batal (bawaan `active`) ditambah {@link listQueryBase}. */
 export const myOrdersQuerySchema = z.object({
   tab: z.enum(["active", "completed", "cancelled"], { error: "Tab tidak dikenal." }).default("active"),
   ...listQueryBase,
 });
+/** Query daftar pesanan pembeli yang sudah lolos {@link myOrdersQuerySchema}. */
 export type MyOrdersQuery = z.infer<typeof myOrdersQuerySchema>;
 
 // F13: ulasan per menu dalam pesanan selesai
 const RATING = "Rating harus 1–5.";
 const REVIEW_ITEMS = "Pilih 1–20 menu untuk diulas.";
+/** Body `POST /orders/:code/reviews`: 1–20 menu, masing-masing rating 1–5 dan komentar opsional maks 500 karakter. */
 export const reviewSchema = z.object(
   {
     items: z
@@ -143,4 +168,5 @@ export const reviewSchema = z.object(
   },
   { error: "Data ulasan tidak valid." },
 );
+/** Data ulasan yang sudah lolos {@link reviewSchema}; diproses `kirimUlasan` di ulasan.service. */
 export type ReviewInput = z.infer<typeof reviewSchema>;

@@ -1,3 +1,5 @@
+// Logika keranjang bersama untuk quote, checkout pembeli, dan pesanan meja: muat data menu/toko, periksa aturan,
+// hitung harga, dan terapkan voucher. Dipanggil order.service dan table.service; tidak menulis ke database.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { rentangHariWib } from "./admin-summary.service";
@@ -9,8 +11,11 @@ import { QuoteInput } from "../dto/order.dto";
 // F06 keranjang (C-09, R-07): muat → periksa (urutan D3) → hitung (D1). Dipakai quote (tanpa kunci) dan createOrder (dalam transaksi).
 
 type Q = Pick<PoolConnection, "query">;
+/** Data mentah keranjang dari DB: baris menu per id, opsi menu (`opsi`), dan toko + titik temu (`toko`, null bila menu dari >1 toko). */
 export type Cart = { menus: Map<number, RowDataPacket>; opsi: RowDataPacket[]; toko: RowDataPacket | null };
+/** Opsi yang dipilih pada satu baris, dengan harga tambahannya. */
 export type CartOption = { id: number; name: string; extra_price: number };
+/** Satu baris keranjang yang sudah dihargai; `hpp` hanya untuk disalin ke order_items, tidak pernah dikirim ke klien (R-11). */
 export type CartLine = {
   menu_id: number;
   menu_name: string;
@@ -22,7 +27,12 @@ export type CartLine = {
   line_total: number;
   available: number;
 };
+/** Menu yang jumlah pesanannya melebihi sisa stok; `index` = baris pertama menu itu di body (untuk kunci galat). */
 export type Shortage = { index: number; menu_id: number; available: number; unit_label: string; menu_name: string };
+/**
+ * Hasil {@link validateCart}: toko, baris (`baris`), rincian uang, dan daftar kekurangan stok (`kurang`).
+ * Field diskon dan total diisi ulang oleh {@link applyVouchers}.
+ */
 export type PricedCart = {
   merchant: RowDataPacket;
   baris: CartLine[];
@@ -35,8 +45,14 @@ export type PricedCart = {
   kurang: Shortage[];
 };
 
-// Baca tanpa kunci; `segarkan` (pesanan) = reset kuota harian dulu (D4). Stok yang dibaca hanya untuk pesan galat:
-// kebenaran stok pesanan dijaga UPDATE bersyarat di createOrder agar baris menu terkunci sesingkat mungkin.
+/**
+ * Muat menu, opsi, dan toko yang dirujuk keranjang dalam 3–4 kueri.
+ * Baca tanpa kunci; `segarkan` (pesanan) = reset kuota harian dulu (D4). Stok yang dibaca hanya untuk pesan galat:
+ * kebenaran stok pesanan dijaga UPDATE bersyarat di createOrder agar baris menu terkunci sesingkat mungkin.
+ *
+ * @param conn koneksi biasa (quote) atau koneksi transaksi (checkout)
+ * @param o `segarkan` reset kuota harian dulu, `hari` tanggal stok WIB `YYYY-MM-DD`, `ms` waktu sekarang
+ */
 export async function loadCart(
   conn: Q,
   data: QuoteInput,
@@ -82,8 +98,16 @@ const throwIfInvalid = (fields: Record<string, string[]>) => {
 const formatHour = (t: unknown) => String(t).slice(0, 5).replace(":", ".");
 const DAY_MS = 86400e3;
 
-// Urutan D3 tanpa stok & promo: stok dikembalikan di `kurang` (quote = peringatan, pesanan = 409), promo dicek pemanggil.
-// F21: pesanan meja tidak memakai titik temu (`tanpaTitikTemu`).
+/**
+ * Periksa keranjang lalu hitung harganya. Urutan cek (D3): menu ada & aktif, satu toko, toko terverifikasi dan
+ * pemiliknya aktif, toko sedang buka, titik temu dilayani toko, waktu ambil (masa depan, maks 7 hari; pre-order
+ * paling cepat H-n), minimal pesan per menu, opsi valid, dan total muat di kolom INT.
+ * Urutan D3 tanpa stok & promo: stok dikembalikan di `kurang` (quote = peringatan, pesanan = 409), promo dicek pemanggil.
+ * F21: pesanan meja tidak memakai titik temu (`tanpaTitikTemu`).
+ *
+ * @returns keranjang berharga dengan diskon 0 dan total = subtotal + biaya layanan
+ * @throws AppError 400 VALIDATION_ERROR (galat per field), 409 MERCHANT_UNAVAILABLE, 409 MERCHANT_CLOSED
+ */
 export function validateCart(k: Cart, data: QuoteInput, ms: number, o: { tanpaTitikTemu?: boolean } = {}): PricedCart {
   const f: Record<string, string[]> = {};
   data.items.forEach((it, i) => {
@@ -183,7 +207,10 @@ export function validateCart(k: Cart, data: QuoteInput, ms: number, o: { tanpaTi
   };
 }
 
-// galat dikirim di promo_codes (klien baru) dan promo_code (klien lama dengan satu isian kode)
+/**
+ * Buat galat 422 PROMO_INVALID dengan pesan `message`.
+ * Galat dikirim di promo_codes (klien baru) dan promo_code (klien lama dengan satu isian kode).
+ */
 export const promoInvalid = (message: string) =>
   new AppError(422, "PROMO_INVALID", message, { promo_codes: [message], promo_code: [message] });
 
@@ -212,7 +239,7 @@ async function validatePromo(conn: Q, p: RowDataPacket, h: PricedCart, userId: n
   if (Number(n.n) >= p.per_user_limit) throw promoInvalid("Promo ini sudah mencapai batas pemakaianmu.");
 }
 
-// percent/fixed dari `dasar` (barang setelah potongan sebelumnya), free_service_fee = biaya layanan
+// percent/fixed dari `base` (barang setelah potongan sebelumnya), free_service_fee = biaya layanan
 const calculateDiscount = (p: RowDataPacket, base: number, fee: number) =>
   p.type === "percent"
     ? Math.min(Math.floor((base * p.value) / 100), p.max_discount ?? Infinity)
@@ -223,7 +250,14 @@ const calculateDiscount = (p: RowDataPacket, base: number, fee: number) =>
 /**
  * Voucher (rancangan 2026-11-16): maks satu voucher toko (promo toko pesanan ini) + satu voucher platform (merchant_id NULL).
  * Toko dihitung dulu dari subtotal, platform dari sisa barang. Mengisi merchant_discount, platform_discount, discount, total.
- * `bayar` (pesanan): voucher platform hanya untuk non-tunai (C1); quote tanpa metode bayar tidak dicek.
+ * `paymentMethod` (pesanan): voucher platform hanya untuk non-tunai (C1); quote tanpa metode bayar tidak dicek.
+ * Tiap voucher dicek aktif, periode, kuota, minimal belanja, dan batas per pembeli (D10). Kuota belum diklaim di sini:
+ * klaim atomik dilakukan createOrder.
+ *
+ * @param h keranjang dari {@link validateCart}; field diskon dan total-nya diubah langsung
+ * @param codes kode voucher dari {@link parseVoucherCodes}
+ * @returns baris promo yang dipakai: `toko` dan `platform` (null bila tidak ada)
+ * @throws AppError 422 PROMO_INVALID bila kode tidak ada, lebih dari 2, slot ganda, syarat tidak terpenuhi, atau total jadi Rp 0
  */
 export async function applyVouchers(
   conn: Q,
@@ -269,7 +303,7 @@ export async function applyVouchers(
   return { toko: merchantPromo, platform };
 }
 
-/** Untuk respons quote: voucher yang terpakai per slot. */
+/** Untuk respons quote (`vouchers_applied`): voucher yang terpakai per slot (`toko`/`platform`) beserta potongannya. */
 export const appliedVouchers = (h: PricedCart, v: { toko: RowDataPacket | null; platform: RowDataPacket | null }) => [
   ...(v.toko
     ? [{ id: v.toko.id as number, code: String(v.toko.code), slot: "toko" as const, amount: h.merchant_discount }]

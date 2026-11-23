@@ -1,3 +1,5 @@
+// Rute pesanan pembeli di /api/v1: quote, checkout, detail, daftar, batal, selesai, ulasan, pesan lagi, dan bayar.
+// Lapisan pertama alur routes → handlers (order.handler) → services (order.service, pembayaran-va.service).
 import { Router } from "express";
 import { quoteSchema, reviewSchema, vaSchema } from "../dto/order.dto";
 import {
@@ -18,7 +20,10 @@ import {
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 
-// Pesanan pembeli (F06); dipasang di /api/v1 sebelum v1
+/**
+ * Router pesanan pembeli (F06); dipasang di /api/v1 sebelum v1. Semua rute wajib login sebagai pembeli,
+ * kecuali `POST /payments/midtrans` (notifikasi Midtrans tanpa token, diverifikasi signature di service).
+ */
 export const order = Router();
 const customerOnly = [requireAuth, requireRole("customer")];
 

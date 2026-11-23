@@ -177,7 +177,7 @@ export const mejaLimiter: RequestHandler & { reset: () => void; ukuran: () => nu
   ((req, _res, next) => {
     const now = Date.now();
     const key = String(req.params.token);
-    // AUD-45: format token (32 hex) dicek sebelum masuk Map, sama dengan pesan mejaAktif
+    // AUD-45: format token (32 hex) dicek sebelum masuk Map, sama dengan pesan getActiveTable
     if (!/^[0-9a-f]{32}$/.test(key))
       return next(new AppError(404, "NOT_FOUND", "Meja tidak ditemukan atau tidak aktif."));
     if (full(perMeja, key, now)) {

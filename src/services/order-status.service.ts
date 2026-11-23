@@ -1,3 +1,5 @@
+// Mesin status pesanan: tabel aturan transisi dan satu fungsi yang menjalankannya di dalam transaksi.
+// Dipakai order.service (pembeli), merchant-order.service (penjual), pembayaran-va.service (lunas), dan job kadaluarsa.
 import { RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/errors";
@@ -6,8 +8,14 @@ import { releaseStock } from "./order-stock.service";
 
 // F07 mesin status pesanan (C-15, C-16, M-04, M-08, R-03; D1–D7). Dipakai rute pembeli, rute penjual, dan job kadaluarsa F08
 // (D18: `expire` dengan aktor sistem, galat 409 ditelan). F08: notifikasi in-app pembeli (C-21) dibuat di transaksi yang sama.
+/** Status pesanan, sama dengan nilai kolom `orders.status`. */
 export type Status = "holding" | "confirmed" | "cooking" | "ready" | "completed" | "cancelled" | "expired";
+/** Aksi yang mengubah status pesanan; aturan tiap aksi ada di {@link TRANSITION_RULES}. */
 export type OrderAction = "confirm" | "pay" | "cook" | "ready" | "complete" | "reject" | "cancel" | "expire";
+/**
+ * Pelaku transisi. Pembeli dan penjual membawa `userId` (dicatat di log status); penjual juga `merchantId`
+ * untuk membatasi pesanan ke tokonya. `system` dipakai notifikasi Midtrans dan job kadaluarsa.
+ */
 export type Actor =
   | { jenis: "customer"; userId: number }
   | { jenis: "merchant"; userId: number; merchantId: number }
@@ -16,6 +24,10 @@ export type Actor =
 type StockOutcome = "terjual" | "kembali" | "batal";
 const releaseOutcome = (fromStatus: Status): StockOutcome => (fromStatus === "holding" ? "kembali" : "batal");
 
+/**
+ * Aturan tiap aksi: `oleh` = aktor yang boleh, `dari` = status asal yang sah, `ke` = status tujuan, `kolom` = kolom
+ * waktu yang diisi, `stok` = nasib porsi yang ditahan (tanpa `stok` = stok tidak disentuh).
+ */
 export const TRANSITION_RULES: Record<
   OrderAction,
   {
@@ -52,8 +64,24 @@ export const TRANSITION_RULES: Record<
 
 const conflict = (message = "Pesanan sudah berubah status.") => new AppError(409, "CONFLICT", message);
 
-// Dipanggil di dalam dalamTransaksi. Urutan kunci (D5, F08 D11) untuk semua aktor: users pembeli → orders (baris, lewat code unik)
-// → menus (releaseStock, urut id), sama dengan checkout F06 (users → orders → menus) sehingga tidak ada siklus.
+/**
+ * Jalankan satu aksi pada pesanan `code`: cek aktor dan status asal, ubah status dan kolom waktunya, kembalikan kuota
+ * promo bila batal/kadaluarsa (F12), perbarui porsi stok lewat releaseStock (konfirmasi/lunas: tertahan → terjual;
+ * batal/tolak/kadaluarsa: dilepas, D14), tulis `order_status_logs`, dan buat notifikasi in-app pembeli bila pelakunya
+ * bukan pembeli (C-21).
+ *
+ * Dipanggil di dalam dalamTransaksi. Urutan kunci (D5, F08 D11) untuk semua aktor: users pembeli → orders (baris, lewat code unik)
+ * → menus (releaseStock, urut id), sama dengan checkout F06 (users → orders → menus) sehingga tidak ada siklus.
+ *
+ * Aturan tambahan: pembeli hanya boleh membatalkan pesanan `confirmed` bila tunai; holding yang lewat waktu hanya bisa
+ * di-`expire` (D2); `confirm` non-tunai harus sudah lunas; `pay` hanya untuk VA/online yang belum lunas.
+ *
+ * @param action aksi yang diminta
+ * @param actor pelaku; pesanan dicari sesuai kepemilikan (pembeli: customer_id, penjual: merchant_id, sistem: semua)
+ * @param reason alasan batal/tolak; untuk `expire` diisi otomatis "Tidak dikonfirmasi tepat waktu."
+ * @returns id pesanan serta status asal (`dari`) dan tujuan (`ke`)
+ * @throws AppError 404 NOT_FOUND bila pesanan tidak ada/bukan milik aktor; 409 CONFLICT bila aksi tidak sah untuk status itu
+ */
 export async function transitionOrder(
   conn: Pick<PoolConnection, "query">,
   code: string,

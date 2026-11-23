@@ -1,3 +1,5 @@
+// Rute publik pesan dari meja (F21) di /api/v1: menu meja, pesanan tamu, status, dan bayar.
+// Alur routes → handlers (table.handler) → services (table.service). Rute kelola meja penjual ada di routes/merchant.ts.
 import { Router } from "express";
 import { payGuestOrderSchema, tableOrderSchema } from "../dto/table.dto";
 import {
@@ -9,7 +11,10 @@ import {
 import { mejaLimiter } from "../middleware/rateLimiter";
 import { validate } from "../middleware/validate";
 
-// F21 pesan dari meja (publik, tanpa token login). Pesanan tamu dibaca/dibayar dengan header X-Guest-Token.
+/**
+ * Router meja (F21, publik, tanpa token login). Pesanan tamu dibaca/dibayar dengan header X-Guest-Token;
+ * membuat pesanan dibatasi `mejaLimiter` per token meja.
+ */
 export const table = Router();
 
 table.get("/tables/:token", getTableMenuHandler);
