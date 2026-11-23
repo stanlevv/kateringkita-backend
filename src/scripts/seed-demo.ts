@@ -1,3 +1,6 @@
+// Isi file: skrip pengisi data demo untuk database lokal (`npm run seed:demo`): empat penjual contoh dengan status
+// verifikasi berbeda (menunggu, perlu perbaikan, terverifikasi, ditangguhkan) beserta titik temu, menu, dan log aktivitas
+// admin, supaya panel admin bisa dicoba tanpa mengisi data satu per satu. Sandi semua akun demo diambil dari DEMO_PASSWORD.
 import "dotenv/config"; // harus pertama: env.ts (lewat db.ts) membaca process.env saat diimpor
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
@@ -6,7 +9,9 @@ import { insertUser } from "../services/auth.service";
 import { password as passwordSchema } from "../dto/auth.dto";
 import { catat, dalamTransaksi } from "../services/admin-audit.service";
 
+// Status verifikasi penjual, sama dengan nilai kolom merchants.verification_status.
 type VerificationStatus = "pending" | "needs_fix" | "verified" | "suspended";
+// Satu penjual demo: `points` = id titik temu, `note` = catatan perbaikan, `reason` = alasan penangguhan.
 type DemoMerchant = {
   phone: string;
   owner: string;
@@ -60,6 +65,11 @@ const DEMO_MERCHANTS: DemoMerchant[] = [
   },
 ];
 
+/**
+ * Memeriksa apakah alamat database menunjuk ke komputer sendiri.
+ * @param url alamat database `mysql://…`
+ * @returns `true` untuk localhost, 127.0.0.1, atau [::1]; `false` untuk host lain atau alamat yang tidak bisa dibaca
+ */
 export function isLocalHost(url: string): boolean {
   try {
     return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
@@ -68,10 +78,14 @@ export function isLocalHost(url: string): boolean {
   }
 }
 
+// Membuat satu penjual demo (akun, toko, titik temu, menu) dalam satu transaksi. Mengembalikan false bila nomor HP-nya
+// sudah terdaftar (sudah pernah dibuat), jadi skrip aman dijalankan berulang.
 async function createDemoMerchant(demo: DemoMerchant, password: string): Promise<boolean> {
+  // 1. Lewati bila akun dengan nomor ini sudah ada.
   const [existing] = await db.query<RowDataPacket[]>("SELECT id FROM users WHERE phone = ?", [demo.phone]);
   if (existing.length) return false;
   await dalamTransaksi(async (conn) => {
+    // 2. Buat akun penjual dan tokonya; tanggal verifikasi/penangguhan diisi sesuai status.
     const user = await insertUser(conn, "merchant", { full_name: demo.owner, phone: demo.phone, password });
     const slug = `demo-${demo.phone.slice(-2)}`;
     const [merchantResult] = await conn.query<ResultSetHeader>(
@@ -90,6 +104,7 @@ async function createDemoMerchant(demo: DemoMerchant, password: string): Promise
         demo.reason ?? null,
       ],
     );
+    // 3. Hubungkan titik temu dan tambahkan menu (tanpa foto, stok harian 20).
     for (const pickupPointId of demo.points)
       await conn.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, ?)", [
         merchantResult.insertId,
@@ -105,14 +120,17 @@ async function createDemoMerchant(demo: DemoMerchant, password: string): Promise
   return true;
 }
 
-// Log hanya bermakna bila ada admin; dilewati bila sudah pernah dibuat.
+// Membuat log aktivitas admin untuk perubahan status penjual demo, atas nama admin pertama. Log hanya bermakna bila
+// sudah ada admin ("no-admin" bila belum), dan dilewati bila sudah pernah dibuat.
 async function createDemoAuditLogs(): Promise<"ok" | "no-admin"> {
+  // 1. Perlu satu admin sebagai pelaku; lewati bila log demo sudah ada.
   const [admins] = await db.query<RowDataPacket[]>("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1");
   if (!admins.length) return "no-admin";
   const [existingLogs] = await db.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM admin_audit_logs WHERE reason = 'Data demo'",
   );
   if (Number(existingLogs[0].n) > 0) return "ok";
+  // 2. Ambil penjual demo beserta statusnya, lalu catat satu aksi admin untuk setiap status selain "pending".
   const [demoMerchants] = await db.query<RowDataPacket[]>(
     "SELECT m.id, m.verification_status AS s FROM merchants m JOIN users u ON u.id = m.user_id WHERE u.phone IN (?)",
     [DEMO_MERCHANTS.map((demo) => demo.phone)],
@@ -139,14 +157,21 @@ async function createDemoAuditLogs(): Promise<"ok" | "no-admin"> {
   return "ok";
 }
 
-// Mengembalikan kode keluar proses. Sandi hanya dari env dan tidak pernah dicetak.
+/**
+ * Menjalankan skrip data demo. Ditolak di production, dan hanya boleh ke database lokal atau database uji (nama berakhiran
+ * `_test`) kecuali diberi opsi `--paksa`. Sandi hanya dari env dan tidak pernah dicetak.
+ * @param env  variabel lingkungan; dibaca NODE_ENV, DATABASE_URL, dan DEMO_PASSWORD
+ * @param args argumen baris perintah, contoh `["--paksa"]`
+ * @returns kode keluar proses: 0 berhasil, 1 gagal (pesannya sudah dicetak)
+ */
 export async function run(env: NodeJS.ProcessEnv, args: string[] = []): Promise<number> {
+  // 1. Tolak lingkungan production dan database selain lokal/uji.
   if (env.NODE_ENV === "production") {
     console.error("Data demo tidak boleh dibuat di lingkungan produksi.");
     return 1;
   }
   const url = env.DATABASE_URL ?? config.DATABASE_URL;
-  // DB uji (nama berakhiran _test, mis. di TiDB) juga boleh: isinya memang dikosongkan setiap uji
+  // Database uji (nama berakhiran _test, contoh di TiDB) juga boleh: isinya memang dikosongkan setiap kali test.
   const isTestDatabase = (() => {
     try {
       return new URL(url).pathname.endsWith("_test");
@@ -158,6 +183,7 @@ export async function run(env: NodeJS.ProcessEnv, args: string[] = []): Promise<
     console.error("Data demo hanya untuk database lokal. Tambahkan --paksa bila memang disengaja.");
     return 1;
   }
+  // 2. Sandi demo wajib ada dan memenuhi aturan sandi biasa.
   const password = env.DEMO_PASSWORD;
   if (!password) {
     console.error("DEMO_PASSWORD belum diisi.");
@@ -170,6 +196,7 @@ export async function run(env: NodeJS.ProcessEnv, args: string[] = []): Promise<
     );
     return 1;
   }
+  // 3. Buat penjual demo yang belum ada, lalu log aktivitas admin.
   try {
     let createdCount = 0;
     for (const demo of DEMO_MERCHANTS) if (await createDemoMerchant(demo, password)) createdCount++;
@@ -183,6 +210,7 @@ export async function run(env: NodeJS.ProcessEnv, args: string[] = []): Promise<
   }
 }
 
+// Hanya berjalan bila file ini dijalankan langsung (bukan diimpor test); pool database ditutup sebelum keluar.
 if (require.main === module) {
   run(process.env, process.argv.slice(2))
     .then((code) => db.end().then(() => process.exit(code)))

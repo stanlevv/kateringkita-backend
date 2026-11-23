@@ -1,8 +1,10 @@
+// Isi file: skrip bantu untuk menjalankan perintah SQL ke DATABASE_URL di .env (bisa production, hati-hati!):
+// `npm run sql -- "SELECT 1" ["UPDATE ..."]`. Hasil SELECT dicetak sebagai tabel.
 import "dotenv/config"; // harus pertama: env.ts (lewat db.ts) membaca process.env saat diimpor
 import db from "../config/db";
 
-// Jalankan SQL ke DATABASE_URL di .env (bisa production!): npm run sql -- "SELECT 1" ["UPDATE ..."]
-// Tiap pernyataan bisa memakai koneksi pool berbeda, jadi `USE db` tidak terbawa; pakai nama lengkap db.tabel.
+// Menjalankan setiap perintah berurutan. Tiap perintah bisa memakai sambungan pool yang berbeda, jadi `USE nama_db`
+// tidak terbawa ke perintah berikutnya; tulis nama lengkap `db.tabel`.
 async function runStatements(statements: string[]): Promise<void> {
   if (!statements.length) throw new Error('Pemakaian: npm run sql -- "SELECT ..." ["..."]');
   for (const sql of statements) {
