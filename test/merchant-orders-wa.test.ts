@@ -46,7 +46,7 @@ test("templat toko dipakai; placeholder asing dibiarkan; nama dengan & # ter-enc
 });
 
 test("DEFAULT_WA_TEMPLATE sama persis dengan fe/lib/wa-template.ts", () => {
-  // monorepo tim memakai fe/, monorepo C:\DIEGO-UATAMA memakai frontend/
+  // salinan repo tim menaruh frontend di folder fe/, salinan lokal lain bisa memakai folder frontend/
   const berkas = ["fe", "frontend"]
     .map((folder) => join(__dirname, "../..", folder, "lib/wa-template.ts"))
     .find((filePath) => existsSync(filePath));
