@@ -14,6 +14,10 @@ const SAFE_ID_PATTERN = /^[\w.:-]{1,128}$/;
  * Memberi id unik pada setiap request lewat header respons X-Request-Id. Id dari pemanggil (server web atau router
  * Heroku) dipakai ulang bila formatnya aman, supaya satu request bisa dilacak di log kedua server; selain itu dibuat
  * id acak baru.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memasang header X-Request-Id lalu memanggil `next()`
  */
 export const requestId: RequestHandler = (req, res, next) => {
   const incomingId = req.get("x-request-id");
@@ -24,6 +28,10 @@ export const requestId: RequestHandler = (req, res, next) => {
 /**
  * Menulis satu baris log setelah respons terkirim: method, path, status, lama proses, dan id request. Path ditulis
  * tanpa query, body, atau header supaya token dan data pribadi tidak ikut tercatat.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memasang pencatat di akhir respons lalu memanggil `next()`
  */
 export const requestLogger: RequestHandler = (req, res, next) => {
   const startedAt = Date.now();
@@ -40,6 +48,10 @@ export const requestLogger: RequestHandler = (req, res, next) => {
  * dashboard admin. Pesan galatnya diambil dari `res.locals.errorSummary` yang diisi errorHandler. 503 karena mode
  * pemeliharaan dilewati karena disengaja, bukan galat server. Penyimpanan berjalan tanpa ditunggu, dan kegagalannya
  * diabaikan supaya tidak mengganggu respons.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memasang pencatat di akhir respons lalu memanggil `next()`
  */
 export const recordServerLog: RequestHandler = (req, res, next) => {
   const startedAt = Date.now();

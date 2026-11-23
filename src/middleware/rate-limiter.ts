@@ -56,6 +56,10 @@ function getClientIp(req: Request): string | undefined {
 /**
  * Pembatas login: 5 kali gagal per menit untuk pasangan IP+akun, dan 10 kali gagal per 15 menit untuk satu akun dari
  * IP mana pun. Hanya login yang gagal (401) yang dihitung.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 429 RATE_LIMITED (diteruskan ke errorHandler) bila batas sudah tercapai
  */
 export const loginLimiter: RequestHandler & { reset: () => void } = Object.assign(
@@ -92,7 +96,7 @@ export const loginLimiter: RequestHandler & { reset: () => void } = Object.assig
   },
 );
 
-// Ganti kata sandi: 5 kata sandi lama salah (400) per pengguna per menit.
+// Perubahan data yang meminta kata sandi saat ini: 5 jawaban 400 per pengguna per menit.
 const passwordByUser = createBucket(5, 60_000);
 
 // Pendaftaran berhasil per sumber (IP klien): 60 per jam. Hanya yang berhasil dihitung, karena pendaftaran yang gagal
@@ -102,6 +106,10 @@ const registerByIp = createBucket(60, 3600_000);
 
 /**
  * Pembatas pendaftaran akun: 60 pendaftaran berhasil (201) per IP per jam.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 429 RATE_LIMITED bila batas sudah tercapai
  */
 export const registerLimiter: RequestHandler & { reset: () => void } = Object.assign(
@@ -119,7 +127,14 @@ export const registerLimiter: RequestHandler & { reset: () => void } = Object.as
 );
 
 /**
- * Pembatas ganti kata sandi: 5 kali kata sandi lama salah per pengguna per menit.
+ * Pembatas perubahan data yang meminta kata sandi saat ini, supaya kata sandi tidak bisa ditebak lewat rute ini:
+ * PATCH /me (ubah profil), PUT /me/password (ganti kata sandi), dan PUT /merchant/payout-account (ubah rekening
+ * pencairan). Paling banyak 5 jawaban 400 per pengguna per menit. Semua jawaban 400 dihitung sebagai gagal, termasuk
+ * 400 karena alasan lain selain kata sandi salah (contoh email wajib diisi); selain 400 jatahnya dikembalikan.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 429 RATE_LIMITED bila batas sudah tercapai
  */
 export const passwordLimiter: RequestHandler & { reset: () => void } = Object.assign(
@@ -131,8 +146,8 @@ export const passwordLimiter: RequestHandler & { reset: () => void } = Object.as
       return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak percobaan. Coba lagi sebentar lagi."));
     }
     addHit(passwordByUser, key, now);
-    // 2. validate berjalan lebih dulu, jadi 400 di sini hanya berarti kata sandi lama salah; selain itu jatah
-    //    dikembalikan.
+    // 2. Semua jawaban 400 dihitung sebagai gagal (validate berjalan lebih dulu, jadi isi yang salah bentuk sudah
+    //    ditolak sebelum sampai sini); selain 400 jatahnya dikembalikan.
     res.on("finish", () => {
       if (res.statusCode !== 400) removeHit(passwordByUser, key);
     });
@@ -146,6 +161,10 @@ const uploadByUser = createBucket(20, 10 * 60_000);
 
 /**
  * Pembatas permintaan alamat unggah foto: 20 per pengguna per 10 menit. Semua permintaan dihitung.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 429 RATE_LIMITED bila batas sudah tercapai
  */
 export const uploadLimiter: RequestHandler & { reset: () => void } = Object.assign(
@@ -168,6 +187,10 @@ const otpByIp = createBucket(30, 15 * 60_000);
 
 /**
  * Pembatas permintaan kode OTP lupa sandi: 5 per rute+email dan 30 per IP, masing-masing per 15 menit.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 429 RATE_LIMITED bila salah satu batas sudah tercapai
  */
 export const otpLimiter: RequestHandler & { reset: () => void } = Object.assign(
@@ -198,6 +221,10 @@ const assistantByUser = createBucket(10, 10 * 60_000);
 
 /**
  * Pembatas pertanyaan ke asisten AI: 10 per pengguna per 10 menit. Semua pertanyaan dihitung.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 429 RATE_LIMITED bila batas sudah tercapai
  */
 export const assistantLimiter: RequestHandler & { reset: () => void } = Object.assign(
@@ -220,6 +247,10 @@ const tableOrderByToken = createBucket(15, 10 * 60_000);
 /**
  * Pembatas pesanan dari meja QR: 15 pesanan per token meja per 10 menit. `size()` mengembalikan jumlah kunci tersimpan
  * (dipakai test untuk memastikan token rusak tidak ikut tersimpan).
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 404 NOT_FOUND bila format token bukan 32 karakter hex, 429 RATE_LIMITED bila batas sudah tercapai
  */
 export const tableOrderLimiter: RequestHandler & { reset: () => void; size: () => number } = Object.assign(
@@ -247,6 +278,10 @@ const ticketByUser = createBucket(10, 60 * 60_000);
 
 /**
  * Pembatas tiket bantuan baru: 10 tiket yang berhasil dibuat per pembeli per jam.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
  * @throws 429 RATE_LIMITED bila batas sudah tercapai
  */
 export const ticketLimiter: RequestHandler & { reset: () => void } = Object.assign(

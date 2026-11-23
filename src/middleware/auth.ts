@@ -65,6 +65,10 @@ export async function getSession(req: Request): Promise<AuthedRequest["auth"] | 
 
 /**
  * Middleware wajib login: menaruh data sesi di `req.auth` lalu lanjut.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns Promise yang selesai setelah `req.auth` diisi dan `next()` dipanggil
  * @throws 401 UNAUTHENTICATED bila tidak ada sesi yang sah
  */
 export const requireAuth: RequestHandler = async (req, _res, next) => {
@@ -78,6 +82,10 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
  * Middleware login opsional untuk halaman publik (katalog): bila ada sesi sah, `req.auth` diisi; bila tidak, request
  * tetap lanjut sebagai tamu dan tidak pernah dijawab 401. Galat database saat membaca sesi juga diperlakukan sebagai
  * tamu.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns Promise yang selesai setelah `next()` dipanggil (dengan atau tanpa `req.auth`)
  */
 export const optionalAuth: RequestHandler = async (req, _res, next) => {
   const auth = await getSession(req).catch((error) => {

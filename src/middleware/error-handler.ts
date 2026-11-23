@@ -6,7 +6,10 @@ import { AppError } from "../utils/errors";
 
 /**
  * Middleware untuk request yang tidak cocok dengan route mana pun: diteruskan ke errorHandler sebagai 404.
- * @param next fungsi lanjut Express
+ * @param req  request masuk (tidak dipakai)
+ * @param res  respons (tidak dipakai)
+ * @param next fungsi Express untuk lanjut; dipanggil dengan galat 404 supaya ditangani errorHandler
+ * @returns tidak ada; meneruskan galat 404 lewat `next`
  */
 export const notFoundHandler = (_req: Request, _res: Response, next: NextFunction): void => {
   next(new AppError(404, "NOT_FOUND", "Data tidak ditemukan."));
@@ -16,7 +19,11 @@ export const notFoundHandler = (_req: Request, _res: Response, next: NextFunctio
  * Mengubah galat menjadi respons JSON. Pesan galat tak terduga tidak dikirim ke pengguna (hanya ke log), dan
  * ringkasannya disimpan di `res.locals.errorSummary` supaya request-logger bisa mencatatnya ke tabel server_logs.
  * @param error galat yang dilempar
- * @param res   respons Express
+ * @param req   request masuk (tidak dipakai)
+ * @param res   respons Express yang akan dikirim
+ * @param next  fungsi lanjut Express (tidak dipakai, tetapi wajib ada: Express hanya mengenali fungsi berparameter
+ *              empat sebagai penangan galat)
+ * @returns tidak ada; respons JSON langsung dikirim lewat `res`
  */
 export const errorHandler = (error: unknown, _req: Request, res: Response, _next: NextFunction): void => {
   const requestId = res.getHeader("X-Request-Id");

@@ -34,6 +34,10 @@ export const canAccess = (level: string | null, method: string, rawPath: string)
 /**
  * Middleware penjaga panel admin. Admin yang masih memakai sandi sementara harus menggantinya dulu (lewat
  * PUT /api/v1/me/password, yang berada di luar router admin sehingga tetap bisa dipanggil).
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila admin boleh mengakses
  * @throws 403 PASSWORD_CHANGE_REQUIRED bila sandi sementara belum diganti, 403 FORBIDDEN bila tingkat admin tidak cukup
  */
 export const adminAccess: RequestHandler = (req, _res, next) => {
