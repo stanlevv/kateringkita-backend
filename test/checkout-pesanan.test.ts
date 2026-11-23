@@ -34,7 +34,7 @@ test("201: bentuk Order + payment tunai, kode KK-tanggal WIB, harga server, tanp
   const r = await pesan(isi({ note: " Sambal dipisah ", total: 1 })).expect(201);
   const d = r.body.data;
   expect(Object.keys(d).sort()).toEqual(KUNCI_ORDER);
-  expect(d.code).toMatch(new RegExp(`^KK-${hariIniWib().replaceAll("-", "")}-[0-9A-HJKMNP-TV-Z]{4}$`));
+  expect(d.code).toMatch(new RegExp(`^KK-${hariIniWib().replace(/-/g, "")}-[0-9A-HJKMNP-TV-Z]{4}$`));
   expect(d).toMatchObject({
     status: "holding", payment_method: "cod", payment_status: "unpaid", payment: { method: "cod", status: "unpaid", amount: 36000 },
     merchant: { id: s.idA, business_name: "Dapur Siti", wa_number: "081298765432" },
@@ -160,7 +160,7 @@ test("D11: 3 pesanan menunggu → ke-4 409; satu kadaluarsa → lolos", async ()
 });
 
 test("D7: kode bentrok → buat ulang; selalu bentrok → 500 tanpa sisa", async () => {
-  const hari = hariIniWib().replaceAll("-", "");
+  const hari = hariIniWib().replace(/-/g, "");
   vi.spyOn(kode, "acak").mockReturnValueOnce("AAAA").mockReturnValueOnce("AAAA").mockReturnValueOnce("BBBB");
   expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-AAAA`);
   expect((await pesan(isi({}, { qty: 1 })).expect(201)).body.data.code).toBe(`KK-${hari}-BBBB`);

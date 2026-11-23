@@ -77,7 +77,7 @@ describe("gateway & fallback", () => {
   test("Groq kena 429 → istirahat sesuai Retry-After → OpenRouter menjawab; berikutnya langsung ke OpenRouter", async () => {
     const groq = (await tambah({ priority: 1 })).body.data.id;
     const or = (await tambah({ provider: "openrouter", label: "OR", model: "meta/llama:free", api_key: "sk-or-12345678", priority: 2 })).body.data.id;
-    const fetch = vi.fn(async (url: string) => (url === URL_GROQ ? new Response("{}", { status: 429, headers: { "retry-after": "120" } }) : openai("Halo dari OR")));
+    const fetch = vi.fn(async (url: string, _init?: RequestInit) => (url === URL_GROQ ? new Response("{}", { status: 429, headers: { "retry-after": "120" } }) : openai("Halo dari OR")));
     vi.stubGlobal("fetch", fetch);
     expect(await ai.tanya("sistem", "pesan", { fitur: "asisten" })).toBe("Halo dari OR");
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([URL_GROQ, URL_OR]);
@@ -102,7 +102,7 @@ describe("gateway & fallback", () => {
     await tambah({ priority: 1, is_active: false });
     await tambah({ provider: "nvidia", label: "NIM", model: "meta/llama-3.3-70b-instruct", api_key: "nvapi-1234567890", priority: 2 });
     env.GEMINI_API_KEY = "kunci-env";
-    const fetch = vi.fn(async (url: string) => (url === URL_NIM
+    const fetch = vi.fn(async (url: string, _init?: RequestInit) => (url === URL_NIM
       ? new Response("{}", { status: 500 })
       : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Halo env" }] } }] }))));
     vi.stubGlobal("fetch", fetch);
@@ -120,7 +120,7 @@ describe("pemakaian AI (F25)", () => {
     await db.query("DELETE FROM ai_usage");
     await tambah({ priority: 1 });
     const or = (await tambah({ provider: "openrouter", label: "OR", model: "meta/llama:free", api_key: "sk-or-12345678", priority: 2 })).body.data.id;
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => (url === URL_GROQ
+    vi.stubGlobal("fetch", vi.fn(async (url: string, _init?: RequestInit) => (url === URL_GROQ
       ? new Response("{}", { status: 429 })
       : new Response(JSON.stringify({ choices: [{ message: { content: "Halo" } }], usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 } })))));
     expect(await ai.tanya("s", "p", { fitur: "rekomendasi", userId: 42 })).toBe("Halo");

@@ -54,14 +54,14 @@ afterAll(() => {
 });
 
 describe("tabel D1: aksi × status asal", () => {
-  const SAH: Record<Aksi, Partial<Record<Status, Status>>> = {
+  const SAH: Partial<Record<Aksi, Partial<Record<Status, Status>>>> = {
     confirm: { holding: "confirmed" }, cook: { confirmed: "cooking" }, ready: { cooking: "ready" }, complete: { ready: "completed" },
     reject: { holding: "cancelled", confirmed: "cancelled" }, cancel: { holding: "cancelled", confirmed: "cancelled" },
     expire: { holding: "expired" },
   };
   const STATUS: Status[] = ["holding", "confirmed", "cooking", "ready", "completed", "cancelled", "expired"];
   const aktor = (a: Aksi) => (a === "cancel" || a === "complete" ? pembeli : a === "expire" ? sistem : penjual);
-  const kasus = (Object.keys(SAH) as Aksi[]).flatMap((aksi) => STATUS.map((dari) => [aksi, dari, SAH[aksi][dari] ?? null] as const));
+  const kasus = (Object.keys(SAH) as Aksi[]).flatMap((aksi) => STATUS.map((dari) => [aksi, dari, SAH[aksi]?.[dari] ?? null] as const));
 
   test.each(kasus)("%s dari %s → %s", async (aksi, dari, ke) => {
     const code = await siap(dari);
