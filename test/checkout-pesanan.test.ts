@@ -281,10 +281,10 @@ describe.skipIf(process.env.DATABASE_URL?.includes("tidbcloud.com"))("galat di t
   test("duplikat pada kunci selain orders.code bukan tabrakan kode → tidak dicoba ulang", async () => {
     await db.query(`CREATE TRIGGER uji_gagal BEFORE INSERT ON orders FOR EACH ROW
       SIGNAL SQLSTATE '23000' SET MESSAGE_TEXT = "Duplicate entry 'x' for key 'orders.lain'", MYSQL_ERRNO = 1062`);
-    const acak = vi.spyOn(codeGenerator, "random");
+    const randomSpy = vi.spyOn(codeGenerator, "random");
     const r = await pesan(isi());
     expect(r.status).not.toBe(201);
-    expect(acak).toHaveBeenCalledTimes(1);
+    expect(randomSpy).toHaveBeenCalledTimes(1);
     expect(await hitung("order_idempotency")).toBe(0);
   });
 });

@@ -75,10 +75,10 @@ export async function loadCart(
   const menuIds = [...new Set(data.items.map((item) => item.menu_id))];
   // 1. Checkout: reset kuota harian menu toko bila tanggal stoknya sudah lewat (hanya bila semua menu dari satu toko).
   if (options.refresh) {
-    const [merchantIds] = await conn.query<RowDataPacket[]>("SELECT DISTINCT merchant_id FROM menus WHERE id IN (?)", [
+    const [merchantRows] = await conn.query<RowDataPacket[]>("SELECT DISTINCT merchant_id FROM menus WHERE id IN (?)", [
       menuIds,
     ]);
-    if (merchantIds.length === 1) await segarkanKuota(conn, merchantIds[0].merchant_id, options.day);
+    if (merchantRows.length === 1) await segarkanKuota(conn, merchantRows[0].merchant_id, options.day);
   }
   // 2. Ambil menu beserta sisa stoknya untuk tanggal `day`, lalu opsi tambahannya.
   const [menus] = await conn.query<RowDataPacket[]>(
