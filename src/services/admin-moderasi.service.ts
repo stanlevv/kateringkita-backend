@@ -107,3 +107,22 @@ export async function moderasiMenu(adminId: number, idRaw: unknown, turun: boole
   const [[x]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_MENU} ${DARI_MENU} WHERE x.id = ?`, [id]);
   return petaMenu(x);
 }
+
+// Hapus satu foto melanggar; menu tetap dijual. Foto utama dihapus → foto tambahan pertama naik jadi foto utama (kartu katalog tidak kosong).
+// shortcut: objek di R2 tidak dihapus (sama dengan buatUnggahan); penjual tidak diberi notifikasi, alasan hanya di log audit
+export async function hapusFotoMenu(adminId: number, idRaw: unknown, url: string, reason: string) {
+  const id = await dalamTransaksi(async (conn) => {
+    const x = await kunci(conn, "menus", idRaw, { where: "deleted_at IS NULL", notFound: "Menu tidak ditemukan." });
+    const sebelum = { image_url: x.image_url as string | null, gallery: galeri(x.gallery) };
+    let sesudah: typeof sebelum;
+    if (sebelum.image_url === url) sesudah = { image_url: sebelum.gallery[0] ?? null, gallery: sebelum.gallery.slice(1) };
+    else if (sebelum.gallery.includes(url)) sesudah = { image_url: sebelum.image_url, gallery: sebelum.gallery.filter((u) => u !== url) };
+    else throw new AppError(404, "NOT_FOUND", "Foto tidak ditemukan di menu ini.");
+    await conn.query("UPDATE menus SET image_url = ?, gallery = ? WHERE id = ?",
+      [sesudah.image_url, sesudah.gallery.length ? JSON.stringify(sesudah.gallery) : null, x.id]);
+    await catat(conn, { adminId, action: "menu.photo_remove", targetType: "menu", targetId: x.id, reason, before: sebelum, after: sesudah });
+    return x.id;
+  });
+  const [[x]] = await db.query<RowDataPacket[]>(`SELECT ${KOLOM_MENU} ${DARI_MENU} WHERE x.id = ?`, [id]);
+  return petaMenu(x);
+}
