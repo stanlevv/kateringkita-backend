@@ -9,6 +9,7 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { Conn, withTransaction } from "./admin-audit.service";
+import { createChatNotification } from "./notification.service";
 import { createUpload, validateImageUrl } from "./upload.service";
 import { ListChatReportsQuery, SendMessageInput } from "../dto/order-chat.dto";
 import { uploadSchema } from "../dto/upload.dto";
@@ -223,8 +224,26 @@ export async function sendMessage(party: ChatParty, code: string, input: SendMes
     const [[row]] = await conn.query<RowDataPacket[]>(`SELECT ${MESSAGE_COLUMNS} FROM order_messages WHERE id = ?`, [
       result.insertId,
     ]);
+    // 4. Pesan pembeli memberi tahu penjual; pesan penjual tidak membuat notifikasi.
+    if (party.role === "customer") await notifyMerchant(conn, order.orderId);
     return toChatMessage(row);
   });
+}
+
+// Menulis notifikasi chat untuk penjual di dalam transaksi pesan, dibatasi titik simpan (SAVEPOINT): bila gagal, hanya
+// tulisan notifikasi yang dibatalkan dan galatnya dicatat ke log server, sedangkan pesannya tetap tersimpan. Tidak ada
+// baris users/orders baru yang dikunci, jadi urutan kunci users → orders dari lockChatOrder tetap terjaga.
+async function notifyMerchant(conn: Conn, orderId: number): Promise<void> {
+  await conn.query("SAVEPOINT chat_notification");
+  try {
+    await createChatNotification(conn, orderId);
+  } catch (error) {
+    await conn.query("ROLLBACK TO SAVEPOINT chat_notification");
+    console.error(
+      `Gagal menyimpan notifikasi chat pesanan ${orderId}:`,
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 // Mengunci pesanan di dalam transaksi sebelum chat ditulisi (kirim pesan, laporan). Baris pembeli dikunci dulu, baru

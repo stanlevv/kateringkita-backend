@@ -2,9 +2,9 @@
 // disimpan di tabel `notifications`. File ini membuat notifikasi perubahan status pesanan, menampilkan daftar
 // notifikasi, dan menandai notifikasi sudah dibaca. Alurnya routes/notification.ts → handlers/notification.handler.ts
 // → file ini → database; order-status.service memanggil createOrderNotification saat penjual atau sistem mengubah
-// status pesanan.
+// status pesanan, dan order-chat.service memanggil createChatNotification saat pembeli mengirim pesan chat.
 // Tanda sudah dibaca = kolom `read_at` berisi waktu notifikasi dibaca; NULL berarti belum dibaca.
-import { RowDataPacket } from "mysql2";
+import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import db from "../config/db";
 import type { Status } from "./order-status.service";
@@ -69,6 +69,37 @@ export async function createOrderNotification(
   await conn.query(
     "INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, 'order_status', ?, ?, ?, UTC_TIMESTAMP())",
     [order.customer_id, title, body.slice(0, 255), JSON.stringify({ order_code: order.code, status: toStatus })],
+  );
+}
+
+/**
+ * Memberi tahu penjual bahwa pembeli mengirim pesan di chat pesanan (notifikasi bertipe `chat_message`). Selama
+ * notifikasi chat pesanan yang sama belum dibaca penjual, notifikasi itu dimajukan waktunya, bukan ditambah baris baru,
+ * supaya daftar notifikasi tidak penuh satu entri per pesan. Dipanggil sendMessage di dalam transaksi pesan, setelah
+ * pesanan dikunci, sehingga pesan-pesan pesanan yang sama tidak bisa membuat dua notifikasi sekaligus.
+ * @param conn    koneksi di dalam transaksi pemanggil
+ * @param orderId id pesanan yang menerima pesan dari pembeli
+ * @returns tidak ada; satu notifikasi untuk akun pemilik toko tersimpan atau diperbarui
+ */
+export async function createChatNotification(conn: Pick<PoolConnection, "query">, orderId: number): Promise<void> {
+  // 1. Kode pesanan diambil dari database (bukan dari URL) supaya penggabungan selalu memakai penulisan yang sama.
+  const [[order]] = await conn.query<RowDataPacket[]>(
+    "SELECT o.code, m.user_id FROM orders o JOIN merchants m ON m.id = o.merchant_id WHERE o.id = ?",
+    [orderId],
+  );
+  const body = `Pembeli mengirim pesan di pesanan ${order.code}.`;
+  // 2. Ada notifikasi chat pesanan ini yang belum dibaca → majukan waktunya saja.
+  const [updated] = await conn.query<ResultSetHeader>(
+    `UPDATE notifications SET body = ?, created_at = UTC_TIMESTAMP()
+     WHERE user_id = ? AND type = 'chat_message' AND read_at IS NULL
+       AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.order_code')) = ?`,
+    [body, order.user_id, order.code],
+  );
+  if (updated.affectedRows > 0) return;
+  // 3. Belum ada (atau sudah dibaca semua) → sisipkan notifikasi baru.
+  await conn.query(
+    "INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, 'chat_message', 'Pesan baru dari pembeli', ?, ?, UTC_TIMESTAMP())",
+    [order.user_id, body, JSON.stringify({ order_code: order.code })],
   );
 }
 
