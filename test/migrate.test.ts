@@ -30,7 +30,7 @@ describe("migrasi", () => {
     await conn.end();
     // 001–003: 22 tabel; 005 meja, 006 ai_providers, 007 server_logs, 008 ai_usage, 010 payouts, 011 merchant_favorites,
     // 012 support_tickets + support_ticket_messages, 013 ai_results, 014 promo_claims, 015 banners, 016 popups,
-    // 018 email_verifications; 019 order_messages + order_chat_reads + order_chat_reports
+    // 018 email_verifications; 019 order_messages + order_chat_reads + order_chat_reports; 021 hanya menambah kolom
     expect(rows[0].n).toBe(39);
   });
 

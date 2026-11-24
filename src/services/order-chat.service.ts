@@ -393,7 +393,7 @@ export async function reportChat(party: ChatParty, code: string, reason: string)
 
 // Kolom laporan untuk admin (alias rp = order_chat_reports, o = orders, u = akun pelapor).
 const REPORT_SELECT = `SELECT rp.id, rp.order_id, o.code AS order_code, rp.reporter_role, u.full_name AS reporter_name,
-    rp.reason, rp.created_at
+    rp.reason, rp.created_at, rp.reviewed_at
   FROM order_chat_reports rp JOIN orders o ON o.id = rp.order_id LEFT JOIN users u ON u.id = rp.reporter_user_id`;
 // Baris REPORT_SELECT → bentuk JSON laporan.
 const toChatReport = (row: RowDataPacket) => ({
@@ -403,17 +403,20 @@ const toChatReport = (row: RowDataPacket) => ({
   reporter_name: (row.reporter_name ?? null) as string | null,
   reason: row.reason as string,
   created_at: row.created_at as Date,
+  reviewed_at: (row.reviewed_at ?? null) as Date | null,
 });
 
 /**
- * Daftar laporan chat untuk admin, terbaru dulu.
+ * Daftar laporan chat untuk admin: yang belum dibuka dulu, lalu terbaru. Membaca daftar tidak menandai laporan
+ * sebagai sudah dibuka.
  * @param filter halaman dan jumlah per halaman
  * @returns `{ data, meta: { page, limit, total } }`; tiap laporan berisi `id`, `order_code`, `reporter_role`,
- *          `reporter_name` (null bila akun pelapor dihapus), `reason`, dan `created_at`
+ *          `reporter_name` (null bila akun pelapor dihapus), `reason`, `created_at`, dan `reviewed_at` (null bila
+ *          admin belum pernah membuka detailnya)
  */
 export async function listChatReports(filter: ListChatReportsQuery) {
   const [rows] = await db.query<RowDataPacket[]>(
-    `${REPORT_SELECT} ORDER BY rp.created_at DESC, rp.id DESC LIMIT ? OFFSET ?`,
+    `${REPORT_SELECT} ORDER BY rp.reviewed_at IS NULL DESC, rp.created_at DESC, rp.id DESC LIMIT ? OFFSET ?`,
     [filter.limit, (filter.page - 1) * filter.limit],
   );
   const [[countRow]] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM order_chat_reports");
@@ -422,7 +425,8 @@ export async function listChatReports(filter: ListChatReportsQuery) {
 
 /**
  * Satu laporan chat beserta seluruh pesan pesanan itu, urut id. Ini satu-satunya jalan admin membaca isi chat, jadi
- * chat yang tidak dilaporkan tidak bisa dibaca admin.
+ * chat yang tidak dilaporkan tidak bisa dibaca admin. Pembukaan pertama mengisi `reviewed_at`; pembukaan berikutnya
+ * tidak mengubahnya.
  * @param reportId id laporan dari path (NaN bila path bukan angka desimal)
  * @returns laporan seperti di {@link listChatReports}, ditambah `messages`
  * @throws 404 id tidak valid atau laporan tidak ada
@@ -431,6 +435,10 @@ export async function getChatReport(reportId: number) {
   // 1. Cari laporannya; id yang bukan bilangan bulat positif pasti tidak ada.
   const notFound = () => new AppError(404, "NOT_FOUND", "Laporan tidak ditemukan.");
   if (!Number.isSafeInteger(reportId) || reportId < 1) throw notFound();
+  // Tandai sudah dibuka sebelum SELECT supaya respons pertama sudah berisi waktunya; id yang tidak ada tidak berubah.
+  await db.query("UPDATE order_chat_reports SET reviewed_at = UTC_TIMESTAMP() WHERE id = ? AND reviewed_at IS NULL", [
+    reportId,
+  ]);
   const [[row]] = await db.query<RowDataPacket[]>(`${REPORT_SELECT} WHERE rp.id = ?`, [reportId]);
   if (!row) throw notFound();
   // 2. Sertakan seluruh riwayat chat pesanan itu.

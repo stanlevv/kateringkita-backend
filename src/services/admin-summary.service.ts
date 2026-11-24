@@ -1,14 +1,17 @@
 // Isi file: ringkasan beranda panel admin (GET /admin/summary): pesanan hari ini per status, omzet hari ini, jumlah
 // toko per status verifikasi dan yang sedang buka, pesanan tahan stok yang hampir habis waktunya, dan 5 log audit
-// terbaru. Alurnya routes/admin.ts → handlers/admin.handler.ts → file ini → database. Dua alat waktu di sini juga
-// dipakai service lain: getWibDayRange (keranjang checkout) dan isOpenAt (katalog).
+// terbaru; juga hitungan antrean "Perlu tindakan" untuk dashboard dan lencana menu (GET /admin/queues). Alurnya
+// routes/admin.ts → handlers/admin.handler.ts → file ini → database. Dua alat waktu di sini juga dipakai service lain:
+// getWibDayRange (keranjang checkout) dan isOpenAt (katalog).
 //
 // WIB = waktu Indonesia barat, UTC+7. Database menyimpan waktu dalam UTC, jadi "hari ini" versi WIB harus diubah dulu
 // menjadi rentang waktu UTC.
 import { RowDataPacket } from "mysql2";
 import db from "../config/db";
+import { AdminLevel } from "../middleware/auth";
 import { listAuditLogs } from "./admin-audit.service";
 import { STATUSES } from "./admin-merchant.service";
+import { ELIGIBLE_ORDERS_SQL, REFUND_DUE_SQL } from "./payout.service";
 
 // Selisih WIB terhadap UTC dan panjang satu hari, dalam milidetik.
 const WIB_OFFSET_MS = 7 * 3600e3;
@@ -101,4 +104,43 @@ export async function getAdminSummary(now = Date.now()) {
   );
   const { data: recent_logs } = await listAuditLogs({ page: 1, limit: 5 });
   return { orders_today, revenue_today, merchants, holding_expiring_soon: Number(holdRows[0].n), recent_logs };
+}
+
+/**
+ * Hitungan antrean yang menunggu tindakan admin, dalam satu query. Tiap angka sama dengan antrean di halaman tujuannya
+ * dengan filter bawaannya:
+ * - `merchants_pending`: toko `verification_status = 'pending'` (/admin/verifikasi; `needs_fix` menunggu penjual, jadi
+ *   tidak dihitung);
+ * - `tickets_open`: tiket `status = 'open'`, menunggu balasan admin (/admin/tiket?status=open);
+ * - `chats_reported`: laporan chat yang detailnya belum pernah dibuka admin, `reviewed_at IS NULL`
+ *   (/admin/chat-dilaporkan);
+ * - `payouts_pending`: jumlah toko yang punya pesanan siap dicairkan, sama dengan baris saldo (/admin/pencairan);
+ * - `refunds_pending`: pembayaran Midtrans yang perlu dikembalikan, sama dengan syarat antrean refund
+ *   (/admin/pencairan; daftar di halaman itu dibatasi 100 baris, angka ini tidak);
+ * - `ai_results_pending`: hasil AI `status = 'menunggu'` (/admin/hasil-ai?status=menunggu).
+ * @param level tingkat admin yang meminta; data uang khusus super
+ * @returns keenam hitungan; `payouts_pending` dan `refunds_pending` bernilai `null` (dan tidak dihitung) bila `level`
+ *          bukan `"super"`
+ */
+export async function getAdminQueues(level: AdminLevel | null) {
+  const isSuper = level === "super";
+  // shortcut: memindai orders tanpa indeks payout_id, tambah INDEX (payout_id, status) bila /admin melambat
+  const moneySql = isSuper
+    ? `, (SELECT COUNT(DISTINCT o.merchant_id) FROM orders o WHERE ${ELIGIBLE_ORDERS_SQL}) AS payouts_pending,
+       (SELECT COUNT(*) FROM payments p JOIN orders o ON o.id = p.order_id WHERE ${REFUND_DUE_SQL}) AS refunds_pending`
+    : "";
+  const [[row]] = await db.query<RowDataPacket[]>(
+    `SELECT (SELECT COUNT(*) FROM merchants WHERE verification_status = 'pending') AS merchants_pending,
+       (SELECT COUNT(*) FROM support_tickets WHERE status = 'open') AS tickets_open,
+       (SELECT COUNT(*) FROM order_chat_reports WHERE reviewed_at IS NULL) AS chats_reported,
+       (SELECT COUNT(*) FROM ai_results WHERE status = 'menunggu') AS ai_results_pending${moneySql}`,
+  );
+  return {
+    merchants_pending: Number(row.merchants_pending),
+    tickets_open: Number(row.tickets_open),
+    chats_reported: Number(row.chats_reported),
+    payouts_pending: isSuper ? Number(row.payouts_pending) : null,
+    refunds_pending: isSuper ? Number(row.refunds_pending) : null,
+    ai_results_pending: Number(row.ai_results_pending),
+  };
 }

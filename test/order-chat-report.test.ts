@@ -1,3 +1,4 @@
+import { RowDataPacket } from "mysql2";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
@@ -23,7 +24,7 @@ const confirmedOrder = async () => {
   return code;
 };
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-const REPORT_KEYS = ["created_at", "id", "order_code", "reason", "reporter_name", "reporter_role"];
+const REPORT_KEYS = ["created_at", "id", "order_code", "reason", "reporter_name", "reporter_role", "reviewed_at"];
 
 beforeAll(async () => {
   setup = await prepareCheckout();
@@ -131,5 +132,80 @@ describe("GET /admin/chat-reports", () => {
     await get("/admin/chat-reports", setup.customerToken).expect(403);
     await get("/admin/chat-reports", setup.tokenA).expect(403);
     await request(app).get("/api/v1/admin/chat-reports").expect(401);
+  });
+});
+
+describe("reviewed_at: laporan sudah dibuka admin (F34)", () => {
+  // Kosongkan laporan lalu buat satu pesanan baru dengan laporan pembeli; mengembalikan id laporannya.
+  const freshReport = async () => {
+    await db.query("DELETE FROM order_chat_reports");
+    const code = await confirmedOrder();
+    await post(`/orders/${code}/chat-report`, setup.customerToken, { reason: "Penjual kasar" }).expect(201);
+    return { code, id: Number((await get("/admin/chat-reports", superToken)).body.data[0].id) };
+  };
+  const reviewedAt = async (id: number) => {
+    const [[row]] = await db.query<RowDataPacket[]>(
+      "SELECT reviewed_at, DATE_FORMAT(reviewed_at, '%Y-%m-%d %H:%i:%s') AS text FROM order_chat_reports WHERE id = ?",
+      [id],
+    );
+    return row as { reviewed_at: Date | null; text: string | null };
+  };
+
+  test("laporan baru belum dibuka: reviewed_at null di daftar", async () => {
+    await freshReport();
+    const list = await get("/admin/chat-reports", superToken).expect(200);
+    expect(list.body.data[0].reviewed_at).toBeNull();
+  });
+
+  test("daftar tidak menandai: dua kali GET daftar, DB tetap NULL", async () => {
+    const { id } = await freshReport();
+    await get("/admin/chat-reports", superToken).expect(200);
+    await get("/admin/chat-reports", supportToken).expect(200);
+    expect((await reviewedAt(id)).reviewed_at).toBeNull();
+  });
+
+  test("detail pertama mengisi, detail kedua tidak mengubah", async () => {
+    const { id } = await freshReport();
+    const first = await get(`/admin/chat-reports/${id}`, superToken).expect(200);
+    const stored = await reviewedAt(id);
+    expect(first.body.data.reviewed_at).toMatch(ISO);
+    expect(first.body.data.reviewed_at).toBe(stored.reviewed_at!.toISOString());
+
+    await db.query("UPDATE order_chat_reports SET reviewed_at = '2026-01-01 00:00:00' WHERE id = ?", [id]);
+    const second = await get(`/admin/chat-reports/${id}`, superToken).expect(200);
+    expect((await reviewedAt(id)).text).toBe("2026-01-01 00:00:00");
+    expect(second.body.data.reviewed_at).toBe("2026-01-01T00:00:00.000Z");
+    const list = await get("/admin/chat-reports", superToken).expect(200);
+    expect(list.body.data[0].reviewed_at).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  test("admin support boleh membuka dan menandai", async () => {
+    const { id } = await freshReport();
+    const detail = await get(`/admin/chat-reports/${id}`, supportToken).expect(200);
+    expect(detail.body.data.reviewed_at).toMatch(ISO);
+    expect((await reviewedAt(id)).reviewed_at).not.toBeNull();
+  });
+
+  test("id tidak ada 404, tidak ada baris yang berubah", async () => {
+    const { id } = await freshReport();
+    await get("/admin/chat-reports/999999", superToken).expect(404);
+    await get("/admin/chat-reports/abc", superToken).expect(404);
+    expect((await reviewedAt(id)).reviewed_at).toBeNull();
+    const [[{ n }]] = await db.query<RowDataPacket[]>(
+      "SELECT COUNT(*) AS n FROM order_chat_reports WHERE reviewed_at IS NOT NULL",
+    );
+    expect(Number(n)).toBe(0);
+  });
+
+  test("urutan: belum dibuka dulu, lalu terbaru", async () => {
+    const { code, id: older } = await freshReport();
+    await post(`/merchant/orders/${code}/chat-report`, setup.tokenA, { reason: "Pembeli mengancam" }).expect(201);
+    const ids = async () =>
+      (await get("/admin/chat-reports", superToken)).body.data.map((r: { id: number }) => Number(r.id));
+    const before = await ids();
+    const newer = before.find((reportId: number) => reportId !== older)!;
+    expect(before).toEqual([newer, older]);
+    await get(`/admin/chat-reports/${newer}`, superToken).expect(200);
+    expect(await ids()).toEqual([older, newer]);
   });
 });

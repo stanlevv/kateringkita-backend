@@ -29,6 +29,7 @@ import {
   getMerchantDetailHandler,
   parseMerchantId,
   getSummaryHandler,
+  getQueuesHandler,
   setMasterActiveHandler,
   setPromoActiveHandler,
   setPromoArchivedHandler,
@@ -198,8 +199,8 @@ admin.post("/master/:kind", createMasterDataHandler);
 admin.patch("/master/:kind/:id", updateMasterDataHandler);
 toggle("/master/:kind/:id", setMasterActiveHandler);
 
-// Promo platform (termasuk arsip dan pulihkan), pengaturan aplikasi (mengubahnya khusus super), pengumuman, dan
-// ringkasan beranda.
+// Promo platform (termasuk arsip dan pulihkan), pengaturan aplikasi (mengubahnya khusus super), pengumuman,
+// ringkasan beranda, dan hitungan antrean "Perlu tindakan" (semua tingkat; dua hitungan uang hanya untuk super).
 admin.get("/promos", listPromosHandler);
 admin.post("/promos", createPromoHandler);
 admin.patch("/promos/:id", updatePromoHandler);
@@ -211,6 +212,7 @@ admin.put("/settings/cs-contact", validate(csContactSchema), updateCsContactHand
 admin.put("/settings/maintenance", validate(maintenanceSchema), updateMaintenanceHandler);
 admin.post("/broadcasts", validate(announcementSchema), sendAnnouncementHandler);
 admin.get("/summary", getSummaryHandler);
+admin.get("/queues", getQueuesHandler);
 
 // Rekap keuangan per toko.
 admin.get("/finance", getFinanceSummaryHandler);
