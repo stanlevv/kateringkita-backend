@@ -31,6 +31,7 @@ const LIST_KEYS = [
   "service_fee",
   "status",
   "subtotal",
+  "timeline",
   "total",
   "updated_at",
 ];
@@ -136,6 +137,35 @@ describe("GET /me/orders", () => {
     const res = await listOrders(`?tab=active&updated_since=${encodeURIComponent(since)}`).expect(200);
     expect(res.body.data.map((order: any) => [order.code, order.status])).toEqual([[ready, "completed"]]);
     expect((await listOrders("?updated_since=2999-01-01T00:00:00%2B07:00").expect(200)).body.data).toEqual([]);
+  });
+});
+
+describe("timeline langkah pesanan", () => {
+  const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+  const merchantAction = (code: string, action: string) =>
+    request(app).post(`/api/v1/merchant/orders/${code}/${action}`).set("Authorization", `Bearer ${setup.tokenA}`);
+
+  test("GET /orders/:code timeline berisi jam setiap langkah", async () => {
+    const code = await placeOrder(setup.customerToken, setup.menu, 1);
+    for (const action of ["confirm", "cook", "ready"]) await merchantAction(code, action).expect(200);
+    const detail = await request(app)
+      .get(`/api/v1/orders/${code}`)
+      .set("Authorization", `Bearer ${setup.customerToken}`)
+      .expect(200);
+    const { timeline } = detail.body.data;
+    expect(Object.keys(timeline).sort()).toEqual([
+      "cancelled_at",
+      "completed_at",
+      "confirmed_at",
+      "cooking_at",
+      "ready_at",
+    ]);
+    for (const key of ["confirmed_at", "cooking_at", "ready_at"]) expect(timeline[key]).toMatch(ISO);
+    expect(timeline.completed_at).toBeNull();
+    expect(timeline.cancelled_at).toBeNull();
+    // item di daftar pesanan membawa timeline yang sama
+    const listed = (await listOrders("?tab=active").expect(200)).body.data.find((order: any) => order.code === code);
+    expect(listed.timeline).toEqual(timeline);
   });
 });
 

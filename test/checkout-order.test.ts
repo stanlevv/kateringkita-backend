@@ -32,6 +32,7 @@ const ORDER_KEYS = [
   "service_fee",
   "status",
   "subtotal",
+  "timeline",
   "total",
   "updated_at",
 ];
