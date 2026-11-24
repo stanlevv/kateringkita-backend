@@ -1,40 +1,64 @@
+// Isi file: daftar alamat (rute) akun di /api/v1: daftar, masuk, keluar, profil sendiri (/me), ganti sandi, unggah
+// foto profil, dan lupa sandi. Lapisan pertama dari alur routes → handlers (auth.handler) → services (auth.service,
+// password-reset.service, upload.service) → database. Tiap rute menentukan urutan middleware: wajib login
+// (requireAuth), pemeriksa isi permintaan dengan skema zod (validate), dan pembatas jumlah percobaan (rate limit:
+// batas berapa kali sebuah aksi boleh diulang dalam waktu tertentu, untuk menahan tebak sandi dan spam).
+// validate dipasang sebelum limiter login, ubah profil, dan OTP, supaya limiter membaca isi yang sudah dirapikan.
 import { Router } from "express";
 import {
-  changePasswordSchema, forgotPasswordSchema, loginSchema, registerCustomerSchema, registerMerchantSchema, resetPasswordSchema, updateMeSchema,
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  registerCustomerSchema,
+  registerMerchantSchema,
+  resetPasswordSchema,
+  updateMeSchema,
   verifyOtpSchema,
 } from "../dto/auth.dto";
 import { uploadSchema } from "../dto/upload.dto";
 import {
-  changePasswordHandler, forgotPasswordHandler, getMeHandler, loginHandler, logoutHandler, registerCustomerHandler, registerMerchantHandler,
-  resetPasswordHandler, updateMeHandler, verifyOtpHandler,
+  changePasswordHandler,
+  forgotPasswordHandler,
+  getMeHandler,
+  loginHandler,
+  logoutHandler,
+  registerCustomerHandler,
+  registerMerchantHandler,
+  resetPasswordHandler,
+  updateMeHandler,
+  verifyOtpHandler,
   uploadAvatarHandler,
 } from "../handlers/auth.handler";
 import { requireAuth } from "../middleware/auth";
-import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rateLimiter";
+import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
-export const v1 = Router();
+/**
+ * Router akun; dipasang di /api/v1. Rute daftar, login, dan lupa sandi terbuka tanpa login; rute /me dan logout
+ * wajib login.
+ */
+export const auth = Router();
 
-v1.post("/auth/customer/register", registerLimiter, validate(registerCustomerSchema), registerCustomerHandler);
+auth.post("/auth/customer/register", registerLimiter, validate(registerCustomerSchema), registerCustomerHandler);
 
-v1.post("/auth/merchant/register", registerLimiter, validate(registerMerchantSchema), registerMerchantHandler);
+auth.post("/auth/merchant/register", registerLimiter, validate(registerMerchantSchema), registerMerchantHandler);
 
-v1.post("/auth/login", validate(loginSchema), loginLimiter, loginHandler);
+auth.post("/auth/login", validate(loginSchema), loginLimiter, loginHandler);
 
-v1.post("/auth/logout", requireAuth, logoutHandler);
+auth.post("/auth/logout", requireAuth, logoutHandler);
 
-v1.get("/me", requireAuth, getMeHandler);
+auth.get("/me", requireAuth, getMeHandler);
 
-v1.patch("/me", requireAuth, validate(updateMeSchema), passwordLimiter, updateMeHandler);
+auth.patch("/me", requireAuth, validate(updateMeSchema), passwordLimiter, updateMeHandler);
 
-v1.put("/me/password", requireAuth, validate(changePasswordSchema), passwordLimiter, changePasswordHandler);
+auth.put("/me/password", requireAuth, validate(changePasswordSchema), passwordLimiter, changePasswordHandler);
 
-// Semua peran (D12); awalan kunci selalu dari token
-v1.post("/me/avatar", requireAuth, validate(uploadSchema), uploadLimiter, uploadAvatarHandler);
+// Semua peran boleh mengunggah foto profil; folder tujuan selalu dibentuk dari id pengguna di token.
+auth.post("/me/avatar", requireAuth, validate(uploadSchema), uploadLimiter, uploadAvatarHandler);
 
-// F11 lupa sandi: OTP lewat email
-v1.post("/auth/password/forgot", validate(forgotPasswordSchema), otpLimiter, forgotPasswordHandler);
+// Lupa sandi: minta kode OTP ke email, periksa kode, lalu ganti sandi dengan kode itu.
+auth.post("/auth/password/forgot", validate(forgotPasswordSchema), otpLimiter, forgotPasswordHandler);
 
-v1.post("/auth/password/verify", validate(verifyOtpSchema), otpLimiter, verifyOtpHandler);
+auth.post("/auth/password/verify", validate(verifyOtpSchema), otpLimiter, verifyOtpHandler);
 
-v1.post("/auth/password/reset", validate(resetPasswordSchema), otpLimiter, resetPasswordHandler);
+auth.post("/auth/password/reset", validate(resetPasswordSchema), otpLimiter, resetPasswordHandler);

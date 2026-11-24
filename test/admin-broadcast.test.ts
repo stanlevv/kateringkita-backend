@@ -3,21 +3,26 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { createAdmin } from "../src/scripts/create-admin";
-import { login, pembeliBaru, siapkanToko, sisipMenu, tampilkan } from "./helpers/toko";
+import { login, createCustomer, prepareMerchants, insertMenu, makeVisible } from "./helpers/merchant";
 
 // Broadcast pengumuman admin, notifikasi promo toko ke pemfavorit, dan kontak CS
-let s: Awaited<ReturnType<typeof siapkanToko>>;
-let tAdmin: string;
-let tLain: string;
-const H = (t: string) => ({ Authorization: `Bearer ${t}` });
-const notif = async (token: string) => (await request(app).get("/api/v1/me/notifications").set(H(token)).expect(200)).body.data as { type: string; title: string; body: string }[];
+let setup: Awaited<ReturnType<typeof prepareMerchants>>;
+let adminToken: string;
+let otherToken: string;
+const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
+const getNotifications = async (token: string) =>
+  (await request(app).get("/api/v1/me/notifications").set(authHeader(token)).expect(200)).body.data as {
+    type: string;
+    title: string;
+    body: string;
+  }[];
 
 beforeAll(async () => {
-  s = await siapkanToko();
-  await tampilkan(s.idA); // AUD-33: hanya toko yang tampil di katalog yang boleh mengirim notifikasi promo
+  setup = await prepareMerchants();
+  await makeVisible(setup.idA); // hanya toko yang tampil di katalog yang boleh mengirim notifikasi promo
   await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
-  tAdmin = await login("081300000009");
-  tLain = await pembeliBaru(1);
+  adminToken = await login("081300000009");
+  otherToken = await createCustomer(1);
 });
 afterAll(() => {
   vi.restoreAllMocks();
@@ -26,81 +31,213 @@ afterAll(() => {
 describe("pengumuman", () => {
   test("audience customer: hanya pembeli aktif; all: pembeli + penjual; tercatat audit", async () => {
     await db.query("UPDATE users SET is_active = FALSE WHERE email = 'pembeli1@mail.com'");
-    const r = await request(app).post("/api/v1/admin/broadcasts").set(H(tAdmin)).send({ audience: "customer", title: " Libur ", body: "Kampus libur 17 Agustus." }).expect(201);
-    expect(r.body.data).toEqual({ sent: 1 });
-    expect((await notif(s.tCust))[0]).toMatchObject({ type: "info", title: "Libur", body: "Kampus libur 17 Agustus." });
-    expect(await notif(s.tA)).toEqual([]);
+    const res = await request(app)
+      .post("/api/v1/admin/broadcasts")
+      .set(authHeader(adminToken))
+      .send({ audience: "customer", title: " Libur ", body: "Kampus libur 17 Agustus." })
+      .expect(201);
+    expect(res.body.data).toEqual({ sent: 1 });
+    expect((await getNotifications(setup.customerToken))[0]).toMatchObject({
+      type: "info",
+      title: "Libur",
+      body: "Kampus libur 17 Agustus.",
+    });
+    expect(await getNotifications(setup.tokenA)).toEqual([]);
     await db.query("UPDATE users SET is_active = TRUE WHERE email = 'pembeli1@mail.com'");
-    expect((await request(app).post("/api/v1/admin/broadcasts").set(H(tAdmin)).send({ audience: "all", title: "Info", body: "Halo semua" }).expect(201)).body.data)
-      .toEqual({ sent: 4 });
-    const [[l]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs WHERE action = 'notification.broadcast'");
-    expect(Number(l.n)).toBe(2);
+    expect(
+      (
+        await request(app)
+          .post("/api/v1/admin/broadcasts")
+          .set(authHeader(adminToken))
+          .send({ audience: "all", title: "Info", body: "Halo semua" })
+          .expect(201)
+      ).body.data,
+    ).toEqual({ sent: 4 });
+    const [[countRow]] = await db.query<any[]>(
+      "SELECT COUNT(*) AS n FROM admin_audit_logs WHERE action = 'notification.broadcast'",
+    );
+    expect(Number(countRow.n)).toBe(2);
   });
 
   test("validasi & hanya admin", async () => {
-    expect((await request(app).post("/api/v1/admin/broadcasts").set(H(tAdmin)).send({ audience: "semua", title: "", body: "x" }).expect(400)).body.error.fields)
-      .toMatchObject({ audience: ["Pilih penerima pengumuman."], title: ["Judul wajib diisi."] });
-    await request(app).post("/api/v1/admin/broadcasts").set(H(s.tA)).send({ audience: "all", title: "x", body: "y" }).expect(403);
+    expect(
+      (
+        await request(app)
+          .post("/api/v1/admin/broadcasts")
+          .set(authHeader(adminToken))
+          .send({ audience: "semua", title: "", body: "x" })
+          .expect(400)
+      ).body.error.fields,
+    ).toMatchObject({ audience: ["Pilih penerima pengumuman."], title: ["Judul wajib diisi."] });
+    await request(app)
+      .post("/api/v1/admin/broadcasts")
+      .set(authHeader(setup.tokenA))
+      .send({ audience: "all", title: "x", body: "y" })
+      .expect(403);
   });
 });
 
 describe("notifikasi promo toko", () => {
   test("promo aktif → pembeli pemfavorit menu toko; nonaktif tidak; menyala lagi → dikirim", async () => {
-    const menu = await sisipMenu(s.idA);
-    await db.query("INSERT INTO favorites (user_id, menu_id) SELECT id, ? FROM users WHERE email = 'budi@mail.com'", [menu]);
-    const isi = { type: "fixed", value: 1000, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
-    const r = await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "HEMAT1K", description: "Potong Rp 1.000" }).expect(201);
-    expect((await notif(s.tCust)).filter((n) => n.type === "promo")).toEqual([
+    const menu = await insertMenu(setup.idA);
+    await db.query("INSERT INTO favorites (user_id, menu_id) SELECT id, ? FROM users WHERE email = 'budi@mail.com'", [
+      menu,
+    ]);
+    const promoBody = {
+      type: "fixed",
+      value: 1000,
+      min_subtotal: 0,
+      per_user_limit: 1,
+      starts_at: "2020-01-01T00:00:00Z",
+      ends_at: "2099-01-01T00:00:00Z",
+    };
+    const res = await request(app)
+      .post("/api/v1/merchant/promos")
+      .set(authHeader(setup.tokenA))
+      .send({ ...promoBody, code: "HEMAT1K", description: "Potong Rp 1.000" })
+      .expect(201);
+    expect(
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo"),
+    ).toEqual([
       expect.objectContaining({ title: "Promo baru dari Dapur Siti", body: "Pakai kode HEMAT1K: Potong Rp 1.000" }),
     ]);
-    expect((await notif(tLain)).filter((n) => n.type === "promo")).toEqual([]);
-    const mati = await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "DIAM", is_active: false }).expect(201);
-    expect((await notif(s.tCust)).filter((n) => n.type === "promo")).toHaveLength(1);
-    await request(app).patch(`/api/v1/merchant/promos/${mati.body.data.id}`).set(H(s.tA)).send({ is_active: true }).expect(200);
-    await request(app).patch(`/api/v1/merchant/promos/${r.body.data.id}`).set(H(s.tA)).send({ value: 1500 }).expect(200);
-    expect((await notif(s.tCust)).filter((n) => n.type === "promo")).toHaveLength(2);
+    expect((await getNotifications(otherToken)).filter((notification) => notification.type === "promo")).toEqual([]);
+    const inactiveRes = await request(app)
+      .post("/api/v1/merchant/promos")
+      .set(authHeader(setup.tokenA))
+      .send({ ...promoBody, code: "DIAM", is_active: false })
+      .expect(201);
+    expect(
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo"),
+    ).toHaveLength(1);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${inactiveRes.body.data.id}`)
+      .set(authHeader(setup.tokenA))
+      .send({ is_active: true })
+      .expect(200);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${res.body.data.id}`)
+      .set(authHeader(setup.tokenA))
+      .send({ value: 1500 })
+      .expect(200);
+    expect(
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo"),
+    ).toHaveLength(2);
   });
 
-  // AUD-27: kode tersembunyi hanya dibagikan penjual sendiri; AUD-33: toko yang tidak tampil (suspend) tidak bisa menyiarkan
+  // kode tersembunyi hanya dibagikan penjual sendiri; toko yang tidak tampil (suspend) tidak bisa menyiarkan
   test("promo tersembunyi dan promo toko yang di-suspend tidak dikirim", async () => {
-    const isi = { type: "fixed", value: 1000, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
-    const jumlah = async () => (await notif(s.tCust)).filter((n) => n.type === "promo").length;
-    const awal = await jumlah();
-    await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "RAHASIA", is_public: false }).expect(201);
-    expect(await jumlah()).toBe(awal);
-    await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [s.idA]);
-    await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "SUSPEN" }).expect(201);
-    expect(await jumlah()).toBe(awal);
-    await tampilkan(s.idA);
+    const promoBody = {
+      type: "fixed",
+      value: 1000,
+      min_subtotal: 0,
+      per_user_limit: 1,
+      starts_at: "2020-01-01T00:00:00Z",
+      ends_at: "2099-01-01T00:00:00Z",
+    };
+    const countPromoNotifications = async () =>
+      (await getNotifications(setup.customerToken)).filter((notification) => notification.type === "promo").length;
+    const initialCount = await countPromoNotifications();
+    await request(app)
+      .post("/api/v1/merchant/promos")
+      .set(authHeader(setup.tokenA))
+      .send({ ...promoBody, code: "RAHASIA", is_public: false })
+      .expect(201);
+    expect(await countPromoNotifications()).toBe(initialCount);
+    await db.query("UPDATE merchants SET verification_status = 'suspended' WHERE id = ?", [setup.idA]);
+    await request(app)
+      .post("/api/v1/merchant/promos")
+      .set(authHeader(setup.tokenA))
+      .send({ ...promoBody, code: "SUSPEN" })
+      .expect(201);
+    expect(await countPromoNotifications()).toBe(initialCount);
+    await makeVisible(setup.idA);
   });
 
-  // AUD-43: mati-nyala berulang tidak boleh membanjiri pemfavorit; satu notifikasi per promo per penerima per 24 jam
+  // mati-nyala berulang tidak boleh membanjiri pemfavorit; satu notifikasi per promo per penerima per 24 jam
   test("5 siklus mati-nyala promo → satu notifikasi per penerima", async () => {
-    const isi = { type: "fixed", value: 1000, min_subtotal: 0, per_user_limit: 1, starts_at: "2020-01-01T00:00:00Z", ends_at: "2099-01-01T00:00:00Z" };
-    const jumlah = async () => (await notif(s.tCust)).filter((n) => n.type === "promo" && n.body.startsWith("Pakai kode ULANG")).length;
-    const id = (await request(app).post("/api/v1/merchant/promos").set(H(s.tA)).send({ ...isi, code: "ULANG" }).expect(201)).body.data.id;
+    const promoBody = {
+      type: "fixed",
+      value: 1000,
+      min_subtotal: 0,
+      per_user_limit: 1,
+      starts_at: "2020-01-01T00:00:00Z",
+      ends_at: "2099-01-01T00:00:00Z",
+    };
+    const countPromoNotifications = async () =>
+      (await getNotifications(setup.customerToken)).filter(
+        (notification) => notification.type === "promo" && notification.body.startsWith("Pakai kode ULANG"),
+      ).length;
+    const id = (
+      await request(app)
+        .post("/api/v1/merchant/promos")
+        .set(authHeader(setup.tokenA))
+        .send({ ...promoBody, code: "ULANG" })
+        .expect(201)
+    ).body.data.id;
     for (let i = 0; i < 5; i++) {
-      await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: false }).expect(200);
-      await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: true }).expect(200);
+      await request(app)
+        .patch(`/api/v1/merchant/promos/${id}`)
+        .set(authHeader(setup.tokenA))
+        .send({ is_active: false })
+        .expect(200);
+      await request(app)
+        .patch(`/api/v1/merchant/promos/${id}`)
+        .set(authHeader(setup.tokenA))
+        .send({ is_active: true })
+        .expect(200);
     }
-    expect(await jumlah()).toBe(1);
+    expect(await countPromoNotifications()).toBe(1);
     // lewat 24 jam → boleh dikabarkan lagi
     await db.query("UPDATE notifications SET created_at = created_at - INTERVAL 25 HOUR WHERE type = 'promo'");
-    await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: false }).expect(200);
-    await request(app).patch(`/api/v1/merchant/promos/${id}`).set(H(s.tA)).send({ is_active: true }).expect(200);
-    expect(await jumlah()).toBe(2);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${id}`)
+      .set(authHeader(setup.tokenA))
+      .send({ is_active: false })
+      .expect(200);
+    await request(app)
+      .patch(`/api/v1/merchant/promos/${id}`)
+      .set(authHeader(setup.tokenA))
+      .send({ is_active: true })
+      .expect(200);
+    expect(await countPromoNotifications()).toBe(2);
   });
 });
 
 describe("kontak CS", () => {
   test("admin mengatur; keluar di /meta/settings; kosongkan; validasi", async () => {
-    expect((await request(app).put("/api/v1/admin/settings/cs-contact").set(H(tAdmin)).send({ wa_number: "085852157352" }).expect(200)).body.data)
-      .toEqual({ cs_whatsapp: "085852157352" });
+    expect(
+      (
+        await request(app)
+          .put("/api/v1/admin/settings/cs-contact")
+          .set(authHeader(adminToken))
+          .send({ wa_number: "085852157352" })
+          .expect(200)
+      ).body.data,
+    ).toEqual({ cs_whatsapp: "085852157352" });
     expect((await request(app).get("/api/v1/meta/settings").expect(200)).body.data.cs_whatsapp).toBe("085852157352");
-    expect((await request(app).get("/api/v1/admin/settings").set(H(tAdmin)).expect(200)).body.data).toMatchObject({ cs_whatsapp: "085852157352" });
-    await request(app).put("/api/v1/admin/settings/cs-contact").set(H(tAdmin)).send({ wa_number: "12345" }).expect(400);
-    expect((await request(app).put("/api/v1/admin/settings/cs-contact").set(H(tAdmin)).send({ wa_number: "" }).expect(200)).body.data).toEqual({ cs_whatsapp: null });
-    const [[l]] = await db.query<any[]>("SELECT COUNT(*) AS n FROM admin_audit_logs WHERE action = 'settings.cs_whatsapp'");
-    expect(Number(l.n)).toBe(2);
+    expect(
+      (await request(app).get("/api/v1/admin/settings").set(authHeader(adminToken)).expect(200)).body.data,
+    ).toMatchObject({
+      cs_whatsapp: "085852157352",
+    });
+    await request(app)
+      .put("/api/v1/admin/settings/cs-contact")
+      .set(authHeader(adminToken))
+      .send({ wa_number: "12345" })
+      .expect(400);
+    expect(
+      (
+        await request(app)
+          .put("/api/v1/admin/settings/cs-contact")
+          .set(authHeader(adminToken))
+          .send({ wa_number: "" })
+          .expect(200)
+      ).body.data,
+    ).toEqual({ cs_whatsapp: null });
+    const [[countRow]] = await db.query<any[]>(
+      "SELECT COUNT(*) AS n FROM admin_audit_logs WHERE action = 'settings.cs_whatsapp'",
+    );
+    expect(Number(countRow.n)).toBe(2);
   });
 });

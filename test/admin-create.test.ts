@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import mysql from "mysql2/promise";
 import { migrate } from "../src/scripts/migrate";
-import { createAdmin, jalankan } from "../src/scripts/create-admin";
+import { createAdmin, run } from "../src/scripts/create-admin";
 import { resetTestDatabase } from "./helpers/db";
 
-describe("admin:create (A-05)", () => {
+describe("admin:create", () => {
   let url: string;
   beforeAll(async () => {
     url = await resetTestDatabase();
@@ -22,7 +22,9 @@ describe("admin:create (A-05)", () => {
   });
 
   test("nomor sudah dipakai → galat", async () => {
-    await expect(createAdmin({ phone: "081300000001", fullName: "Dua", password: "rahasia123" })).rejects.toThrow("Nomor sudah terdaftar.");
+    await expect(createAdmin({ phone: "081300000001", fullName: "Dua", password: "rahasia123" })).rejects.toThrow(
+      "Nomor sudah terdaftar.",
+    );
   });
 
   test.each(["pendek1", "hurufsajaa", "12345678"])("sandi lemah %s → galat", async (password) => {
@@ -36,7 +38,7 @@ describe("admin:create (A-05)", () => {
 
   test("CLI tanpa ADMIN_INITIAL_PASSWORD → kode 1", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    const code = await jalankan(["--phone", "081300000004", "--name", "Admin"], {});
+    const code = await run(["--phone", "081300000004", "--name", "Admin"], {});
     expect(code).toBe(1);
     expect(err).toHaveBeenCalledWith("ADMIN_INITIAL_PASSWORD belum diisi.");
     err.mockRestore();
@@ -44,7 +46,9 @@ describe("admin:create (A-05)", () => {
 
   test("CLI sukses → kode 0, sandi tidak dicetak", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const code = await jalankan(["--phone", "081300000005", "--name", "Admin Lima"], { ADMIN_INITIAL_PASSWORD: "rahasia123" });
+    const code = await run(["--phone", "081300000005", "--name", "Admin Lima"], {
+      ADMIN_INITIAL_PASSWORD: "rahasia123",
+    });
     expect(code).toBe(0);
     expect(JSON.stringify(log.mock.calls)).not.toContain("rahasia123");
     log.mockRestore();
@@ -52,7 +56,7 @@ describe("admin:create (A-05)", () => {
 
   test("CLI tanpa --phone/--name → kode 1", async () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await jalankan(["--phone", "081300000006"], { ADMIN_INITIAL_PASSWORD: "rahasia123" })).toBe(1);
+    expect(await run(["--phone", "081300000006"], { ADMIN_INITIAL_PASSWORD: "rahasia123" })).toBe(1);
     err.mockRestore();
   });
 });

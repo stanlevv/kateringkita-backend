@@ -3,11 +3,11 @@
 Sejak F26 semua pembayaran non-tunai lewat Midtrans dan masuk ke akun Midtrans platform. QRIS statis toko
 (foto QRIS + penjual menekan "Verifikasi bayar") **dihapus**. Pembeli memilih salah satu dari tiga metode:
 
-| `payment_method` | Cara bayar | Siapa yang menerima pesanan |
-|---|---|---|
-| `cod` | Tunai saat mengambil | Penjual menekan Konfirmasi |
-| `va` | Virtual Account Midtrans (BCA, BNI, BRI), bank dipilih pembeli | Otomatis saat Midtrans melaporkan lunas |
-| `online` | QRIS yang digambar langsung di aplikasi (`/qris`), atau halaman bayar Midtrans Snap: QRIS, GoPay, ShopeePay, VA BCA/BNI/BRI (`/online`) | Otomatis saat Midtrans melaporkan lunas |
+| `payment_method` | Cara bayar                                                                                                                              | Siapa yang menerima pesanan             |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `cod`            | Tunai saat mengambil                                                                                                                    | Penjual menekan Konfirmasi              |
+| `va`             | Virtual Account Midtrans (BCA, BNI, BRI), bank dipilih pembeli                                                                          | Otomatis saat Midtrans melaporkan lunas |
+| `online`         | QRIS yang digambar langsung di aplikasi (`/qris`), atau halaman bayar Midtrans Snap: QRIS, GoPay, ShopeePay, VA BCA/BNI/BRI (`/online`) | Otomatis saat Midtrans melaporkan lunas |
 
 `qris` hanya ada di data lama. Checkout dengan `qris` ditolak `400`.
 
@@ -100,18 +100,18 @@ Respons: bentuk pesanan dengan `payment.va = { "bank", "va_number", "expires_at"
 
 ## Galat
 
-| Kapan | Status | Pesan |
-|---|---|---|
-| Checkout `payment_method` selain `cod`/`va`/`online` | 400 | `Pilih bayar tunai, Virtual Account, atau bayar online.` |
-| Checkout VA/online, Midtrans belum dipasang di server | 409 | `Pembayaran Virtual Account belum tersedia. Pilih metode lain.` / `Pembayaran online belum tersedia. Pilih metode lain.` |
-| `/online` atau `/qris` untuk pesanan bukan `online` | 409 | `Pesanan ini tidak memakai bayar online.` |
-| `/online` atau `/qris` untuk pesanan yang sudah lunas, batal, atau kedaluwarsa | 409 | `Pesanan ini tidak menunggu pembayaran.` |
-| `/qris` setelah pembeli memilih metode di halaman Snap | 409 | `Pembayaran pesanan ini sudah dimulai di halaman Midtrans. Lanjutkan di sana.` |
-| `/qris`, Midtrans menolak atau tidak menjawab | 502 | `Gagal membuat QRIS. Coba lagi.` |
-| `/va` untuk pesanan yang tidak menunggu VA | 409 | `Pesanan ini tidak menunggu pembayaran Virtual Account.` |
-| Sisa waktu tahan < 1 menit | 409 | `Batas waktu pesanan sudah habis.` |
-| `kembali` bukan alamat web KateringKita | 400 | `fields.kembali`: `Alamat kembali tidak diizinkan.` |
-| Pesanan milik pembeli lain atau tidak ada | 404 | `Pesanan tidak ditemukan.` |
+| Kapan                                                                          | Status | Pesan                                                                                                                    |
+| ------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Checkout `payment_method` selain `cod`/`va`/`online`                           | 400    | `Pilih bayar tunai, Virtual Account, atau bayar online.`                                                                 |
+| Checkout VA/online, Midtrans belum dipasang di server                          | 409    | `Pembayaran Virtual Account belum tersedia. Pilih metode lain.` / `Pembayaran online belum tersedia. Pilih metode lain.` |
+| `/online` atau `/qris` untuk pesanan bukan `online`                            | 409    | `Pesanan ini tidak memakai bayar online.`                                                                                |
+| `/online` atau `/qris` untuk pesanan yang sudah lunas, batal, atau kedaluwarsa | 409    | `Pesanan ini tidak menunggu pembayaran.`                                                                                 |
+| `/qris` setelah pembeli memilih metode di halaman Snap                         | 409    | `Pembayaran pesanan ini sudah dimulai di halaman Midtrans. Lanjutkan di sana.`                                           |
+| `/qris`, Midtrans menolak atau tidak menjawab                                  | 502    | `Gagal membuat QRIS. Coba lagi.`                                                                                         |
+| `/va` untuk pesanan yang tidak menunggu VA                                     | 409    | `Pesanan ini tidak menunggu pembayaran Virtual Account.`                                                                 |
+| Sisa waktu tahan < 1 menit                                                     | 409    | `Batas waktu pesanan sudah habis.`                                                                                       |
+| `kembali` bukan alamat web KateringKita                                        | 400    | `fields.kembali`: `Alamat kembali tidak diizinkan.`                                                                      |
+| Pesanan milik pembeli lain atau tidak ada                                      | 404    | `Pesanan tidak ditemukan.`                                                                                               |
 
 ## Batal dan pengembalian dana
 

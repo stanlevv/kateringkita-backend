@@ -1,17 +1,17 @@
 import { beforeAll, describe, expect, test } from "vitest";
 import db from "../src/config/db";
-import { siapkanToko } from "./helpers/toko";
+import { prepareMerchants } from "./helpers/merchant";
 
-// F06 Task 1 (BE-03, D17): orders.stock_date + tabel idempotensi per pengguna
+// Migrasi checkout: orders.stock_date + tabel idempotensi per pengguna
 describe("migrasi 003_checkout", () => {
   let budi: number;
   let siti: number;
 
   beforeAll(async () => {
-    await siapkanToko();
-    const [u] = await db.query<any[]>("SELECT id, full_name FROM users WHERE full_name IN ('Budi','Siti')");
-    budi = u.find((r) => r.full_name === "Budi").id;
-    siti = u.find((r) => r.full_name === "Siti").id;
+    await prepareMerchants();
+    const [userRows] = await db.query<any[]>("SELECT id, full_name FROM users WHERE full_name IN ('Budi','Siti')");
+    budi = userRows.find((user) => user.full_name === "Budi").id;
+    siti = userRows.find((user) => user.full_name === "Siti").id;
   });
 
   test("orders.stock_date DATE NULL", async () => {
@@ -20,11 +20,14 @@ describe("migrasi 003_checkout", () => {
   });
 
   test("order_idempotency: kunci unik per (pengguna, kunci)", async () => {
-    const sisip = (uid: number) =>
-      db.query("INSERT INTO order_idempotency (customer_id, idem_key, request_hash) VALUES (?, 'k1', ?)", [uid, "a".repeat(64)]);
-    await sisip(budi);
-    await expect(sisip(budi)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
-    await expect(sisip(siti)).resolves.toBeDefined();
+    const insertIdempotencyKey = (uid: number) =>
+      db.query("INSERT INTO order_idempotency (customer_id, idem_key, request_hash) VALUES (?, 'k1', ?)", [
+        uid,
+        "a".repeat(64),
+      ]);
+    await insertIdempotencyKey(budi);
+    await expect(insertIdempotencyKey(budi)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+    await expect(insertIdempotencyKey(siti)).resolves.toBeDefined();
   });
 
   test("schema_migrations memuat 003_checkout.sql", async () => {

@@ -1,89 +1,123 @@
+// Isi file: daftar route semua fitur penjual di bawah /api/v1/merchant: profil toko, menu dan kuota, unggah foto,
+// banner, pesanan, laporan, promo, ulasan, asisten AI, meja, dan pencairan. Alurnya request masuk → middleware (login,
+// peran penjual, pemeriksa body, pembatas laju) → handler → service → database.
 import { Router } from "express";
 import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
-import { statusSchema, updateProfileSchema } from "../dto/merchant.dto";
+import { openStatusSchema, updateProfileSchema } from "../dto/merchant.dto";
 import { merchantUploadSchema } from "../dto/upload.dto";
-import { buatBannerTokoHandler, daftarBannerTokoHandler, hapusBannerTokoHandler, ubahBannerTokoHandler } from "../handlers/banner.handler";
-import { tanyaSchema } from "../dto/asisten.dto";
-import { mejaSchema, ubahMejaSchema } from "../dto/meja.dto";
-import { rekeningSchema } from "../dto/pencairan.dto";
-import { buatMejaHandler, daftarMejaHandler, ubahMejaHandler } from "../handlers/meja.handler";
-import { pencairanSayaHandler, ubahRekeningHandler } from "../handlers/pencairan.handler";
 import {
-  aksiPesananTokoHandler, ambilMenuHandler, ambilPesananTokoHandler, buatMenuHandler, daftarMenuHandler, daftarPesananTokoHandler,
-  buatPromoTokoHandler, daftarPromoTokoHandler, daftarUlasanTokoHandler, hapusPromoTokoHandler, tanyaAsistenHandler, ubahPromoTokoHandler,
-  getProfileHandler, hapusMenuHandler, laporanPerJamHandler, laporanTransaksiHandler, ringkasanLaporanHandler, setOpenHandler, ubahKuotaHandler, ubahMenuHandler, updateProfileHandler, uploadFotoHandler,
-  waPesananTokoHandler,
+  createMerchantBannerHandler,
+  listMerchantBannersHandler,
+  deleteMerchantBannerHandler,
+  updateMerchantBannerHandler,
+} from "../handlers/banner.handler";
+import { askAssistantSchema } from "../dto/assistant.dto";
+import { tableSchema, updateTableSchema } from "../dto/table.dto";
+import { bankAccountSchema } from "../dto/payout.dto";
+import { createTableHandler, listTablesHandler, updateTableHandler } from "../handlers/table.handler";
+import { getMyPayoutsHandler, updateBankAccountHandler } from "../handlers/payout.handler";
+import {
+  transitionMerchantOrderHandler,
+  getMenuHandler,
+  getMerchantOrderHandler,
+  createMenuHandler,
+  listMenusHandler,
+  listMerchantOrdersHandler,
+  createMerchantPromoHandler,
+  listMerchantPromosHandler,
+  listMerchantReviewsHandler,
+  deleteMerchantPromoHandler,
+  askAssistantHandler,
+  updateMerchantPromoHandler,
+  getProfileHandler,
+  deleteMenuHandler,
+  getHourlyReportHandler,
+  listReportTransactionsHandler,
+  getReportSummaryHandler,
+  setOpenHandler,
+  updateQuotaHandler,
+  updateMenuHandler,
+  updateProfileHandler,
+  uploadPhotoHandler,
+  getMerchantOrderWhatsappHandler,
 } from "../handlers/merchant.handler";
-import { asistenLimiter, passwordLimiter, uploadLimiter } from "../middleware/rateLimiter";
+import { assistantLimiter, passwordLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
-// Penjaga (requireAuth + requireRole("merchant")) dipasang sekali di app.ts; toko selalu dari token (R-10).
+// `validate(schema)` = memeriksa body dengan skema zod sebelum handler jalan (400 bila tidak sesuai). Pembatas laju
+// (rate limiter) = penolak 429 bila satu pengguna terlalu sering memanggil route yang sama dalam waktu singkat.
+/**
+ * Router penjual. Dipasang di app.ts pada `/api/v1/merchant` dengan penjaga requireAuth + requireRole("merchant"), jadi
+ * semua route di sini wajib login sebagai penjual. Toko selalu dicari dari token login, tidak pernah dari request.
+ */
 export const merchant = Router();
 
 merchant.get("/profile", getProfileHandler);
 
-merchant.patch("/status", validate(statusSchema), setOpenHandler);
+merchant.patch("/status", validate(openStatusSchema), setOpenHandler);
 
 merchant.patch("/profile", validate(updateProfileSchema), updateProfileHandler);
 
-merchant.get("/menus", daftarMenuHandler);
+merchant.get("/menus", listMenusHandler);
 
-merchant.get("/menus/:id", ambilMenuHandler);
+merchant.get("/menus/:id", getMenuHandler);
 
-merchant.post("/menus", validate(menuSchema), buatMenuHandler);
+merchant.post("/menus", validate(menuSchema), createMenuHandler);
 
-merchant.patch("/menus/:id", validate(menuPatchSchema), ubahMenuHandler);
+merchant.patch("/menus/:id", validate(menuPatchSchema), updateMenuHandler);
 
-merchant.delete("/menus/:id", hapusMenuHandler);
+merchant.delete("/menus/:id", deleteMenuHandler);
 
-merchant.patch("/menus/:id/quota", ubahKuotaHandler);
+// body kuota diperiksa di handler supaya galat "tepat salah satu dari delta atau quota_today" tanpa `fields`
+merchant.patch("/menus/:id/quota", updateQuotaHandler);
 
-merchant.post("/uploads", validate(merchantUploadSchema), uploadLimiter, uploadFotoHandler);
-// Banner beranda (rancangan voucher 2026-11-16 §5.4): 1 banner aktif per toko, tampil setelah disetujui admin
-merchant.get("/banners", daftarBannerTokoHandler);
-merchant.post("/banners", buatBannerTokoHandler);
-merchant.patch("/banners/:id", ubahBannerTokoHandler);
-merchant.delete("/banners/:id", hapusBannerTokoHandler);
+// alamat unggah foto: paling banyak 20 permintaan per penjual per 10 menit
+merchant.post("/uploads", validate(merchantUploadSchema), uploadLimiter, uploadPhotoHandler);
+// Banner beranda: satu banner aktif per toko, tampil setelah disetujui admin. Body diperiksa di service banner.
+merchant.get("/banners", listMerchantBannersHandler);
+merchant.post("/banners", createMerchantBannerHandler);
+merchant.patch("/banners/:id", updateMerchantBannerHandler);
+merchant.delete("/banners/:id", deleteMerchantBannerHandler);
 
-// F07 (M-04): daftar & detail pesanan toko
-merchant.get("/orders", daftarPesananTokoHandler);
+// Daftar dan detail pesanan toko.
+merchant.get("/orders", listMerchantOrdersHandler);
 
-merchant.get("/orders/:code", ambilPesananTokoHandler);
+merchant.get("/orders/:code", getMerchantOrderHandler);
 
-// F07 (M-04, M-11): tautan chat ke pembeli
-merchant.get("/orders/:code/whatsapp", waPesananTokoHandler);
+// Tautan chat WhatsApp ke pembeli.
+merchant.get("/orders/:code/whatsapp", getMerchantOrderWhatsappHandler);
 
-// F09 laporan penjualan
-merchant.get("/reports/summary", ringkasanLaporanHandler);
+// Laporan penjualan.
+merchant.get("/reports/summary", getReportSummaryHandler);
 
-merchant.get("/reports/hourly", laporanPerJamHandler);
+merchant.get("/reports/hourly", getHourlyReportHandler);
 
-merchant.get("/reports/transactions", laporanTransaksiHandler);
+merchant.get("/reports/transactions", listReportTransactionsHandler);
 
-// F12 promo toko
-merchant.get("/promos", daftarPromoTokoHandler);
+// Promo toko. Body diperiksa di service promo.
+merchant.get("/promos", listMerchantPromosHandler);
 
-merchant.post("/promos", buatPromoTokoHandler);
+merchant.post("/promos", createMerchantPromoHandler);
 
-merchant.patch("/promos/:id", ubahPromoTokoHandler);
+merchant.patch("/promos/:id", updateMerchantPromoHandler);
 
-merchant.delete("/promos/:id", hapusPromoTokoHandler);
+merchant.delete("/promos/:id", deleteMerchantPromoHandler);
 
-// F13 ulasan pembeli untuk menu toko
-merchant.get("/reviews", daftarUlasanTokoHandler);
+// Ulasan pembeli untuk menu toko.
+merchant.get("/reviews", listMerchantReviewsHandler);
 
-// F17 asisten AI toko
-merchant.post("/assistant", validate(tanyaSchema), asistenLimiter, tanyaAsistenHandler);
+// Asisten AI toko: paling banyak 10 pertanyaan per penjual per 10 menit.
+merchant.post("/assistant", validate(askAssistantSchema), assistantLimiter, askAssistantHandler);
 
-// F21: meja & QR pesan dari meja
-merchant.get("/tables", daftarMejaHandler);
-merchant.post("/tables", validate(mejaSchema), buatMejaHandler);
-merchant.patch("/tables/:id", validate(ubahMejaSchema), ubahMejaHandler);
+// Meja dan kode QR untuk pesan dari meja.
+merchant.get("/tables", listTablesHandler);
+merchant.post("/tables", validate(tableSchema), createTableHandler);
+merchant.patch("/tables/:id", validate(updateTableSchema), updateTableHandler);
 
-// F26: rekening pencairan (kata sandi diminta ulang, salah 5×/menit → 429), saldo & riwayat pencairan
-merchant.get("/payouts", pencairanSayaHandler);
-merchant.put("/payout-account", validate(rekeningSchema), passwordLimiter, ubahRekeningHandler);
+// Saldo dan riwayat pencairan, serta ubah rekening pencairan (kata sandi diminta ulang; lebih dari 5 kali ditolak 400
+// dalam semenit → 429).
+merchant.get("/payouts", getMyPayoutsHandler);
+merchant.put("/payout-account", validate(bankAccountSchema), passwordLimiter, updateBankAccountHandler);
 
-// F07 (M-04, M-08): aksi di luar AKSI_TOKO → lanjut ke notFoundHandler (404)
-
-merchant.post("/orders/:code/:aksi", aksiPesananTokoHandler);
+// Aksi penjual pada pesanan (confirm, cook, ready, complete, reject). Aksi lain diteruskan ke penangan 404.
+merchant.post("/orders/:code/:aksi", transitionMerchantOrderHandler);

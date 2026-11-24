@@ -1,0 +1,336 @@
+import request from "supertest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import app from "../src/app";
+import db from "../src/config/db";
+import { env } from "../src/config/env";
+import { passwordLimiter } from "../src/middleware/rate-limiter";
+import { createAdmin } from "../src/scripts/create-admin";
+import { sendNotification } from "./helpers/midtrans";
+import { login, placeOrder, prepareCheckout } from "./helpers/merchant";
+
+// Pencairan dana: rekening pencairan penjual, saldo & pencatatan pencairan oleh admin super, daftar pengembalian dana Midtrans.
+// Test berurutan dan berbagi data: saldo test 2 dicairkan di test 3.
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
+let adminToken: string;
+let asOf: string;
+// Versi rekening (account.updated_at) yang dilihat admin di daftar saldo saat mentransfer
+let accountVersion: string | null = null;
+
+const get = (path: string, token: string) => request(app).get(`/api/v1${path}`).set("Authorization", `Bearer ${token}`);
+const post = (path: string, body: object, token: string) =>
+  request(app).post(`/api/v1${path}`).set("Authorization", `Bearer ${token}`).send(body);
+const saveBankAccount = (body: object) =>
+  request(app).put("/api/v1/merchant/payout-account").set("Authorization", `Bearer ${setup.tokenA}`).send(body);
+const requestPayout = (body: object) =>
+  post(
+    "/admin/payouts",
+    { merchant_id: setup.idA, until: asOf, reference: "TRF-0001", account_updated_at: accountVersion, ...body },
+    adminToken,
+  );
+const BANK_ACCOUNT = {
+  bank: "bca",
+  account_number: "012 345-678.901",
+  account_name: " Siti Aminah ",
+  password: "rahasia123",
+};
+
+const promo = async (merchantId: number | null, code: string) =>
+  (
+    await db.query<any>(
+      "INSERT INTO promos (merchant_id, code, type, value, starts_at, ends_at) VALUES (?, ?, 'fixed', 2000, UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 DAY))",
+      [merchantId, code],
+    )
+  )[0].insertId as number;
+
+// Pesanan Budi lewat checkout tunai, lalu dibentuk lewat SQL. Waktu selesai relatif ke jam DB, sama dengan as_of.
+// Voucher (migrasi 014): potongan dicatat per slot — toko: [promo_id, potongan], platform: [promo_id, potongan]
+async function createPaidOrder(
+  qty: number,
+  options: { method: string; status?: string; toko?: [number, number]; platform?: [number, number]; menit?: number },
+) {
+  const code = await placeOrder(setup.customerToken, setup.menu, qty);
+  await db.query(
+    `UPDATE orders SET payment_method = ?, status = ?, payment_status = 'paid', merchant_promo_id = ?, merchant_discount = ?,
+       platform_promo_id = ?, platform_discount = ?, discount = ?, completed_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE) WHERE code = ?`,
+    [
+      options.method,
+      options.status ?? "completed",
+      options.toko?.[0] ?? null,
+      options.toko?.[1] ?? 0,
+      options.platform?.[0] ?? null,
+      options.platform?.[1] ?? 0,
+      (options.toko?.[1] ?? 0) + (options.platform?.[1] ?? 0),
+      options.menit ?? -60,
+      code,
+    ],
+  );
+  await db.query("UPDATE menus SET held_today = 0");
+  return code;
+}
+
+// Pembayaran Midtrans tercatat, lalu pesanan batal (ditolak penjual) atau kedaluwarsa (dibayar setelah batas waktu)
+async function payThenCancel(method: string, status: "cancelled" | "expired", paymentStatus = "paid") {
+  const code = await placeOrder(setup.customerToken, setup.menu2);
+  const isCancelled = status === "cancelled";
+  await db.query(
+    `UPDATE orders SET payment_method = ?, status = ?, payment_status = ?, cancelled_at = UTC_TIMESTAMP(), cancelled_by = ?, cancel_reason = ?
+     WHERE code = ?`,
+    [
+      method,
+      status,
+      paymentStatus === "paid" ? "paid" : "unpaid",
+      isCancelled ? "merchant" : "system",
+      isCancelled ? "Stok habis" : null,
+      code,
+    ],
+  );
+  await db.query(
+    `INSERT INTO payments (order_id, method, provider, amount, status, paid_at)
+     SELECT id, ?, 'midtrans', total, ?, IF(? = 'paid', UTC_TIMESTAMP(), NULL) FROM orders WHERE code = ?`,
+    [method, paymentStatus, paymentStatus, code],
+  );
+  await db.query("UPDATE menus SET held_today = 0");
+  return code;
+}
+
+beforeAll(async () => {
+  setup = await prepareCheckout();
+  passwordLimiter.reset();
+  await createAdmin({ phone: "081300000009", fullName: "Admin Uji", password: "rahasia123" });
+  adminToken = await login("081300000009");
+});
+afterAll(() => {
+  vi.restoreAllMocks();
+});
+
+test("rekening: kosong di awal; sandi salah dan isian tidak valid → 400, tidak tersimpan", async () => {
+  const res = await get("/merchant/payouts", setup.tokenA).expect(200);
+  expect(res.body.data).toMatchObject({ account: null, balance: { amount: 0, orders: 0, since: null }, payouts: [] });
+  expect(res.body.data.banks).toContainEqual({ code: "bca", name: "BCA" });
+  expect((await saveBankAccount({ ...BANK_ACCOUNT, password: "salah123" }).expect(400)).body.error.fields).toEqual({
+    password: ["Kata sandi salah."],
+  });
+  const bad = await saveBankAccount({ bank: "xyz", account_number: "12ab", account_name: "S", password: "" }).expect(
+    400,
+  );
+  expect(bad.body.error.fields).toEqual({
+    bank: ["Pilih bank atau e-wallet."],
+    account_number: ["Nomor rekening 6–20 angka."],
+    account_name: ["Nama pemilik rekening 3–100 karakter."],
+    password: ["Masukkan kata sandi akunmu."],
+  });
+  expect((await get("/merchant/payouts", setup.tokenA)).body.data.account).toBeNull();
+});
+
+test("saldo: hanya VA/online lunas & selesai; bagian penjual = subtotal − promo toko", async () => {
+  const merchantPromo = await promo(setup.idA, "TOKO2RB");
+  const platform = await promo(null, "HEMAT3RB");
+  await createPaidOrder(1, { method: "online" }); // 15.000
+  // 30.000 − 2.000 voucher toko; voucher platform 3.000 di pesanan yang sama ditanggung platform (bagian penjual tetap 28.000)
+  await createPaidOrder(2, { method: "va", toko: [merchantPromo, 2000], platform: [platform, 3000] });
+  await createPaidOrder(1, { method: "online", platform: [platform, 3000] }); // 15.000: diskon ditanggung platform
+  await createPaidOrder(1, { method: "cod" }); // tunai sudah diterima penjual langsung
+  await createPaidOrder(1, { method: "online", status: "cooking" }); // belum selesai
+  const res = await get("/admin/payouts/balances", adminToken).expect(200);
+  asOf = res.body.data.as_of;
+  expect(res.body.data.rows).toEqual([
+    // platform_discount: voucher platform yang dibayar platform di pesanan saldo ini, dicek admin sebelum transfer
+    {
+      merchant_id: setup.idA,
+      business_name: "Dapur Siti",
+      account: null,
+      amount: 58000,
+      orders: 3,
+      platform_discount: 6000,
+      since: expect.any(String),
+    },
+  ]);
+  expect((await get("/merchant/payouts", setup.tokenA)).body.data.balance).toMatchObject({ amount: 58000, orders: 3 });
+});
+
+test("catat pencairan: wajib rekening, nominal harus cocok, pesanan setelah as_of tidak ikut, tidak bisa dobel", async () => {
+  expect((await requestPayout({ amount: 58000 }).expect(409)).body.error.message).toBe(
+    "Penjual belum mengisi rekening pencairan.",
+  );
+  const accountRes = await saveBankAccount(BANK_ACCOUNT).expect(200);
+  accountVersion = accountRes.body.data.account.updated_at;
+  expect(accountRes.body.data.account).toEqual({
+    bank: "bca",
+    bank_name: "BCA",
+    account_number: "012345678901",
+    account_name: "Siti Aminah",
+    updated_at: expect.any(String),
+  });
+  expect((await requestPayout({ amount: 57000 }).expect(409)).body.error.message).toBe(
+    "Saldo penjual berubah. Muat ulang lalu periksa lagi.",
+  );
+  await createPaidOrder(1, { method: "online", menit: 60 }); // selesai setelah as_of: ikut pencairan berikutnya
+  await db.query("UPDATE orders SET updated_at = '2026-01-01 00:00:00' WHERE merchant_id = ?", [setup.idA]);
+  const res = await requestPayout({ amount: 58000, note: " Transfer BCA " }).expect(201);
+  expect(res.body.data).toMatchObject({
+    merchant_id: setup.idA,
+    business_name: "Dapur Siti",
+    amount: 58000,
+    orders_count: 3,
+    bank: "bca",
+    bank_name: "BCA",
+    account_number: "012345678901",
+    account_name: "Siti Aminah",
+    reference: "TRF-0001",
+    note: "Transfer BCA",
+    admin_name: "Admin Uji",
+  });
+  const [payoutOrders] = await db.query<any[]>(
+    "SELECT DATE_FORMAT(updated_at, '%Y-%m-%d') AS u FROM orders WHERE payout_id = ?",
+    [res.body.data.id],
+  );
+  expect(payoutOrders.map((order) => order.u)).toEqual(["2026-01-01", "2026-01-01", "2026-01-01"]); // pesanan tidak "berubah" bagi sinkron updated_since
+  expect((await requestPayout({ amount: 58000 }).expect(409)).body.error.message).toBe(
+    "Tidak ada saldo untuk dicairkan.",
+  );
+
+  const merchantPayouts = (await get("/merchant/payouts", setup.tokenA).expect(200)).body.data;
+  expect(merchantPayouts.balance).toMatchObject({ amount: 15000, orders: 1 });
+  expect(merchantPayouts.payouts).toMatchObject([
+    { id: res.body.data.id, amount: 58000, reference: "TRF-0001", account_number: "012345678901" },
+  ]);
+  const historyRes = await get("/admin/payouts", adminToken).expect(200);
+  expect(historyRes.body.meta).toEqual({ page: 1, limit: 20, total: 1 });
+  expect(historyRes.body.data).toMatchObject([{ id: res.body.data.id, amount: 58000, admin_name: "Admin Uji" }]);
+  const [[log]] = await db.query<any[]>(
+    "SELECT target_type, target_id, after_json FROM admin_audit_logs WHERE action = 'payout.create'",
+  );
+  expect(log).toMatchObject({ target_type: "merchant", target_id: String(setup.idA) });
+  expect(log.after_json).toEqual({ payout_id: res.body.data.id, amount: 58000, orders: 3, reference: "TRF-0001" });
+});
+
+// Pencatatan terikat ke rekening yang dilihat admin; rekening diganti sesudahnya → 409, tidak tercatat ke rekening baru
+test("rekening diganti setelah daftar saldo dimuat → pencatatan 409", async () => {
+  await db.query(
+    "UPDATE merchants SET payout_updated_at = DATE_SUB(payout_updated_at, INTERVAL 1 MINUTE) WHERE id = ?",
+    [setup.idA],
+  );
+  const oldUpdatedAt =
+    (await get("/admin/payouts/balances", adminToken).expect(200)).body.data.rows[0]?.account?.updated_at ??
+    (await get("/merchant/payouts", setup.tokenA).expect(200)).body.data.account.updated_at;
+  await saveBankAccount({ ...BANK_ACCOUNT, account_number: "999 888 777 666" }).expect(200);
+  const res = await requestPayout({ amount: 15000, account_updated_at: oldUpdatedAt }).expect(409);
+  expect(res.body.error.message).toBe("Rekening penjual berubah. Muat ulang lalu periksa lagi.");
+  expect((await requestPayout({ amount: 15000, account_updated_at: undefined }).expect(409)).body.error.message).toBe(
+    "Rekening penjual berubah. Muat ulang lalu periksa lagi.",
+  );
+  await saveBankAccount(BANK_ACCOUNT).expect(200);
+});
+
+test("validasi pencairan → 400; penjual tidak dikenal → 404", async () => {
+  const res = await post(
+    "/admin/payouts",
+    { merchant_id: setup.idA, amount: 0, until: "kemarin", reference: "x" },
+    adminToken,
+  ).expect(400);
+  expect(res.body.error.fields).toEqual({
+    amount: ["Nominal tidak valid."],
+    until: ["Waktu saldo tidak valid. Muat ulang halaman."],
+    reference: ["Nomor referensi transfer 3–100 karakter."],
+  });
+  expect((await requestPayout({ merchant_id: 9999, amount: 1000 }).expect(404)).body.error.message).toBe(
+    "Penjual tidak ditemukan.",
+  );
+});
+
+test("pengembalian dana: hanya dana Midtrans lunas dari pesanan batal/kedaluwarsa; ditandai sekali", async () => {
+  const cancelledOrder = await payThenCancel("online", "cancelled");
+  const expiredOrder = await payThenCancel("va", "expired");
+  await payThenCancel("online", "cancelled", "expired"); // tidak pernah dibayar
+  const cod = await placeOrder(setup.customerToken, setup.menu2);
+  await db.query("UPDATE orders SET status = 'cancelled' WHERE code = ?", [cod]); // tunai: tidak ada dana masuk
+  await db.query("UPDATE menus SET held_today = 0");
+
+  const res = await get("/admin/refunds", adminToken).expect(200);
+  expect(res.body.data.map((refund: { code: string }) => refund.code)).toEqual([cancelledOrder, expiredOrder]);
+  expect(res.body.data[0]).toMatchObject({
+    status: "cancelled",
+    method: "online",
+    customer_name: "Budi",
+    business_name: "Dapur Siti",
+    dine_in: false,
+    cancelled_by: "merchant",
+    cancel_reason: "Stok habis",
+    paid_at: expect.any(String),
+  });
+  const markRes = await post(`/admin/refunds/${cancelledOrder}`, { reference: " RF-0001 " }, adminToken).expect(200);
+  expect(markRes.body.data).toEqual({ code: cancelledOrder, amount: res.body.data[0].amount, reference: "RF-0001" });
+  const [[payment]] = await db.query<any[]>(
+    "SELECT p.status, p.refund_ref, p.refunded_at, o.payment_status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?",
+    [cancelledOrder],
+  );
+  expect(payment).toMatchObject({ status: "refunded", refund_ref: "RF-0001", payment_status: "refunded" });
+  expect(payment.refunded_at).not.toBeNull();
+  expect((await get("/admin/refunds", adminToken)).body.data.map((refund: { code: string }) => refund.code)).toEqual([
+    expiredOrder,
+  ]);
+  const again = await post(`/admin/refunds/${cancelledOrder}`, { reference: "RF-0001" }, adminToken).expect(404);
+  expect(again.body.error.message).toBe("Tidak ada dana yang perlu dikembalikan untuk pesanan ini.");
+  await post(`/admin/refunds/${cod}`, { reference: "RF-0002" }, adminToken).expect(404);
+  expect(
+    (await post(`/admin/refunds/${expiredOrder}`, { reference: "x" }, adminToken).expect(400)).body.error.fields,
+  ).toEqual({
+    reference: ["Nomor referensi transfer 3–100 karakter."],
+  });
+  const [[log]] = await db.query<any[]>(
+    "SELECT target_type, target_id, after_json FROM admin_audit_logs WHERE action = 'refund.mark'",
+  );
+  expect(log).toEqual({
+    target_type: "order",
+    target_id: cancelledOrder,
+    after_json: { amount: markRes.body.data.amount, reference: "RF-0001" },
+  });
+});
+
+// Settlement Midtrans yang dikirim ulang setelah refund ditandai tidak boleh mengembalikan pembayaran menjadi lunas
+test("settlement dikirim ulang setelah refund → tetap refunded, tidak muncul lagi di daftar refund", async () => {
+  env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji";
+  const code = await payThenCancel("online", "cancelled");
+  await post(`/admin/refunds/${code}`, { reference: "RF-0003" }, adminToken).expect(200);
+  const status = async () =>
+    (
+      (
+        await db.query<any[]>(
+          "SELECT p.status, p.amount, o.payment_status FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.code = ?",
+          [code],
+        )
+      )[0] as any[]
+    )[0];
+  const { amount } = await status();
+  await sendNotification(
+    { order_id: code, status_code: "200", gross_amount: `${amount}.00`, transaction_status: "settlement" },
+    "SB-Mid-server-uji",
+  ).expect(200);
+  expect(await status()).toMatchObject({ status: "refunded", payment_status: "refunded" });
+  expect(
+    (await get("/admin/refunds", adminToken)).body.data.map((refund: { code: string }) => refund.code),
+  ).not.toContain(code);
+  await post(`/admin/refunds/${code}`, { reference: "RF-0003" }, adminToken).expect(404);
+  env.MIDTRANS_SERVER_KEY = undefined;
+  vi.unstubAllGlobals();
+});
+
+test("akses: pencairan & pengembalian dana hanya admin super; rekening hanya penjual", async () => {
+  await createAdmin({ phone: "081300000008", fullName: "Admin Ops", password: "rahasia123" });
+  await db.query("UPDATE users SET admin_level = 'ops' WHERE phone = '081300000008'");
+  const opsToken = await login("081300000008");
+  for (const token of [opsToken, setup.tokenA, setup.customerToken]) {
+    await get("/admin/payouts/balances", token).expect(403);
+    await get("/admin/payouts", token).expect(403);
+    await get("/admin/refunds", token).expect(403);
+    await post(
+      "/admin/payouts",
+      { merchant_id: setup.idA, amount: 15000, until: asOf, reference: "TRF-0002" },
+      token,
+    ).expect(403);
+  }
+  await get("/merchant/payouts", setup.customerToken).expect(403);
+  await get("/merchant/payouts", adminToken).expect(403);
+  await request(app).get("/api/v1/merchant/payouts").expect(401);
+  expect((await db.query<any[]>("SELECT COUNT(*) AS n FROM payouts"))[0][0].n).toBe(1);
+});

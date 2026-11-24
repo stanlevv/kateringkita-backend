@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
-import { loginLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter } from "../src/middleware/rate-limiter";
 import { env } from "../src/config/env";
 import { resetTestDatabase } from "./helpers/db";
 
@@ -22,12 +22,12 @@ beforeEach(async () => {
 });
 
 const SECRET = "rahasia-internal-minimal-32-karakter-aman";
-const loginDari = (ip: string, body: object, secret: string | null = SECRET) => {
-  const r = request(app).post("/api/v1/auth/login").set("X-Client-IP", ip);
-  return (secret === null ? r : r.set("X-Internal-Secret", secret)).send(body);
+const loginFrom = (clientIp: string, body: object, secret: string | null = SECRET) => {
+  const req = request(app).post("/api/v1/auth/login").set("X-Client-IP", clientIp);
+  return (secret === null ? req : req.set("X-Internal-Secret", secret)).send(body);
 };
-const salah = { identifier: "budi@mail.com", password: "salah12345", client: "web" };
-const benar = { identifier: "budi@mail.com", password: "rahasia123", client: "web" };
+const wrongBody = { identifier: "budi@mail.com", password: "salah12345", client: "web" };
+const correctBody = { identifier: "budi@mail.com", password: "rahasia123", client: "web" };
 
 const login = (body: object) => request(app).post("/api/v1/auth/login").send(body);
 const sessions = async () => {
@@ -60,12 +60,12 @@ test("login dengan no WA berformat → 200", async () => {
 });
 
 test("password salah dan email tak dikenal → 401 identik", async () => {
-  const a = await login({ identifier: "budi@mail.com", password: "salah12345", client: "web" });
-  const b = await login({ identifier: "tidak@ada.com", password: "rahasia123", client: "web" });
-  for (const r of [a, b]) {
-    expect(r.status).toBe(401);
-    expect(r.body.error.code).toBe("UNAUTHENTICATED");
-    expect(r.body.error.message).toBe(GENERIC);
+  const wrongPassword = await login({ identifier: "budi@mail.com", password: "salah12345", client: "web" });
+  const unknownEmail = await login({ identifier: "tidak@ada.com", password: "rahasia123", client: "web" });
+  for (const res of [wrongPassword, unknownEmail]) {
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHENTICATED");
+    expect(res.body.error.message).toBe(GENERIC);
   }
 });
 
@@ -106,19 +106,19 @@ test("6× salah → percobaan ke-6 429; identifier lain tetap 401", async () => 
   expect(other.status).toBe(401);
 });
 
-test("F01-SEC-1: email beraksen dengan password benar → 401 generik, bukan 200", async () => {
+test("email beraksen dengan password benar → 401 generik, bukan 200", async () => {
   const res = await login({ identifier: "búdi@màil.cóm", password: "rahasia123", client: "web" });
   expect(res.status).toBe(401);
   expect(res.body.error.message).toBe(GENERIC);
 });
 
-test.each([["\u0001"], ["\u007f"]])("F01-SEC-1: karakter kontrol %j di email dengan password benar → 401", async (ch) => {
-  const res = await login({ identifier: `bu${ch}di@mail.com`, password: "rahasia123", client: "web" });
+test.each([["\u0001"], ["\u007f"]])("karakter kontrol %j di email dengan password benar → 401", async (controlChar) => {
+  const res = await login({ identifier: `bu${controlChar}di@mail.com`, password: "rahasia123", client: "web" });
   expect(res.status).toBe(401);
   expect(res.body.error.message).toBe(GENERIC);
 });
 
-test("F01-SEC-1: varian aksen memakai bucket limiter yang sama → 429", async () => {
+test("varian aksen memakai bucket limiter yang sama → 429", async () => {
   for (let i = 0; i < 5; i++) {
     expect((await login({ identifier: "budi@mail.com", password: "salah12345", client: "web" })).status).toBe(401);
   }
@@ -132,53 +132,53 @@ test("identifier 300 karakter → 400 VALIDATION_ERROR", async () => {
   expect(res.body.error.code).toBe("VALIDATION_ERROR");
 });
 
-test("F01-SEC-2: login berhasil tidak memakan jatah (5 berhasil lalu salah → 401)", async () => {
-  for (let i = 0; i < 5; i++) expect((await login(benar)).status).toBe(200);
-  expect((await login(salah)).status).toBe(401);
+test("login berhasil tidak memakan jatah (5 berhasil lalu salah → 401)", async () => {
+  for (let i = 0; i < 5; i++) expect((await login(correctBody)).status).toBe(200);
+  expect((await login(wrongBody)).status).toBe(401);
 });
 
-test("F01-SEC-2: X-Client-IP dipercaya hanya bila secret cocok; bucket per IP klien", async () => {
+test("X-Client-IP dipercaya hanya bila secret cocok; bucket per IP klien", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
-    for (let i = 0; i < 5; i++) expect((await loginDari("203.0.113.1", salah)).status).toBe(401);
-    expect((await loginDari("203.0.113.1", salah)).status).toBe(429);
-    expect((await loginDari("203.0.113.2", salah)).status).toBe(401);
+    for (let i = 0; i < 5; i++) expect((await loginFrom("203.0.113.1", wrongBody)).status).toBe(401);
+    expect((await loginFrom("203.0.113.1", wrongBody)).status).toBe(429);
+    expect((await loginFrom("203.0.113.2", wrongBody)).status).toBe(401);
   } finally {
     env.INTERNAL_API_SECRET = undefined;
   }
 });
 
-test("F01-SEC-2: X-Client-IP diabaikan bila secret salah/kosong/tak dikonfigurasi", async () => {
+test("X-Client-IP diabaikan bila secret salah/kosong/tak dikonfigurasi", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
     for (const secret of ["salah-salah-salah-salah-salah-salah-1", "x".repeat(SECRET.length), "pendek", null]) {
       loginLimiter.reset();
-      for (let i = 0; i < 5; i++) expect((await loginDari(`203.0.113.${i + 10}`, salah, secret)).status).toBe(401);
-      expect((await loginDari("203.0.113.99", salah, secret)).status).toBe(429);
+      for (let i = 0; i < 5; i++) expect((await loginFrom(`203.0.113.${i + 10}`, wrongBody, secret)).status).toBe(401);
+      expect((await loginFrom("203.0.113.99", wrongBody, secret)).status).toBe(429);
     }
     env.INTERNAL_API_SECRET = undefined;
     loginLimiter.reset();
-    for (let i = 0; i < 5; i++) expect((await loginDari(`203.0.113.${i + 10}`, salah)).status).toBe(401);
-    expect((await loginDari("203.0.113.99", salah)).status).toBe(429);
+    for (let i = 0; i < 5; i++) expect((await loginFrom(`203.0.113.${i + 10}`, wrongBody)).status).toBe(401);
+    expect((await loginFrom("203.0.113.99", wrongBody)).status).toBe(429);
   } finally {
     env.INTERNAL_API_SECRET = undefined;
   }
 });
 
-test("F01-SEC-2: 10 gagal dari 10 IP → IP baru 429 walau sandi benar; varian aksen ikut", async () => {
+test("10 gagal dari 10 IP → IP baru 429 walau sandi benar; varian aksen ikut", async () => {
   env.INTERNAL_API_SECRET = SECRET;
   try {
-    for (let i = 0; i < 10; i++) expect((await loginDari(`198.51.100.${i + 1}`, salah)).status).toBe(401);
-    expect((await loginDari("198.51.100.200", benar)).status).toBe(429);
-    expect((await loginDari("198.51.100.201", { ...benar, identifier: "búdi@mail.com" })).status).toBe(429);
+    for (let i = 0; i < 10; i++) expect((await loginFrom(`198.51.100.${i + 1}`, wrongBody)).status).toBe(401);
+    expect((await loginFrom("198.51.100.200", correctBody)).status).toBe(429);
+    expect((await loginFrom("198.51.100.201", { ...correctBody, identifier: "búdi@mail.com" })).status).toBe(429);
   } finally {
     env.INTERNAL_API_SECRET = undefined;
   }
 });
 
-test("F01-SEC-2: 8 login salah paralel dari satu IP → tepat 5×401, sisanya 429", async () => {
-  const rs = await Promise.all(Array.from({ length: 8 }, () => login(salah)));
-  expect(rs.filter((r) => r.status === 401)).toHaveLength(5);
-  expect(rs.filter((r) => r.status === 429)).toHaveLength(3);
-  expect((await login(salah)).status).toBe(429);
+test("8 login salah paralel dari satu IP → tepat 5×401, sisanya 429", async () => {
+  const responses = await Promise.all(Array.from({ length: 8 }, () => login(wrongBody)));
+  expect(responses.filter((res) => res.status === 401)).toHaveLength(5);
+  expect(responses.filter((res) => res.status === 429)).toHaveLength(3);
+  expect((await login(wrongBody)).status).toBe(429);
 });

@@ -6,7 +6,10 @@ import { migrate } from "../src/scripts/migrate";
 import { resetTestDatabase } from "./helpers/db";
 
 // semua berkas migrasi, urut nama (sama dengan urutan migrate())
-const SEMUA = fs.readdirSync(path.join(__dirname, "../database/migrations")).filter((f) => f.endsWith(".sql")).sort();
+const ALL_MIGRATIONS = fs
+  .readdirSync(path.join(__dirname, "../database/migrations"))
+  .filter((file) => file.endsWith(".sql"))
+  .sort();
 
 describe("migrasi", () => {
   let url: string;
@@ -18,7 +21,7 @@ describe("migrasi", () => {
   });
 
   test("DB kosong → semua migrasi diterapkan berurutan, 34 tabel + schema_migrations", async () => {
-    expect(firstRun).toEqual(SEMUA);
+    expect(firstRun).toEqual(ALL_MIGRATIONS);
     expect(firstRun.slice(0, 4)).toEqual(["001_init.sql", "002_admin.sql", "003_checkout.sql", "004_moderasi.sql"]);
     const conn = await mysql.createConnection(url);
     const [rows] = await conn.query<mysql.RowDataPacket[]>(
@@ -41,7 +44,7 @@ describe("migrasi", () => {
     expect(await migrate(url)).toEqual([]);
   });
 
-  test("menghapus user pemilik toko ditolak (bukan cascade) — BE-12", async () => {
+  test("menghapus user pemilik toko ditolak (bukan cascade)", async () => {
     const conn = await mysql.createConnection(url);
     const [rows] = await conn.query<mysql.RowDataPacket[]>(
       `SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS

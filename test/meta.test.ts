@@ -19,7 +19,7 @@ test("GET /api/v1/meta/merchant-types → 5 jenis usaha", async () => {
 test("jenis usaha nonaktif tidak ditampilkan", async () => {
   await db.query("UPDATE merchant_types SET is_active = FALSE WHERE id = 5");
   const res = await request(app).get("/api/v1/meta/merchant-types");
-  expect(res.body.data.map((t: { id: number }) => t.id)).toEqual([1, 2, 3, 4]);
+  expect(res.body.data.map((type: { id: number }) => type.id)).toEqual([1, 2, 3, 4]);
 });
 
 test("GET /api/v1/meta/categories → 7 kategori urut sort_order, nonaktif disembunyikan, urutan dari admin", async () => {
@@ -43,13 +43,18 @@ test("GET /api/v1/meta/pickup-points → urut nama, nonaktif disembunyikan", asy
   expect(res.body.data[0].name).toBe("Gazebo Fakultas Ilmu Komputer");
   await db.query("UPDATE pickup_points SET is_active = FALSE WHERE id = 2");
   res = await request(app).get("/api/v1/meta/pickup-points");
-  expect(res.body.data.map((p: { id: number }) => p.id)).toEqual([3, 1]);
+  expect(res.body.data.map((point: { id: number }) => point.id)).toEqual([3, 1]);
 });
 
 test("GET /api/v1/meta/settings → service_fee number, timezone string, mengikuti nilai admin", async () => {
   let res = await request(app).get("/api/v1/meta/settings");
   expect(res.status).toBe(200);
-  expect(res.body.data).toEqual({ service_fee: 0, timezone: "Asia/Jakarta", cs_whatsapp: null, maintenance: { aktif: false, pesan: null } });
+  expect(res.body.data).toEqual({
+    service_fee: 0,
+    timezone: "Asia/Jakarta",
+    cs_whatsapp: null,
+    maintenance: { aktif: false, pesan: null },
+  });
   await db.query("UPDATE app_settings SET setting_value = '2000' WHERE setting_key = 'service_fee'");
   res = await request(app).get("/api/v1/meta/settings");
   expect(res.body.data.service_fee).toBe(2000);

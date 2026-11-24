@@ -1,0 +1,80 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { beforeAll, describe, expect, test } from "vitest";
+import db from "../src/config/db";
+import { placeOrder, prepareCheckout } from "./helpers/merchant";
+
+// Migrasi 014: kolom & tabel voucher, dan backfill potongan pesanan lama (promo_id tunggal) ke slot toko / platform
+const SQL = readFileSync(join(__dirname, "../database/migrations/014_voucher.sql"), "utf8");
+const BACKFILL = /-- backfill[^\n]*\n([\s\S]*?;)/.exec(SQL)?.[1] ?? "";
+
+let setup: Awaited<ReturnType<typeof prepareCheckout>>;
+const promo = async (merchantId: number | null, code: string) => {
+  const [result] = await db.query<any>(
+    `INSERT INTO promos (merchant_id, code, type, value, min_subtotal, starts_at, ends_at)
+     VALUES (?, ?, 'fixed', 3000, 0, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 1 DAY)`,
+    [merchantId, code],
+  );
+  return result.insertId as number;
+};
+const orderRow = async (code: string) =>
+  ((await db.query<any[]>("SELECT * FROM orders WHERE code = ?", [code]))[0] as any[])[0];
+
+beforeAll(async () => {
+  setup = await prepareCheckout();
+});
+
+describe("migrasi 014 voucher", () => {
+  test("kolom & tabel baru ada dengan bawaan yang benar", async () => {
+    const id = await promo(setup.idA, "BARU1");
+    const [[promoRow]] = await db.query<any[]>("SELECT is_public FROM promos WHERE id = ?", [id]);
+    expect(Boolean(promoRow.is_public)).toBe(true);
+    const code = await placeOrder(setup.customerToken, setup.menu);
+    expect(await orderRow(code)).toMatchObject({
+      merchant_promo_id: null,
+      merchant_discount: 0,
+      platform_promo_id: null,
+      platform_discount: 0,
+    });
+    const [[user]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
+    await db.query("INSERT INTO promo_claims (promo_id, user_id) VALUES (?, ?)", [id, user.id]);
+    await expect(
+      db.query("INSERT INTO promo_claims (promo_id, user_id) VALUES (?, ?)", [id, user.id]),
+    ).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+    // dua voucher per pesanan → dua baris redemption; promo yang sama dua kali di pesanan yang sama tetap ditolak
+    const id2 = await promo(null, "BARU2");
+    const [[order]] = await db.query<any[]>("SELECT id FROM orders WHERE code = ?", [code]);
+    const redeem = (promoId: number) =>
+      db.query("INSERT INTO promo_redemptions (promo_id, order_id, user_id, amount) VALUES (?, ?, ?, 1)", [
+        promoId,
+        order.id,
+        user.id,
+      ]);
+    await redeem(id);
+    await redeem(id2);
+    await expect(redeem(id)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+  });
+
+  test("backfill: promo_id lama → slot toko atau platform sesuai pemilik promo", async () => {
+    expect(BACKFILL).toMatch(/^UPDATE orders/);
+    const merchantPromo = await promo(setup.idA, "LAMATOKO");
+    const platform = await promo(null, "LAMAPLAT");
+    const firstCode = await placeOrder(setup.customerToken, setup.menu);
+    const secondCode = await placeOrder(setup.customerToken, setup.menu2);
+    await db.query("UPDATE orders SET promo_id = ?, discount = 3000 WHERE code = ?", [merchantPromo, firstCode]);
+    await db.query("UPDATE orders SET promo_id = ?, discount = 2500 WHERE code = ?", [platform, secondCode]);
+    await db.query(BACKFILL);
+    expect(await orderRow(firstCode)).toMatchObject({
+      merchant_promo_id: merchantPromo,
+      merchant_discount: 3000,
+      platform_promo_id: null,
+      platform_discount: 0,
+    });
+    expect(await orderRow(secondCode)).toMatchObject({
+      merchant_promo_id: null,
+      merchant_discount: 0,
+      platform_promo_id: platform,
+      platform_discount: 2500,
+    });
+  });
+});

@@ -3,16 +3,16 @@ import request from "supertest";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import { validate } from "../src/middleware/validate";
-import { errorHandler } from "../src/middleware/errorHandler";
+import { errorHandler } from "../src/middleware/error-handler";
 
 function makeApp(schema: z.ZodType) {
-  const a = express();
-  a.use(express.json());
-  a.post("/x", validate(schema), (req, res) => {
+  const expressApp = express();
+  expressApp.use(express.json());
+  expressApp.post("/x", validate(schema), (req, res) => {
     res.json({ data: req.body });
   });
-  a.use(errorHandler);
-  return a;
+  expressApp.use(errorHandler);
+  return expressApp;
 }
 
 describe("validate()", () => {

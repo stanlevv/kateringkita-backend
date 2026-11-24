@@ -32,14 +32,14 @@ AI tidak "dilatih": setiap permintaan membaca menu dan stok terbaru, jadi peruba
 }
 ```
 
-| Kolom | Wajib | Aturan |
-|---|---|---|
-| `question` | ya | teks 3–500 karakter |
-| `budget` | tidak | angka bulat Rupiah 1.000–100.000.000 (angka JSON, bukan string) |
-| `portions` | tidak | angka bulat 1–1.000 |
-| `category` | tidak | slug kategori dari `GET /meta/categories` |
-| `merchant` | tidak | slug toko |
-| `pickup_point_id` | tidak | id dari `GET /meta/pickup-points` |
+| Kolom             | Wajib | Aturan                                                          |
+| ----------------- | ----- | --------------------------------------------------------------- |
+| `question`        | ya    | teks 3–500 karakter                                             |
+| `budget`          | tidak | angka bulat Rupiah 1.000–100.000.000 (angka JSON, bukan string) |
+| `portions`        | tidak | angka bulat 1–1.000                                             |
+| `category`        | tidak | slug kategori dari `GET /meta/categories`                       |
+| `merchant`        | tidak | slug toko                                                       |
+| `pickup_point_id` | tidak | id dari `GET /meta/pickup-points`                               |
 
 ## Respons 200
 
@@ -52,7 +52,12 @@ AI tidak "dilatih": setiap permintaan membaca menu dan stok terbaru, jadi peruba
       {
         "merchant": { "id": 3, "slug": "dapur-siti", "business_name": "Dapur Siti", "is_open": true },
         "items": [
-          { "menu": { "...": "kartu menu, sama dengan item GET /menus" }, "qty": 5, "subtotal": 75000, "reason": "Tidak pedas, favorit" },
+          {
+            "menu": { "...": "kartu menu, sama dengan item GET /menus" },
+            "qty": 5,
+            "subtotal": 75000,
+            "reason": "Tidak pedas, favorit"
+          },
           { "menu": { "...": "..." }, "qty": 5, "subtotal": 25000, "reason": null }
         ],
         "total": 100000
@@ -75,12 +80,12 @@ AI tidak "dilatih": setiap permintaan membaca menu dan stok terbaru, jadi peruba
 
 ## Galat
 
-| Status | Kode | Kapan |
-|---|---|---|
-| 400 | `VALIDATION_ERROR` | kolom tidak valid (`error.fields.<kolom>`), termasuk `question` yang berisi pola prompt injection: `"Permintaan berisi perintah yang tidak diizinkan."` |
-| 401 | `UNAUTHENTICATED` | tanpa token / sesi habis |
-| 403 | `FORBIDDEN` | bukan akun pembeli |
-| 429 | `RATE_LIMITED` | lebih dari 10 permintaan per 10 menit per pengguna (kuota bersama asisten AI) |
+| Status | Kode               | Kapan                                                                                                                                                   |
+| ------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `VALIDATION_ERROR` | kolom tidak valid (`error.fields.<kolom>`), termasuk `question` yang berisi pola prompt injection: `"Permintaan berisi perintah yang tidak diizinkan."` |
+| 401    | `UNAUTHENTICATED`  | tanpa token / sesi habis                                                                                                                                |
+| 403    | `FORBIDDEN`        | bukan akun pembeli                                                                                                                                      |
+| 429    | `RATE_LIMITED`     | lebih dari 10 permintaan per 10 menit per pengguna (kuota bersama asisten AI)                                                                           |
 
 AI yang tidak tersedia **tidak** menghasilkan galat; respons memakai `source: "fallback"`.
 

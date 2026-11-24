@@ -2,9 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { expect, test } from "vitest";
+import { afterAll, expect, test } from "vitest";
 import { migrate } from "../src/scripts/migrate";
 import { resetTestDatabase } from "./helpers/db";
+
+// DB yang ditinggalkan harus utuh untuk file berikutnya
+afterAll(async () => {
+  await migrate(await resetTestDatabase());
+});
 
 test("file migrasi rusak → error menyebut nama file dan tidak tercatat", async () => {
   const url = await resetTestDatabase();

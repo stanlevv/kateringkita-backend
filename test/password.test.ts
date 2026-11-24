@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { migrate } from "../src/scripts/migrate";
-import { loginLimiter, passwordLimiter } from "../src/middleware/rateLimiter";
+import { loginLimiter, passwordLimiter } from "../src/middleware/rate-limiter";
 import { resetTestDatabase } from "./helpers/db";
 
 let tokenA: string;
@@ -12,10 +12,10 @@ let tokenB: string;
 const login = (password = "rahasia123") =>
   request(app).post("/api/v1/auth/login").send({ identifier: "budi@mail.com", password, client: "web" });
 const change = (body: object, token?: string) => {
-  const r = request(app).put("/api/v1/me/password").send(body);
-  return token ? r.set("Authorization", `Bearer ${token}`) : r;
+  const req = request(app).put("/api/v1/me/password").send(body);
+  return token ? req.set("Authorization", `Bearer ${token}`) : req;
 };
-const me = (token: string) => request(app).get("/api/v1/me").set("Authorization", `Bearer ${token}`);
+const getMe = (token: string) => request(app).get("/api/v1/me").set("Authorization", `Bearer ${token}`);
 const wrong = { current_password: "salahsalah1", new_password: "baru12345" };
 
 beforeEach(async () => {
@@ -44,9 +44,9 @@ test("percobaan salah ke-6 -> 429 RATE_LIMITED", async () => {
 });
 
 test("8 percobaan salah paralel -> tepat 5x 400 dan 3x 429", async () => {
-  const rs = await Promise.all(Array.from({ length: 8 }, () => change(wrong, tokenA)));
-  expect(rs.filter((r) => r.status === 400)).toHaveLength(5);
-  expect(rs.filter((r) => r.status === 429)).toHaveLength(3);
+  const responses = await Promise.all(Array.from({ length: 8 }, () => change(wrong, tokenA)));
+  expect(responses.filter((res) => res.status === 400)).toHaveLength(5);
+  expect(responses.filter((res) => res.status === 429)).toHaveLength(3);
 });
 
 test("sandi baru tidak valid tidak memakan jatah", async () => {
@@ -66,8 +66,8 @@ test("sukses -> 204, sesi lain dicabut, sesi ini hidup, sandi berganti", async (
   const res = await change({ current_password: "rahasia123", new_password: "baru12345" }, tokenA);
   expect(res.status).toBe(204);
   expect(res.text).toBe("");
-  await me(tokenA).expect(200);
-  await me(tokenB).expect(401);
+  await getMe(tokenA).expect(200);
+  await getMe(tokenB).expect(401);
   await login("rahasia123").expect(401);
   await login("baru12345").expect(200);
 });
@@ -78,9 +78,9 @@ test("tanpa token -> 401", async () => {
 
 afterEach(() => vi.restoreAllMocks());
 
-// AUD-29: hash ditulis sebelum sesi dicabut, jadi kegagalan di langkah ini belum mengubah apa pun (aman diulang)
+// Urutan ganti sandi: hash ditulis sebelum sesi dicabut, jadi kegagalan di langkah ini belum mengubah apa pun (aman diulang)
 test("UPDATE hash gagal -> 500, belum ada yang berubah: sesi lain tetap, sandi lama tetap berlaku", async () => {
-  const orig = db.query.bind(db) as (...a: unknown[]) => Promise<unknown>;
+  const orig = db.query.bind(db) as (...args: unknown[]) => Promise<unknown>;
   vi.spyOn(db, "query").mockImplementation(((sql: unknown, ...rest: unknown[]) =>
     typeof sql === "string" && sql.startsWith("UPDATE users SET password_hash")
       ? Promise.reject(new Error("gagal"))
@@ -88,6 +88,6 @@ test("UPDATE hash gagal -> 500, belum ada yang berubah: sesi lain tetap, sandi l
   const res = await change({ current_password: "rahasia123", new_password: "baru12345" }, tokenA);
   expect(res.status).toBe(500);
   vi.restoreAllMocks();
-  await me(tokenB).expect(200);
+  await getMe(tokenB).expect(200);
   await login("rahasia123").expect(200);
 });

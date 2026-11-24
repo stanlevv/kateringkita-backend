@@ -1,33 +1,41 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, test, vi } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import { AppError } from "../src/utils/errors";
-import { errorHandler, notFoundHandler } from "../src/middleware/errorHandler";
+import { errorHandler, notFoundHandler } from "../src/middleware/error-handler";
 import app from "../src/app";
+import { migrate } from "../src/scripts/migrate";
+import { resetTestDatabase } from "./helpers/db";
+
+beforeAll(async () => {
+  await migrate(await resetTestDatabase()); // app.ts membaca app_settings (pemeliharaan)
+});
 
 function makeApp() {
-  const a = express();
-  a.use(express.json());
-  a.get("/conflict", () => {
+  const expressApp = express();
+  expressApp.use(express.json());
+  expressApp.get("/conflict", () => {
     throw new AppError(409, "CONFLICT", "Email sudah terdaftar.", { email: ["Sudah dipakai."] });
   });
-  a.get("/boom", async () => {
+  expressApp.get("/boom", async () => {
     throw new Error("ER_NO_SUCH_TABLE: Table 'kk.menus' doesn't exist");
   });
-  a.get("/dup", () => {
+  expressApp.get("/dup", () => {
     throw Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY" });
   });
-  a.get("/sql", () => {
+  expressApp.get("/sql", () => {
     throw Object.assign(new Error("Check constraint 'menus_chk_2' is violated."), {
-      code: "ER_CHECK_CONSTRAINT_VIOLATED", errno: 3819, sql: "INSERT INTO orders (customer_phone) VALUES ('081234567890')",
+      code: "ER_CHECK_CONSTRAINT_VIOLATED",
+      errno: 3819,
+      sql: "INSERT INTO orders (customer_phone) VALUES ('081234567890')",
     });
   });
-  a.post("/echo", (req, res) => {
+  expressApp.post("/echo", (req, res) => {
     res.json({ data: req.body });
   });
-  a.use(notFoundHandler);
-  a.use(errorHandler);
-  return a;
+  expressApp.use(notFoundHandler);
+  expressApp.use(errorHandler);
+  return expressApp;
 }
 
 describe("error terpusat", () => {
@@ -60,7 +68,7 @@ describe("error terpusat", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     await request(makeApp()).get("/sql").expect(500);
     const args = spy.mock.calls.flat();
-    expect(args.some((x) => typeof x === "object" && x !== null)).toBe(false);
+    expect(args.some((arg) => typeof arg === "object" && arg !== null)).toBe(false);
     const log = args.join(" ");
     expect(log).toContain("ER_CHECK_CONSTRAINT_VIOLATED");
     expect(log).not.toContain("081234567890");

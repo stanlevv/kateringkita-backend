@@ -1,0 +1,104 @@
+# style: format seluruh kode dengan prettier (F28)
+87ac620f5e67b125328f8bf8cb068f07f64ad2ed
+
+# refactor(pesanan): nama file bahasa Inggris (F28)
+a72d0982600ff76588b6e5ff4b238acea3e11797
+
+# refactor(pesanan): nama kode bahasa Inggris (F28)
+364ec20f207ada52c7a346e3cc4edb615b8501ee
+
+# refactor(pesanan): akhiran _MSG untuk konstanta pesan (F28)
+b12c34eabf3565ce2d52032158383d7d6cf9aba3
+
+# refactor(pesanan): akhiran _MSG untuk konstanta pesan tersisa (F28)
+a3b93f011880b3c9cd178ad8a13ea87b4be87ae0
+
+# refactor(pesanan): nama variabel dan properti internal yang jelas (F28)
+493b39a22c3c5f53fcadb4907ccdf85ead2ba246
+
+# refactor(pesanan): nama lokal yang jelas hasil review (F28)
+0a5f79f5dc3c9a1a61150218042abd8af1165cf8
+
+# refactor(dasar): nama file bahasa Inggris (F28)
+7a99af3f811b4ceec1016db6bc9cd678de97a80f
+
+# refactor(dasar): nama kode bahasa Inggris yang jelas (F28)
+7a6b9ebb9c08ac3af35cd0630c819700caf3fdef
+
+# refactor(dasar): nama pendek tersisa jadi kata utuh (F28)
+d0b90c60c989d5d5d7ad63b6449c035da76a7a7e
+
+# refactor(dasar): shorthand durationMs di request-logger (F28)
+ea70f964152d666308cd1878e1960866add76064
+
+# refactor(auth): nama file bahasa Inggris (F28)
+64930be4d38fd7c66ae9bc0375cd318b14789848
+
+# refactor(auth): nama kode bahasa Inggris yang jelas (F28)
+0a6e5979c062875d98162ef9c0ae162d79cd9de5
+
+# refactor(katalog): nama file bahasa Inggris (F28)
+91a36f2ade9c264934650e41a23323c304b144e6
+
+# refactor(katalog): nama kode bahasa Inggris yang jelas (F28)
+a32bb9e1f53f24c1838621fc446b3f3150506a74
+
+# refactor(penjual): nama file bahasa Inggris (F28)
+31a3f01d7a14a18d7dadcd4e5428be7d40aabb9e
+
+# refactor(penjual): nama kode bahasa Inggris yang jelas (F28)
+794ccf635a660b336eef5ca891ca163888c732f3
+
+# refactor(pembayaran): nama file bahasa Inggris (F28)
+e3aea2662d5b13e9f100dbf978401e726cbf54f1
+
+# refactor(pembayaran): nama kode bahasa Inggris yang jelas (F28)
+a050916cf3c5461b5410592ee98e50d1b9a39d2b
+
+# refactor(test): nama file dan deskripsi test alur utama bahasa Inggris (F28)
+1e7457358b2ebb0e556fd0a03c3452634b0c581f
+
+# refactor(test): nama helper test bahasa Inggris (F28)
+a3262e155c37e959efccbfe7b0dd4b55f0f50fbd
+
+# refactor(test): deskripsi test memakai nama kode baru; ORDER_NOTIFICATION_TEMPLATES (F28)
+c9fe57b6c816564ab3b3bbbdf97520f0ee106d5c
+
+# refactor(test): nama variabel lokal test alur utama yang jelas (F28)
+01adcdb6d9eda92491e0779babe91564daa977f7
+
+# refactor(test): expressApp alih-alih testApp agar tidak terbaca sebagai test oleh vitest list (F28)
+8bde9c0e3b480c8cc9cdf256fb58d6f485929f25
+
+# refactor(fitur-lain): nama file bahasa Inggris (F28)
+7bb99eb59820f1801801b64d94dcfae7ffd23a1b
+
+# refactor(fitur-lain): nama kode bahasa Inggris yang jelas (F28)
+cb28317fefa61fc3e2aa0e0fe9783755df76e4e5
+
+# refactor(fitur-lain): nama pendek di test fitur-lain jadi kata utuh (F28)
+6cec3ecd02f68d6a6952648a267c0cd78b12c484
+
+# refactor(fitur-lain): nama lama di komentar dan kunci test pendek jadi kata utuh (F28)
+e82610290dc3ce548514bad5447c276fe4cb2645
+
+# refactor(fitur-lain): kode catatan internal di judul dan komentar test diganti kata-kata (F28)
+79a4eb3b2a05892073bdcb77543d43e8e6727dc6
+
+# refactor(admin): nama file bahasa Inggris (F28)
+b8788117a2a7d05d20f6ce21f15979880930932b
+
+# refactor(admin): nama kode bahasa Inggris yang jelas (F28)
+df07518e2e529888a1e547ff071ca5f989de8f5e
+
+# refactor(admin): nama pendek di test admin dan nama lama di komentar jadi kata utuh (F28)
+2a8092b7a20f08acc50fd7af5143b29d8230c0e4
+
+# refactor(test): kode catatan internal di judul dan komentar test diganti kata-kata (F28)
+c9e88ff122d0dd256b5b53ae6e9ad6c696304b9b
+
+# refactor(test): nama variabel, helper, dan konstanta test bahasa Inggris (F28)
+0b420ea55220a58b681a7c840c9514e3d1ed3fc6
+
+# refactor(pesanan): buyer menjadi customer sesuai glosarium (F28)
+58aee353021d7d052bf05bfe476861886c012f70

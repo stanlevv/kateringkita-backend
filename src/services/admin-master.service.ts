@@ -1,143 +1,281 @@
+// Isi file: kelola data master oleh admin (super dan ops) lewat /admin/master/:kind. Data master = daftar pilihan
+// yang dipakai seluruh aplikasi: kategori menu (`categories`), titik temu atau tempat ambil pesanan (`pickup-points`),
+// dan jenis usaha toko (`merchant-types`). Alurnya routes/admin.ts → handlers/admin.handler.ts → file ini → database.
+// Data master tidak dihapus, hanya dinonaktifkan. Setiap perubahan dicatat di log audit (`master.<kind>.<aksi>`).
 import { RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { parse } from "../middleware/validate";
-import { Conn, catat, dalamTransaksi, kunci, withBool } from "./admin-audit.service";
+import { Conn, recordAudit, withTransaction, lockRow, withBooleanFlags } from "./admin-audit.service";
 
-const name = (max: number) => z.string({ error: "Nama wajib diisi." }).trim().min(1, "Nama wajib diisi.").max(max, `Nama maksimal ${max} karakter.`);
-const sortOrder = z.number({ error: "Urutan harus angka." }).int("Urutan harus bilangan bulat.").min(0, "Urutan tidak boleh negatif.");
+// Aturan kolom nama: wajib, spasi di ujung dibuang, panjang maksimal sesuai kolom tabel.
+const nameField = (max: number) =>
+  z
+    .string({ error: "Nama wajib diisi." })
+    .trim()
+    .min(1, "Nama wajib diisi.")
+    .max(max, `Nama maksimal ${max} karakter.`);
+// Urutan tampil: bilangan bulat 0 atau lebih (kecil tampil lebih dulu).
+const sortOrder = z
+  .number({ error: "Urutan harus angka." })
+  .int("Urutan harus bilangan bulat.")
+  .min(0, "Urutan tidak boleh negatif.");
 
-// Per jenis data master: tabel, kolom yang boleh ditulis (hanya ini yang masuk SQL), urutan daftar.
+// Per jenis data master: nama tabel, urutan daftar, perlu slug atau tidak, dan skema zod untuk buat dan ubah. Hanya
+// kolom yang ada di skema yang bisa masuk SQL, jadi nama kolom tidak pernah datang dari input pengguna.
 const KINDS = {
   categories: {
-    table: "categories", order: "sort_order, id", slug: true,
-    create: z.object({ name: name(60), icon: z.string().trim().max(40, "Ikon maksimal 40 karakter.").nullish() }),
-    update: z.object({ name: name(60), icon: z.string().trim().max(40, "Ikon maksimal 40 karakter.").nullish(), sort_order: sortOrder }).partial(),
+    table: "categories",
+    order: "sort_order, id",
+    slug: true,
+    create: z.object({ name: nameField(60), icon: z.string().trim().max(40, "Ikon maksimal 40 karakter.").nullish() }),
+    update: z
+      .object({
+        name: nameField(60),
+        icon: z.string().trim().max(40, "Ikon maksimal 40 karakter.").nullish(),
+        sort_order: sortOrder,
+      })
+      .partial(),
   },
   "pickup-points": {
-    table: "pickup_points", order: "name, id", slug: false,
-    create: z.object({ name: name(120), description: z.string().trim().max(255, "Deskripsi maksimal 255 karakter.").nullish() }),
-    update: z.object({ name: name(120), description: z.string().trim().max(255, "Deskripsi maksimal 255 karakter.").nullish() }).partial(),
+    table: "pickup_points",
+    order: "name, id",
+    slug: false,
+    create: z.object({
+      name: nameField(120),
+      description: z.string().trim().max(255, "Deskripsi maksimal 255 karakter.").nullish(),
+    }),
+    update: z
+      .object({
+        name: nameField(120),
+        description: z.string().trim().max(255, "Deskripsi maksimal 255 karakter.").nullish(),
+      })
+      .partial(),
   },
   "merchant-types": {
-    table: "merchant_types", order: "sort_order, id", slug: false,
-    create: z.object({ name: name(100) }),
-    update: z.object({ name: name(100), sort_order: sortOrder }).partial(),
+    table: "merchant_types",
+    order: "sort_order, id",
+    slug: false,
+    create: z.object({ name: nameField(100) }),
+    update: z.object({ name: nameField(100), sort_order: sortOrder }).partial(),
   },
 } as const;
 type Kind = keyof typeof KINDS;
 
-const kindOf = (k: string) => {
-  if (!Object.prototype.hasOwnProperty.call(KINDS, k)) throw new AppError(404, "NOT_FOUND", "Data tidak ditemukan.");
-  return KINDS[k as Kind];
+// Jenis data master dari URL; jenis yang tidak dikenal dijawab 404.
+const getKindConfig = (kind: string) => {
+  if (!Object.prototype.hasOwnProperty.call(KINDS, kind)) throw new AppError(404, "NOT_FOUND", "Data tidak ditemukan.");
+  return KINDS[kind as Kind];
 };
-const duplikat = (e: unknown) => {
-  if ((e as { code?: string })?.code === "ER_DUP_ENTRY") throw new AppError(409, "CONFLICT", "Nama sudah dipakai.");
-  throw e;
+// Galat MySQL "nilai kembar" (nama atau slug sudah ada) diubah menjadi 409; galat lain diteruskan.
+const rethrowDuplicateName = (error: unknown) => {
+  if ((error as { code?: string })?.code === "ER_DUP_ENTRY") throw new AppError(409, "CONFLICT", "Nama sudah dipakai.");
+  throw error;
 };
 
-export async function daftarMaster(kind: string) {
-  const k = kindOf(kind);
-  const [rows] = await db.query<RowDataPacket[]>(`SELECT * FROM ${k.table} ORDER BY ${k.order}`);
-  return rows.map(withBool);
+/**
+ * Daftar semua data master satu jenis, termasuk yang nonaktif.
+ * @param kind jenis dari URL: `categories`, `pickup-points`, atau `merchant-types`
+ * @returns semua baris tabel itu, `is_active` berupa boolean
+ * @throws 404 jenis tidak dikenal
+ */
+export async function listMasterData(kind: string) {
+  const config = getKindConfig(kind);
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT * FROM ${config.table} ORDER BY ${config.order}`);
+  return rows.map(withBooleanFlags);
 }
 
-const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "kategori";
+// Nama menjadi slug untuk URL: huruf kecil, selain huruf/angka diganti "-" (contoh "Nasi Kotak!" → "nasi-kotak").
+const slugify = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "kategori";
 
-export async function buatMaster(adminId: number, kind: string, body: unknown) {
-  const k = kindOf(kind);
-  const data: Record<string, unknown> = parse(k.create, body);
+/**
+ * Menambah satu data master. Kategori mendapat slug unik (ditambah "-2", "-3", ... bila sudah dipakai); jenis yang
+ * punya urutan ditaruh di urutan terakhir. Dicatat di log audit `master.<kind>.create`.
+ * @param adminId id admin yang menambah
+ * @param kind    jenis data master dari URL
+ * @param body    isi permintaan, diperiksa skema `create` jenis itu
+ * @returns baris baru
+ * @throws 400 isi tidak valid, 404 jenis tidak dikenal, 409 nama sudah dipakai
+ */
+export async function createMasterData(adminId: number, kind: string, body: unknown) {
+  // 1. Periksa jenis dan isi permintaan.
+  const config = getKindConfig(kind);
+  const data: Record<string, unknown> = parse(config.create, body);
   try {
-    return await dalamTransaksi(async (conn) => {
-      if (k.slug) {
-        // slug dibuat sekali saat dibuat dan tidak berubah saat nama diganti (URL stabil untuk mobile)
+    return await withTransaction(async (conn) => {
+      // 2. Kategori: buat slug unik. Slug dibuat sekali dan tidak ikut berubah saat nama diganti (URL stabil
+      //    untuk aplikasi mobile).
+      if (config.slug) {
         const base = slugify(String(data.name)).slice(0, 55).replace(/-+$/, ""); // sisakan ruang untuk "-N" (kolom 60)
         let slug = base;
-        for (let n = 2; ; n++) {
-          const [hit] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM ${k.table} WHERE slug = ?`, [slug]);
-          if (!hit.length) break;
-          slug = `${base}-${n}`;
+        for (let suffix = 2; ; suffix++) {
+          const [existing] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM ${config.table} WHERE slug = ?`, [slug]);
+          if (!existing.length) break;
+          slug = `${base}-${suffix}`;
         }
         data.slug = slug;
       }
-      if ("sort_order" in k.update.shape) {
-        // item baru di urutan terakhir (default 0 akan tampil paling atas)
-        const [mx] = await conn.query<RowDataPacket[]>(`SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM ${k.table}`);
-        data.sort_order = Number(mx[0].n);
+      // 3. Jenis yang punya urutan: data baru di urutan terakhir (bawaan 0 akan tampil paling atas).
+      if ("sort_order" in config.update.shape) {
+        const [maxRow] = await conn.query<RowDataPacket[]>(
+          `SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM ${config.table}`,
+        );
+        data.sort_order = Number(maxRow[0].n);
       }
-      const cols = Object.keys(data);
-      const [ins] = await conn.query<any>(`INSERT INTO ${k.table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, cols.map((c) => data[c] ?? null));
-      const [row] = await conn.query<RowDataPacket[]>(`SELECT * FROM ${k.table} WHERE id = ?`, [ins.insertId]);
-      await catat(conn, { adminId, action: `master.${kind}.create`, targetType: kind, targetId: ins.insertId, after: withBool(row[0]) });
-      return withBool(row[0]);
+      // 4. Simpan, baca ulang barisnya, lalu catat di log audit.
+      const columns = Object.keys(data);
+      const [insertResult] = await conn.query<any>(
+        `INSERT INTO ${config.table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+        columns.map((column) => data[column] ?? null),
+      );
+      const [row] = await conn.query<RowDataPacket[]>(`SELECT * FROM ${config.table} WHERE id = ?`, [
+        insertResult.insertId,
+      ]);
+      await recordAudit(conn, {
+        adminId,
+        action: `master.${kind}.create`,
+        targetType: kind,
+        targetId: insertResult.insertId,
+        after: withBooleanFlags(row[0]),
+      });
+      return withBooleanFlags(row[0]);
     });
-  } catch (e) {
-    return duplikat(e);
+  } catch (error) {
+    return rethrowDuplicateName(error);
   }
 }
 
-export async function ubahMaster(adminId: number, kind: string, idRaw: unknown, body: unknown) {
-  const k = kindOf(kind);
-  const data: Record<string, unknown> = parse(k.update, body);
-  const cols = Object.keys(data);
-  if (!cols.length) throw new AppError(400, "VALIDATION_ERROR", "Tidak ada data yang diubah.");
+/**
+ * Mengubah sebagian kolom satu data master (slug kategori tidak ikut berubah). Bila nilainya sama dengan yang
+ * tersimpan, tidak ada yang ditulis dan tidak ada log. Log audit `master.<kind>.update` hanya memuat kolom yang
+ * dikirim.
+ * @param adminId id admin yang mengubah
+ * @param kind    jenis data master dari URL
+ * @param idRaw   id data dari URL
+ * @param body    isi permintaan, diperiksa skema `update` jenis itu
+ * @returns baris sesudah diubah
+ * @throws 400 isi tidak valid atau kosong, 404 jenis atau data tidak ada, 409 nama sudah dipakai
+ */
+export async function updateMasterData(adminId: number, kind: string, idRaw: unknown, body: unknown) {
+  // 1. Periksa isi; minimal satu kolom harus dikirim.
+  const config = getKindConfig(kind);
+  const data: Record<string, unknown> = parse(config.update, body);
+  const columns = Object.keys(data);
+  if (!columns.length) throw new AppError(400, "VALIDATION_ERROR", "Tidak ada data yang diubah.");
   try {
-    return await dalamTransaksi(async (conn) => {
-      const before = await kunci(conn, k.table, idRaw);
-      if (cols.every((c) => (data[c] ?? null) === before[c])) return withBool(before); // tidak ada perubahan: tanpa log
-      await conn.query(`UPDATE ${k.table} SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`, [...cols.map((c) => data[c] ?? null), before.id]);
-      const [after] = await conn.query<RowDataPacket[]>(`SELECT * FROM ${k.table} WHERE id = ?`, [before.id]);
-      const pick = (r: RowDataPacket) => Object.fromEntries(cols.map((c) => [c, r[c]]));
-      await catat(conn, { adminId, action: `master.${kind}.update`, targetType: kind, targetId: before.id, before: pick(before), after: pick(after[0]) });
-      return withBool(after[0]);
+    return await withTransaction(async (conn) => {
+      // 2. Kunci barisnya; bila semua nilai sama dengan yang tersimpan, selesai tanpa menulis dan tanpa log.
+      const before = await lockRow(conn, config.table, idRaw);
+      if (columns.every((column) => (data[column] ?? null) === before[column])) return withBooleanFlags(before);
+      // 3. Simpan perubahan, lalu catat nilai lama dan baru kolom yang dikirim di log audit.
+      await conn.query(
+        `UPDATE ${config.table} SET ${columns.map((column) => `${column} = ?`).join(", ")} WHERE id = ?`,
+        [...columns.map((column) => data[column] ?? null), before.id],
+      );
+      const [after] = await conn.query<RowDataPacket[]>(`SELECT * FROM ${config.table} WHERE id = ?`, [before.id]);
+      const pick = (row: RowDataPacket) => Object.fromEntries(columns.map((column) => [column, row[column]]));
+      await recordAudit(conn, {
+        adminId,
+        action: `master.${kind}.update`,
+        targetType: kind,
+        targetId: before.id,
+        before: pick(before),
+        after: pick(after[0]),
+      });
+      return withBooleanFlags(after[0]);
     });
-  } catch (e) {
-    return duplikat(e);
+  } catch (error) {
+    return rethrowDuplicateName(error);
   }
 }
 
-// Menonaktifkan titik temu terakhir toko terverifikasi (pemilik aktif) → 409 dengan nama toko.
-// Urutan kunci tetap (toko urut id -> titik temu) agar penonaktifan bersamaan terserialisasi tanpa deadlock.
-async function cekTitikTemuTerakhir(conn: Conn, idRaw: unknown) {
+// Penjaga sebelum titik temu dinonaktifkan: tolak 409 (dengan nama tokonya) bila titik temu ini satu-satunya titik
+// temu aktif bagi toko terverifikasi yang pemiliknya aktif, karena pembeli toko itu jadi tidak punya tempat ambil.
+// Urutan kunci selalu sama (toko urut id, lalu titik temu) supaya penonaktifan bersamaan antre tanpa saling mengunci
+// (deadlock).
+async function guardLastPickupPoint(conn: Conn, idRaw: unknown) {
   const id = Number(idRaw);
   if (!Number.isInteger(id) || id < 1) throw new AppError(404, "NOT_FOUND", "Data tidak ditemukan.");
-  // shortcut: tautan toko dibaca tanpa kunci; tautan yang masuk sebelum titik temu terkunci ditangkap pembacaan ulang di bawah (409 "coba lagi"). Sisa: gap lock InnoDB bisa memicu deadlock; terdeteksi MySQL dan muncul sebagai 500, jarang.
-  const [links] = await conn.query<RowDataPacket[]>("SELECT merchant_id FROM merchant_pickup_points WHERE pickup_point_id = ?", [id]);
-  const tokoIds = links.map((l) => l.merchant_id).sort((a, b) => a - b);
-  if (tokoIds.length) await conn.query("SELECT id FROM merchants WHERE id IN (?) ORDER BY id FOR UPDATE", [tokoIds]);
-  const row = await kunci(conn, "pickup_points", id);
-  // titik temu sudah terkunci: tautan baru dari penjual tidak bisa masuk lagi, jadi baca ulang dan tolak bila ada toko yang terlewat
-  // FOR UPDATE, bukan FOR SHARE: TiDB (production) menolak FOR SHARE (ER_NOT_SUPPORTED_YET)
-  const [terkini] = await conn.query<RowDataPacket[]>("SELECT merchant_id FROM merchant_pickup_points WHERE pickup_point_id = ? FOR UPDATE", [id]);
-  if (terkini.some((l) => !tokoIds.includes(l.merchant_id))) throw new AppError(409, "CONFLICT", "Data titik temu berubah. Coba lagi.");
-  if (!row.is_active || !tokoIds.length) return; // sudah nonaktif: setAktif membalas tanpa perubahan
-  // Locking read setelah kunci toko: membaca data terbaru, bukan snapshot.
-  const [toko] = await conn.query<RowDataPacket[]>(
+  // 1. Baca toko yang memakai titik temu ini, lalu kunci toko-toko itu urut id.
+  // shortcut: tautan toko dibaca tanpa kunci; tautan yang masuk sebelum titik temu terkunci ditangkap pembacaan ulang
+  // di bawah (409 "coba lagi"). Sisa: gap lock InnoDB bisa memicu deadlock; terdeteksi MySQL dan muncul sebagai 500,
+  // jarang.
+  const [links] = await conn.query<RowDataPacket[]>(
+    "SELECT merchant_id FROM merchant_pickup_points WHERE pickup_point_id = ?",
+    [id],
+  );
+  const merchantIds = links.map((link) => link.merchant_id).sort((left, right) => left - right);
+  if (merchantIds.length)
+    await conn.query("SELECT id FROM merchants WHERE id IN (?) ORDER BY id FOR UPDATE", [merchantIds]);
+  // 2. Kunci titik temunya. Setelah ini tautan baru dari penjual tidak bisa masuk lagi, jadi tautan dibaca ulang dan
+  //    permintaan ditolak bila ada toko yang terlewat di langkah 1. Memakai FOR UPDATE, bukan FOR SHARE, karena
+  //    TiDB (database production) menolak FOR SHARE.
+  const row = await lockRow(conn, "pickup_points", id);
+  const [currentLinks] = await conn.query<RowDataPacket[]>(
+    "SELECT merchant_id FROM merchant_pickup_points WHERE pickup_point_id = ? FOR UPDATE",
+    [id],
+  );
+  if (currentLinks.some((link) => !merchantIds.includes(link.merchant_id)))
+    throw new AppError(409, "CONFLICT", "Data titik temu berubah. Coba lagi.");
+  // 3. Sudah nonaktif atau tidak dipakai toko mana pun: tidak ada yang perlu dijaga.
+  if (!row.is_active || !merchantIds.length) return;
+  // 4. Ambil toko terverifikasi dengan pemilik aktif. Pembacaan berkunci membaca data terbaru, bukan salinan lama.
+  const [merchants] = await conn.query<RowDataPacket[]>(
     `SELECT m.id, m.business_name FROM merchants m JOIN users u ON u.id = m.user_id
      WHERE m.id IN (?) AND m.verification_status = 'verified' AND u.is_active ORDER BY m.id FOR UPDATE`,
-    [tokoIds],
+    [merchantIds],
   );
-  if (!toko.length) return;
-  const [cadangan] = await conn.query<RowDataPacket[]>(
+  if (!merchants.length) return;
+  // 5. Cari toko yang masih punya titik temu aktif lain; toko yang tidak punya membuat permintaan ditolak.
+  const [otherPoints] = await conn.query<RowDataPacket[]>(
     `SELECT DISTINCT o.merchant_id FROM merchant_pickup_points o JOIN pickup_points p ON p.id = o.pickup_point_id
      WHERE o.merchant_id IN (?) AND o.pickup_point_id <> ? AND p.is_active FOR UPDATE`,
-    [toko.map((t) => t.id), id],
+    [merchants.map((merchant) => merchant.id), id],
   );
-  const aman = new Set(cadangan.map((c) => c.merchant_id));
-  const blok = toko.filter((t) => !aman.has(t.id));
-  if (blok.length) throw new AppError(409, "CONFLICT", `Titik temu ini satu-satunya untuk toko: ${blok.map((b) => b.business_name).join(", ")}.`);
+  const coveredIds = new Set(otherPoints.map((link) => link.merchant_id));
+  const blocked = merchants.filter((merchant) => !coveredIds.has(merchant.id));
+  if (blocked.length)
+    throw new AppError(
+      409,
+      "CONFLICT",
+      `Titik temu ini satu-satunya untuk toko: ${blocked.map((merchant) => merchant.business_name).join(", ")}.`,
+    );
 }
 
-// Sudah dalam keadaan tujuan → 200 tanpa perubahan dan tanpa baris log (idempoten).
-export async function setAktif(adminId: number, kind: string, idRaw: unknown, aktif: boolean) {
-  const k = kindOf(kind);
-  return dalamTransaksi(async (conn) => {
-    if (!aktif && kind === "pickup-points") await cekTitikTemuTerakhir(conn, idRaw);
-    const row = await kunci(conn, k.table, idRaw);
-    if (Boolean(row.is_active) === aktif) return withBool(row);
-    await conn.query(`UPDATE ${k.table} SET is_active = ? WHERE id = ?`, [aktif, row.id]);
-    await catat(conn, { adminId, action: `master.${kind}.${aktif ? "activate" : "deactivate"}`, targetType: kind, targetId: row.id, before: { is_active: Boolean(row.is_active) }, after: { is_active: aktif } });
-    return withBool({ ...row, is_active: aktif } as RowDataPacket);
+/**
+ * Mengaktifkan atau menonaktifkan satu data master. Bila sudah dalam keadaan tujuan, dijawab 200 tanpa perubahan dan
+ * tanpa log (idempoten: diulang berkali-kali hasilnya sama). Dicatat di log audit `master.<kind>.activate` atau
+ * `master.<kind>.deactivate`.
+ * @param adminId id admin yang mengubah
+ * @param kind    jenis data master dari URL
+ * @param idRaw   id data dari URL
+ * @param active  `true` untuk mengaktifkan, `false` untuk menonaktifkan
+ * @returns baris sesudah diubah
+ * @throws 404 jenis atau data tidak ada, 409 titik temu terakhir bagi toko terverifikasi atau tautannya baru berubah
+ */
+export async function setMasterActive(adminId: number, kind: string, idRaw: unknown, active: boolean) {
+  const config = getKindConfig(kind);
+  return withTransaction(async (conn) => {
+    // 1. Menonaktifkan titik temu: jalankan penjaga titik temu terakhir dulu.
+    if (!active && kind === "pickup-points") await guardLastPickupPoint(conn, idRaw);
+    // 2. Kunci barisnya; sudah dalam keadaan tujuan berarti selesai tanpa log.
+    const row = await lockRow(conn, config.table, idRaw);
+    if (Boolean(row.is_active) === active) return withBooleanFlags(row);
+    // 3. Simpan dan catat di log audit.
+    await conn.query(`UPDATE ${config.table} SET is_active = ? WHERE id = ?`, [active, row.id]);
+    await recordAudit(conn, {
+      adminId,
+      action: `master.${kind}.${active ? "activate" : "deactivate"}`,
+      targetType: kind,
+      targetId: row.id,
+      before: { is_active: Boolean(row.is_active) },
+      after: { is_active: active },
+    });
+    return withBooleanFlags({ ...row, is_active: active } as RowDataPacket);
   });
 }
