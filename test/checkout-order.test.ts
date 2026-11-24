@@ -16,6 +16,7 @@ const ORDER_KEYS = [
   "can_review",
   "cancel_reason",
   "cancelled_by",
+  "chat",
   "code",
   "created_at",
   "discount",
