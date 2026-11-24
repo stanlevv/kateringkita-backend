@@ -403,13 +403,22 @@ export async function getMerchantProfile(slug: string, userId: number | null) {
 /**
  * Daftar semua toko yang tampil untuk halaman publik (SEO): lolos {@link MERCHANT_VISIBLE}, toko tutup tetap ikut. Hanya
  * data yang aman dibuka ke siapa pun; alamat, nomor WhatsApp, dan id pemilik tidak diambil.
+ * `menu_count` = jumlah menu yang lolos syarat tampil menu (menu habis tetap dihitung).
+ * @param pickupPointId bila diisi, hanya toko yang melayani titik temu aktif itu; titik nonaktif/tak dikenal → kosong
  * @returns ringkasan toko, urut nama usaha
  */
-export async function listPublicMerchants() {
+export async function listPublicMerchants(pickupPointId?: number) {
   // shortcut: tanpa paginasi, tambahkan page/limit bila toko > 1.000
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT m.slug, m.business_name, m.logo_url, t.id AS t_id, t.name AS t_name, m.rating_avg, m.rating_count
-     FROM ${MERCHANT_FROM} WHERE ${MERCHANT_VISIBLE} ORDER BY m.business_name`,
+    `SELECT m.slug, m.business_name, m.logo_url, t.id AS t_id, t.name AS t_name, m.rating_avg, m.rating_count,
+       (SELECT COUNT(*) FROM menus x WHERE x.merchant_id = m.id AND x.is_active AND x.deleted_at IS NULL) AS menu_count
+     FROM ${MERCHANT_FROM} WHERE ${MERCHANT_VISIBLE}${
+       pickupPointId
+         ? ` AND EXISTS (SELECT 1 FROM merchant_pickup_points mp JOIN pickup_points p ON p.id = mp.pickup_point_id
+             WHERE mp.merchant_id = m.id AND p.id = ? AND p.is_active)`
+         : ""
+     } ORDER BY m.business_name`,
+    pickupPointId ? [pickupPointId] : [],
   );
   return rows.map((merchant) => ({
     slug: merchant.slug,
@@ -418,5 +427,6 @@ export async function listPublicMerchants() {
     merchant_type: { id: merchant.t_id, name: merchant.t_name },
     rating_avg: Number(merchant.rating_avg),
     rating_count: merchant.rating_count,
+    menu_count: Number(merchant.menu_count),
   }));
 }

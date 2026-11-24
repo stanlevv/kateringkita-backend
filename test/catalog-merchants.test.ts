@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, expect, test } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { PRIVATE_KEYS, prepareMerchants, makeVisible } from "./helpers/merchant";
+import { PRIVATE_KEYS, prepareMerchants, makeVisible, insertMenu } from "./helpers/merchant";
 
 let idA: number, idB: number;
 
@@ -29,6 +29,7 @@ test("kunci respons persis", async () => {
   expect(Object.keys(res.body.data[0]).sort()).toEqual([
     "business_name",
     "logo_url",
+    "menu_count",
     "merchant_type",
     "rating_avg",
     "rating_count",
@@ -56,4 +57,33 @@ test("toko tutup tetap muncul", async () => {
 
 test("tanpa token tetap 200", async () => {
   await list().expect(200);
+});
+
+test("menu_count menghitung menu aktif termasuk yang habis, bukan yang nonaktif", async () => {
+  await makeVisible(idA);
+  await makeVisible(idB);
+  await insertMenu(idA);
+  await insertMenu(idA, { name: "Habis", quota_today: 0 });
+  await insertMenu(idA, { name: "Nonaktif", is_active: false });
+  const res = await list().expect(200);
+  expect(res.body.data.map((m: any) => [m.slug, m.menu_count])).toEqual([
+    [await slugOf(idB), 0],
+    [await slugOf(idA), 2],
+  ]);
+});
+
+test("filter pickup_point_id: hanya toko yang melayani titik aktif itu, toko tutup ikut", async () => {
+  await makeVisible(idA, { open: false });
+  await makeVisible(idB);
+  await db.query("INSERT INTO merchant_pickup_points (merchant_id, pickup_point_id) VALUES (?, 1)", [idA]);
+  const res = await request(app).get("/api/v1/merchants?pickup_point_id=1").expect(200);
+  expect(slugs(res.body)).toEqual([await slugOf(idA)]);
+  await db.query("UPDATE pickup_points SET is_active = 0 WHERE id = 1");
+  expect((await request(app).get("/api/v1/merchants?pickup_point_id=1").expect(200)).body.data).toEqual([]);
+  expect((await request(app).get("/api/v1/merchants?pickup_point_id=999999").expect(200)).body.data).toEqual([]);
+});
+
+test.each(["abc", "0", "-1"])("pickup_point_id=%s ditolak 400", async (value) => {
+  const res = await request(app).get(`/api/v1/merchants?pickup_point_id=${value}`).expect(400);
+  expect(res.body.error.fields.pickup_point_id).toEqual(["Titik temu tidak valid."]);
 });
