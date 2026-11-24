@@ -13,6 +13,8 @@ import {
   listMerchantBanners,
   deleteMerchantBanner,
   reviewBanner,
+  setBannerArchived,
+  updateAdminBannerContent,
   updateMerchantBanner,
 } from "../services/banner.service";
 import { createUpload } from "../services/upload.service";
@@ -77,14 +79,16 @@ export const deleteMerchantBannerHandler: RequestHandler = async (req, res) => {
 };
 
 /**
- * `GET /admin/banners`: semua banner untuk admin, bisa disaring status.
- * @param req permintaan; query `status` diperiksa listBannersSchema
+ * `GET /admin/banners`: banner untuk admin, bisa disaring status; `?archived=true` untuk daftar arsip.
+ * @param req permintaan; query `status` diperiksa listBannersSchema, `archived` opsional
  * @param res jawaban `{ data: [banner] }`
  * @returns selesai setelah jawaban dikirim
  * @throws 400 status tidak dikenal
  */
 export const listAdminBannersHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await listAdminBanners(parse(listBannersSchema, req.query).status) });
+  res.json({
+    data: await listAdminBanners(parse(listBannersSchema, req.query).status, req.query.archived === "true"),
+  });
 };
 /**
  * `POST /admin/banners`: admin membuat banner platform yang langsung tayang.
@@ -106,6 +110,27 @@ export const createAdminBannerHandler: RequestHandler = async (req, res) => {
 export const reviewBannerHandler: RequestHandler = async (req, res) => {
   res.json({ data: await reviewBanner(getUserId(req), req.params.id, req.body) });
 };
+
+/**
+ * `PATCH /admin/banners/:id/content`: admin mengubah isi banner platform (semua kolom isi dikirim lengkap).
+ * @param req permintaan dengan `:id` banner dan isi banner
+ * @param res jawaban `{ data: banner }`
+ * @returns selesai setelah jawaban dikirim
+ * @throws 400 isian tidak valid, 404 banner tidak ada, 409 MERCHANT_BANNER bila banner milik toko
+ */
+export const updateAdminBannerContentHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await updateAdminBannerContent(getUserId(req), req.params.id, req.body) });
+};
+/**
+ * Membuat handler `POST /admin/banners/:id/archive` (archive = true) atau `.../restore` (archive = false).
+ * @param archive `true` untuk mengarsipkan, `false` untuk memulihkan
+ * @returns handler yang menjawab `{ data: banner }`; galatnya 404 banner tidak ada atau 409 saat dipulihkan
+ */
+export const setBannerArchivedHandler =
+  (archive: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await setBannerArchived(getUserId(req), req.params.id, archive) });
+  };
 
 /**
  * `POST /admin/uploads`: membuat alamat unggah gambar banner atau pop-up platform ke folder `platform/<purpose>/`.
