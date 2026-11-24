@@ -9,6 +9,7 @@ import {
   deleteFavoriteHandler,
   deleteFavoriteMerchantHandler,
   getMerchantProfileHandler,
+  listPublicMerchantsHandler,
   saveFavoriteHandler,
   saveFavoriteMerchantHandler,
   recommendMenusHandler,
@@ -32,6 +33,8 @@ catalog.get("/menus", optionalAuth, listCatalogHandler);
 catalog.get("/menus/:id", optionalAuth, getMenuDetailHandler);
 
 catalog.get("/menus/:id/reviews", listMenuReviewsHandler);
+
+catalog.get("/merchants", listPublicMerchantsHandler);
 
 catalog.get("/merchants/:slug", optionalAuth, getMerchantProfileHandler);
 

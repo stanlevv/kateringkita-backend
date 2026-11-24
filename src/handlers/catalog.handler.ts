@@ -13,7 +13,13 @@ import {
   saveFavorite,
   saveFavoriteMerchant,
 } from "../services/catalog-favorite.service";
-import { listCatalog, getMenuDetail, getMerchantProfile, listMenuReviews } from "../services/catalog.service";
+import {
+  listCatalog,
+  getMenuDetail,
+  getMerchantProfile,
+  listMenuReviews,
+  listPublicMerchants,
+} from "../services/catalog.service";
 import { recommendMenus } from "../services/recommendation.service";
 
 // Id pembeli untuk tanda favorit dan voucher. Hanya diisi untuk sesi pembeli; tamu, penjual, dan admin mendapat null.
@@ -52,6 +58,16 @@ export const getMenuDetailHandler: RequestHandler = async (req, res) => {
  */
 export const listMenuReviewsHandler: RequestHandler = async (req, res) => {
   res.json(await listMenuReviews(req.params.id, parse(paginationSchema, req.query)));
+};
+
+/**
+ * GET /merchants: daftar toko publik untuk halaman SEO.
+ * @param _req request tanpa parameter; tanpa login
+ * @param res respons `{ data }` berisi ringkasan toko
+ * @returns tidak ada; hasil dikirim lewat `res`
+ */
+export const listPublicMerchantsHandler: RequestHandler = async (_req, res) => {
+  res.json({ data: await listPublicMerchants() });
 };
 
 /**
