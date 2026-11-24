@@ -1,6 +1,9 @@
 -- Chat pembeli ↔ penjual untuk satu pesanan (koordinasi titik temu dan pengambilan makanan), penanda baca per pihak,
 -- dan laporan chat ke admin. Hanya tabel baru, data lama tidak disentuh. IF NOT EXISTS: aman bila dijalankan ulang
 -- (TiDB). order_id BIGINT = tipe orders.id.
+
+-- Isi chat. TiDB membagikan blok id per node sehingga id bisa tidak berurutan menurut waktu kirim, dan cek berkala
+-- `id > after_id` lalu bisa melewatkan pesan. AUTO_ID_CACHE=1 membuat id berurutan; MySQL mengabaikan opsi /*T! */.
 CREATE TABLE IF NOT EXISTS order_messages (
   id             BIGINT       AUTO_INCREMENT PRIMARY KEY,
   order_id       BIGINT       NOT NULL,
@@ -13,7 +16,8 @@ CREATE TABLE IF NOT EXISTS order_messages (
   INDEX idx_chat_pengirim (sender_user_id),                           -- indeks FK
   FOREIGN KEY (order_id)       REFERENCES orders(id) ON DELETE CASCADE,
   FOREIGN KEY (sender_user_id) REFERENCES users(id)  ON DELETE SET NULL
-);
+)
+/*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- Pesan terakhir yang sudah dibaca tiap pihak. Pesan pihak lawan dengan id lebih besar = belum dibaca.
 CREATE TABLE IF NOT EXISTS order_chat_reads (

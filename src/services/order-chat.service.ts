@@ -182,11 +182,23 @@ export async function listMessages(
  */
 export async function sendMessage(party: ChatParty, code: string, input: SendMessageInput): Promise<ChatMessage> {
   return withTransaction(async (conn) => {
-    // 1. Kunci pesanan lalu pastikan chat sedang terbuka.
+    // 1. Kunci baris pembeli dulu, baru pesanan: urutan sama dengan transitionOrder, supaya kirim pesan dan perubahan
+    //    status yang bersamaan tidak saling menunggu (deadlock). Penjual: customer_id tidak pernah berubah, jadi aman
+    //    dibaca tanpa kunci; pesanan tamu tidak punya pembeli untuk dikunci.
+    let customerId: number | null = party.userId;
+    if (party.role === "merchant") {
+      const [[owner]] = await conn.query<RowDataPacket[]>(
+        "SELECT customer_id FROM orders WHERE code = ? AND merchant_id = ?",
+        [code, party.merchantId],
+      );
+      customerId = owner?.customer_id ?? null;
+    }
+    if (customerId !== null) await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [customerId]);
+    // 2. Kunci pesanan lalu pastikan chat sedang terbuka.
     const order = await loadChatOrder(party, code, conn);
     const closedReason = getClosedReason(order.status, order.customerId);
     if (closedReason) throw CLOSED_ERRORS[closedReason]();
-    // 2. Simpan pesan, lalu baca lagi supaya waktu kirimnya sama persis dengan yang tersimpan.
+    // 3. Simpan pesan, lalu baca lagi supaya waktu kirimnya sama persis dengan yang tersimpan.
     const [result] = await conn.query<ResultSetHeader>(
       "INSERT INTO order_messages (order_id, sender_role, sender_user_id, body) VALUES (?, ?, ?, ?)",
       [order.orderId, party.role, party.userId, input.body],

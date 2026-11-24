@@ -118,6 +118,19 @@ describe("POST /orders/:code/messages", () => {
     const res = await post(`/orders/${code}/messages`, { body: "Satu lagi" }).expect(429);
     expect(res.body.error).toMatchObject({ code: "RATE_LIMITED", message: "Terlalu banyak pesan. Tunggu sebentar." });
   });
+
+  test("kirim bersamaan dengan penjual menyelesaikan pesanan: 201 atau 409, tidak pernah 500 (deadlock)", async () => {
+    for (let round = 0; round < 5; round++) {
+      const code = await confirmedOrder();
+      for (const action of ["cook", "ready"]) await merchantAction(code, action);
+      const [complete, ...sends] = await Promise.all([
+        request(app).post(`/api/v1/merchant/orders/${code}/complete`).set(authHeader(setup.tokenA)),
+        ...[1, 2, 3, 4].map((i) => post(`/orders/${code}/messages`, { body: `Pesan ${i}` })),
+      ]);
+      expect(complete.status).toBe(200);
+      for (const send of sends) expect([201, 409]).toContain(send.status);
+    }
+  });
 });
 
 describe("GET /orders/:code/messages", () => {
