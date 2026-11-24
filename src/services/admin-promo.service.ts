@@ -1,7 +1,8 @@
 // Isi file: promo platform (voucher yang dibuat admin dan ditanggung platform, `merchant_id` kosong) dan pengaturan
 // aplikasi yang diubah admin: biaya layanan dan nomor WhatsApp layanan pelanggan (CS). Alurnya routes/admin.ts →
 // handlers/admin.handler.ts → file ini → database. Promo boleh dikelola admin ops dan super; mengubah pengaturan
-// (PUT /admin/settings/...) hanya admin super. Semua perubahan dicatat di log audit. Pemeriksa isian promo dan
+// (PUT /admin/settings/...) hanya admin super. Promo platform tidak pernah dihapus, hanya diarsipkan (`archived_at`)
+// supaya riwayat pesanan tetap utuh. Semua perubahan dicatat di log audit. Pemeriksa isian promo dan
 // beberapa alat kecil di sini juga dipakai promo toko (merchant-promo.service).
 //
 // Istilah promo: jenis `percent` = potongan persen (boleh dibatasi `max_discount`), `fixed` = potongan rupiah,
@@ -13,7 +14,7 @@ import { z } from "zod";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { fieldsFromIssues, parse } from "../middleware/validate";
-import { Conn, recordAudit, withTransaction, lockRow, withBooleanFlags } from "./admin-audit.service";
+import { Conn, recordAudit, withTransaction, lockRow, withBooleanFlags, setArchived } from "./admin-audit.service";
 
 // Aturan angka bulat dengan batas bawah; `label` dipakai di pesan galat.
 const integerField = (label: string, min: number) =>
@@ -149,12 +150,50 @@ export const duplicateCodeError = () =>
   new AppError(409, "CONFLICT", "Kode sudah dipakai.", { code: ["Kode sudah dipakai."] });
 
 /**
- * Daftar semua promo platform, terbaru dulu.
- * @returns baris promo dengan `is_active` dan `is_public` berupa boolean
+ * Daftar promo platform, terbaru dulu: yang belum diarsipkan, atau hanya yang diarsipkan bila `archived` true.
+ * @param archived `true` untuk daftar arsip
+ * @returns baris promo dengan `is_active` dan `is_public` berupa boolean, serta `archived_at` (null bila tidak diarsipkan)
  */
-export async function listPromos() {
-  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE merchant_id IS NULL ORDER BY id DESC");
+export async function listPromos(archived = false) {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT * FROM promos WHERE merchant_id IS NULL AND archived_at IS ${archived ? "NOT " : ""}NULL ORDER BY id DESC`,
+  );
   return rows.map(withBooleanFlags);
+}
+
+/**
+ * Mengarsipkan atau memulihkan promo platform. Promo arsip tidak tampil di aplikasi dan tidak bisa dipakai saat
+ * checkout, tetapi pesanan, pemakaian promo, dan klaim voucher yang menunjuknya tetap utuh. Idempoten; dicatat di log
+ * audit `promo.archive` / `promo.restore`.
+ * @param adminId id admin yang mengubah
+ * @param idRaw   id promo dari URL
+ * @param archive `true` untuk mengarsipkan, `false` untuk memulihkan
+ * @returns promo sesudah diubah
+ * @throws 404 promo platform tidak ada, 409 PROMO_IN_USE bila promo masih dipasang di pop-up atau banner yang belum
+ *         diarsipkan
+ */
+export async function setPromoArchived(adminId: number, idRaw: unknown, archive: boolean) {
+  const id = await setArchived(adminId, "promos", "promo", idRaw, archive, {
+    where: "merchant_id IS NULL",
+    notFound: "Promo tidak ditemukan.",
+    // Promo yang masih dipasang di pop-up atau banner aktif tidak boleh diarsipkan; judulnya disebut di pesan.
+    check: async (conn, promo) => {
+      if (!archive) return;
+      const [users] = await conn.query<RowDataPacket[]>(
+        `SELECT title FROM popups WHERE promo_id = ? AND archived_at IS NULL
+         UNION ALL SELECT title FROM banners WHERE promo_id = ? AND archived_at IS NULL`,
+        [promo.id, promo.id],
+      );
+      if (users.length)
+        throw new AppError(
+          409,
+          "PROMO_IN_USE",
+          `Promo masih dipakai di pop-up atau banner: ${users.map((row) => row.title).join(", ")}.`,
+        );
+    },
+  });
+  const [[row]] = await db.query<RowDataPacket[]>("SELECT * FROM promos WHERE id = ?", [id]);
+  return withBooleanFlags(row);
 }
 
 /**

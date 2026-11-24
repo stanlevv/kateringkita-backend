@@ -3,7 +3,7 @@
 // → services/popup.service.ts → database.
 import { Request, RequestHandler } from "express";
 import { AuthedRequest } from "../middleware/auth";
-import { createPopup, listPopups, getPublicPopup, updatePopup } from "../services/popup.service";
+import { createPopup, listPopups, getPublicPopup, setPopupArchived, updatePopup } from "../services/popup.service";
 
 // id admin yang login, sudah dipasang middleware requireAuth di rute.
 const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
@@ -23,13 +23,13 @@ export const getPublicPopupHandler: RequestHandler = async (req, res) => {
   res.json({ data: await getPublicPopup(getCustomerId(req)) });
 };
 /**
- * `GET /admin/popups`: 50 pop-up terbaru untuk admin.
- * @param _req permintaan (tidak dibaca)
- * @param res  jawaban `{ data: [pop-up] }`
+ * `GET /admin/popups`: 50 pop-up terbaru untuk admin; `?archived=true` untuk daftar arsip.
+ * @param req permintaan; query `archived` opsional
+ * @param res jawaban `{ data: [pop-up] }`
  * @returns selesai setelah jawaban dikirim
  */
-export const listPopupsHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await listPopups() });
+export const listPopupsHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await listPopups(req.query.archived === "true") });
 };
 /**
  * `POST /admin/popups`: admin membuat pop-up baru.
@@ -51,3 +51,13 @@ export const createPopupHandler: RequestHandler = async (req, res) => {
 export const updatePopupHandler: RequestHandler = async (req, res) => {
   res.json({ data: await updatePopup(getUserId(req), req.params.id, req.body) });
 };
+/**
+ * Membuat handler `POST /admin/popups/:id/archive` (archive = true) atau `.../restore` (archive = false).
+ * @param archive `true` untuk mengarsipkan, `false` untuk memulihkan
+ * @returns handler yang menjawab `{ data: pop-up }`; galatnya 404 pop-up tidak ada atau 409 PROMO_ARCHIVED
+ */
+export const setPopupArchivedHandler =
+  (archive: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await setPopupArchived(getUserId(req), req.params.id, archive) });
+  };
