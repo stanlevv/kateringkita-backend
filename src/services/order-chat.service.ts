@@ -298,6 +298,38 @@ export async function listUnreadChats(party: ChatParty) {
 }
 
 /**
+ * Pesanan toko yang chatnya belum dibalas: chat masih terbuka (status confirmed, cooking, ready) dan pesan terakhirnya
+ * dari pembeli. Pesanan tetap di daftar walau penjual sudah membaca pesannya; baru keluar setelah penjual membalas.
+ * @param merchantId id toko penjual
+ * @returns `{ total, orders }`; `total` = jumlah pesanan, tiap pesanan berisi `code`, `status`, `last_message_at`
+ *          (waktu pesan pembeli yang belum dibalas), dan `unread_count` (pesan pembeli yang belum dibaca), urut dari
+ *          yang paling lama menunggu
+ */
+export async function listUnrepliedChats(merchantId: number) {
+  // 1. Cari id pesan terakhir tiap pesanan toko yang chatnya terbuka, lalu ambil yang pengirimnya pembeli.
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT o.code, o.status, lm.created_at AS last_message_at, ${chatUnreadColumn("merchant")}
+     FROM orders o
+     JOIN (SELECT m.order_id, MAX(m.id) AS last_id
+           FROM order_messages m JOIN orders oo ON oo.id = m.order_id
+           WHERE oo.merchant_id = ? AND oo.status IN (?)
+           GROUP BY m.order_id) latest ON latest.order_id = o.id
+     JOIN order_messages lm ON lm.id = latest.last_id
+     WHERE lm.sender_role = 'customer'
+     ORDER BY lm.id ASC`,
+    [merchantId, OPEN_STATUSES],
+  );
+  // 2. Susun daftarnya; total = jumlah pesanan yang menunggu balasan.
+  const orders = rows.map((row) => ({
+    code: row.code as string,
+    status: row.status as string,
+    last_message_at: row.last_message_at as Date,
+    unread_count: Number(row.chat_unread),
+  }));
+  return { total: orders.length, orders };
+}
+
+/**
  * Membuat alamat unggah foto chat di folder `orders/<id pesanan>/chat/`. Hanya boleh selama chat terbuka.
  * @param party pihak yang mengunggah
  * @param code  kode pesanan

@@ -5,7 +5,8 @@ import db from "../src/config/db";
 import { chatLimiter, uploadLimiter } from "../src/middleware/rate-limiter";
 import { photoUrl, placeOrder, prepareCheckout, setR2Env } from "./helpers/merchant";
 
-// Chat pesanan sisi penjual (/merchant/orders/:code/messages…, /merchant/chats/unread), foto chat dari kedua sisi,
+// Chat pesanan sisi penjual (/merchant/orders/:code/messages…, /merchant/chats/unread, /merchant/chats/unreplied),
+// foto chat dari kedua sisi,
 // dan kolom chat_unread_count di pesanan penjual.
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 
@@ -115,6 +116,52 @@ describe("chat penjual", () => {
     await post(`/merchant/orders/${first}/messages/read`, setup.tokenA).expect(204);
     const afterRead = (await get("/merchant/chats/unread", setup.tokenA).expect(200)).body.data;
     expect(afterRead).toMatchObject({ total: 1, orders: [{ code: second, unread_count: 1 }] });
+  });
+
+  test("/merchant/chats/unreplied: pesan terakhir dari pembeli; dibaca tetap masuk, dibalas keluar", async () => {
+    const unreplied = async (token = setup.tokenA) =>
+      (await get("/merchant/chats/unreplied", token).expect(200)).body.data;
+    const first = await confirmedOrder();
+    const second = await confirmedOrder();
+    // Hanya pesanan tes ini; pesanan dari tes lain di toko yang sama diabaikan.
+    const listed = async () => (await unreplied()).orders.filter((order: any) => [first, second].includes(order.code));
+    const listedCodes = async () => (await listed()).map((order: any) => order.code);
+    expect(await listed()).toEqual([]);
+
+    // 1. Pesan pembeli → masuk, paling lama menunggu di atas.
+    await post(`/orders/${first}/messages`, setup.customerToken, { body: "Halo kak" }).expect(201);
+    await post(`/orders/${second}/messages`, setup.customerToken, { body: "Masih lama?" }).expect(201);
+    const data = await unreplied();
+    expect(Object.keys(data).sort()).toEqual(["orders", "total"]);
+    expect(data.total).toBe(data.orders.length);
+    const rows = await listed();
+    expect(rows.map((order: any) => order.code)).toEqual([first, second]);
+    for (const order of rows) {
+      expect(Object.keys(order).sort()).toEqual(["code", "last_message_at", "status", "unread_count"]);
+      expect(order).toMatchObject({ status: "confirmed", unread_count: 1 });
+      expect(order.last_message_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    }
+
+    // 2. Penjual membaca tanpa membalas → tetap masuk, belum dibaca jadi 0.
+    await post(`/merchant/orders/${first}/messages/read`, setup.tokenA).expect(204);
+    expect((await listed()).find((order: any) => order.code === first)).toMatchObject({ unread_count: 0 });
+
+    // 3. Penjual membalas → keluar; pembeli kirim lagi → masuk lagi, sekarang paling bawah.
+    await post(`/merchant/orders/${first}/messages`, setup.tokenA, { body: "Sebentar lagi" }).expect(201);
+    expect(await listedCodes()).toEqual([second]);
+    await post(`/orders/${first}/messages`, setup.customerToken, { body: "Oke kak" }).expect(201);
+    expect(await listedCodes()).toEqual([second, first]);
+
+    // 4. Masih masuk saat dimasak dan siap; keluar setelah pesanan selesai.
+    await merchantAction(second, "cook");
+    await merchantAction(second, "ready");
+    expect((await listed()).find((order: any) => order.code === second)).toMatchObject({ status: "ready" });
+    await post(`/orders/${second}/complete`, setup.customerToken).expect(200);
+    expect(await listedCodes()).toEqual([first]);
+
+    // 5. Toko lain kosong; pembeli 403.
+    expect(await unreplied(setup.tokenB)).toEqual({ total: 0, orders: [] });
+    await get("/merchant/chats/unreplied", setup.customerToken).expect(403);
   });
 
   test("chat_unread_count di daftar dan detail pesanan penjual", async () => {

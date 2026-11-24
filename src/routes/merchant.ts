@@ -43,6 +43,7 @@ import {
 } from "../handlers/merchant.handler";
 import {
   listMerchantUnreadChatsHandler,
+  listMerchantUnrepliedChatsHandler,
   listMyOrderMessagesHandler,
   markMyOrderMessagesReadHandler,
   reportChatHandler,
@@ -104,6 +105,8 @@ merchant.post("/orders/:code/messages/upload", validate(uploadSchema), uploadLim
 merchant.post("/orders/:code/chat-report", reportChatHandler);
 // Pesanan toko yang punya pesan pembeli belum dibaca, untuk badge chat.
 merchant.get("/chats/unread", listMerchantUnreadChatsHandler);
+// Pesanan toko yang pesan terakhirnya dari pembeli (belum dibalas), untuk daftar "Chat belum dibalas".
+merchant.get("/chats/unreplied", listMerchantUnrepliedChatsHandler);
 
 // Laporan penjualan.
 merchant.get("/reports/summary", getReportSummaryHandler);

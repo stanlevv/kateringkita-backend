@@ -1,6 +1,6 @@
 // Isi file: handler HTTP chat pesanan. Handler chat yang sama dipasang untuk pembeli (routes/order.ts:
 // /orders/:code/…, /me/chats/unread) dan penjual (routes/merchant.ts: /merchant/orders/:code/…,
-// /merchant/chats/unread); pihaknya ditentukan dari peran akun yang login. Ditambah handler baca laporan chat untuk
+// /merchant/chats/unread, /merchant/chats/unreplied); pihaknya ditentukan dari peran akun yang login. Ditambah handler baca laporan chat untuk
 // admin (routes/admin.ts: /admin/chat-reports). Handler memeriksa query atau isi permintaan dengan skema
 // dto/order-chat.dto.ts, memanggil order-chat.service, lalu mengirim JSON.
 import { Request, RequestHandler } from "express";
@@ -21,6 +21,7 @@ import {
   listChatReports,
   listMessages,
   listUnreadChats,
+  listUnrepliedChats,
   markRead,
   reportChat,
   requestChatUpload,
@@ -115,6 +116,18 @@ export const countMyUnreadChatsHandler: RequestHandler = async (req, res) => {
  */
 export const listMerchantUnreadChatsHandler: RequestHandler = async (req, res) => {
   res.json({ data: await listUnreadChats(await getParty(req)) });
+};
+
+/**
+ * `GET /merchant/chats/unreplied`: pesanan toko yang chatnya terbuka dan pesan terakhirnya dari pembeli (belum dibalas),
+ * paling lama menunggu di atas, untuk daftar "Chat belum dibalas".
+ * @param req permintaan dari penjual yang login
+ * @param res jawaban `{ data: { total, orders: [{ code, status, last_message_at, unread_count }] } }`
+ * @returns selesai setelah jawaban dikirim
+ * @throws 404 akun ini belum punya toko
+ */
+export const listMerchantUnrepliedChatsHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await listUnrepliedChats(await getMerchantId((req as AuthedRequest).auth.userId)) });
 };
 
 /**
