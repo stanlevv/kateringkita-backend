@@ -1,6 +1,7 @@
 // Isi file: banner di beranda aplikasi mobile. Pembeli melihat banner yang sedang tayang; penjual mengajukan banner
-// tokonya; admin membuat banner platform dan meninjau (menyetujui, menolak, menonaktifkan) banner penjual. Alurnya
-// routes/catalog.ts, routes/merchant.ts, atau routes/admin.ts → handlers/banner.handler.ts → file ini → database.
+// tokonya; admin membuat dan mengubah banner platform, meninjau (menyetujui, menolak, menonaktifkan) banner penjual,
+// serta mengarsipkan dan memulihkan semua banner. Alurnya routes/catalog.ts, routes/merchant.ts, atau routes/admin.ts →
+// handlers/banner.handler.ts → file ini → database.
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { z } from "zod";
 import db from "../config/db";
@@ -16,7 +17,7 @@ import {
 } from "../dto/banner.dto";
 import { AppError } from "../utils/errors";
 import { PRESIGN_SECONDS } from "../utils/r2";
-import { recordAudit, withTransaction, lockRow } from "./admin-audit.service";
+import { Conn, recordAudit, withTransaction, lockRow, setArchived } from "./admin-audit.service";
 import { clock } from "./catalog.service";
 import { getMerchantId } from "./merchant-menu.service";
 import { validateImageUrl } from "./upload.service";
@@ -26,6 +27,7 @@ import { VoucherCard, getAvailableVoucher } from "./voucher.service";
 // `menunggu` dan baru tayang setelah admin mengubahnya menjadi `disetujui` (bisa juga `ditolak` atau `nonaktif`);
 // satu toko hanya boleh punya satu banner aktif. Banner platform buatan admin langsung `disetujui`. Tujuan banner
 // (`target`): halaman toko, sebuah voucher (`promo`), atau tidak ke mana-mana (`none`, hanya banner platform).
+// Banner yang diarsipkan admin (`archived_at` terisi) tidak tayang dan tidak dihitung sebagai banner aktif toko.
 /** Paling banyak 8 banner yang tayang di beranda. */
 export const MAX_PUBLIC_BANNERS = 8;
 // Folder gambar di penyimpanan R2: banner platform di platform/banner/, banner toko di merchants/<id toko>/banner/.
@@ -33,7 +35,7 @@ const PLATFORM_PREFIX = "platform/banner/";
 const merchantPrefix = (merchantId: number) => `merchants/${merchantId}/banner/`;
 
 const BANNER_COLUMNS = `b.id, b.merchant_id, b.title, b.image_url, b.target, b.promo_id, b.status, b.catatan, b.starts_at, b.ends_at, b.sort_order,
-  b.reviewed_at, b.created_at, p.code AS promo_code, m.slug, m.business_name`;
+  b.reviewed_at, b.created_at, b.archived_at, p.code AS promo_code, m.slug, m.business_name`;
 const BANNER_FROM_SQL =
   "banners b LEFT JOIN promos p ON p.id = b.promo_id LEFT JOIN merchants m ON m.id = b.merchant_id";
 
@@ -54,6 +56,7 @@ const mapBanner = (row: RowDataPacket) => ({
   sort_order: row.sort_order as number,
   reviewed_at: row.reviewed_at,
   created_at: row.created_at,
+  archived_at: row.archived_at,
 });
 
 const bannerNotFound = () => new AppError(404, "NOT_FOUND", "Banner tidak ditemukan.");
@@ -122,7 +125,7 @@ export async function listPublicBanners(userId: number | null): Promise<PublicBa
   const now = new Date(nowMs);
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${BANNER_COLUMNS} FROM ${BANNER_FROM_SQL} LEFT JOIN users u ON u.id = m.user_id
-     WHERE b.status = 'disetujui' AND b.starts_at <= ? AND b.ends_at > ?
+     WHERE b.archived_at IS NULL AND b.status = 'disetujui' AND b.starts_at <= ? AND b.ends_at > ?
        AND (b.merchant_id IS NULL OR (m.verification_status = 'verified' AND u.is_active))
      ORDER BY b.merchant_id IS NULL DESC, b.sort_order, b.reviewed_at DESC, b.id LIMIT 40`,
     [now, now],
@@ -178,11 +181,11 @@ async function validateMerchantPromo(
   return promoId as number;
 }
 
-// Satu toko hanya boleh punya satu banner aktif (menunggu atau disetujui, belum berakhir). `excludeId` = banner yang
-// sedang diubah, supaya tidak dihitung melawan dirinya sendiri.
+// Satu toko hanya boleh punya satu banner aktif (menunggu atau disetujui, belum berakhir, tidak diarsipkan).
+// `excludeId` = banner yang sedang diubah, supaya tidak dihitung melawan dirinya sendiri.
 async function ensureSingleActive(merchantId: number, excludeId: number | null) {
   const [[countRow]] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS n FROM banners WHERE merchant_id = ? AND status IN ('menunggu', 'disetujui') AND ends_at > UTC_TIMESTAMP() AND id <> ?`,
+    `SELECT COUNT(*) AS n FROM banners WHERE merchant_id = ? AND status IN ('menunggu', 'disetujui') AND ends_at > UTC_TIMESTAMP() AND archived_at IS NULL AND id <> ?`,
     [merchantId, excludeId ?? 0],
   );
   if (Number(countRow.n) > 0) throw new AppError(409, "CONFLICT", "Toko ini sudah punya banner aktif.");
@@ -228,7 +231,7 @@ export async function createMerchantBanner(userId: number, body: unknown) {
  * @param body   isi permintaan mentah (diperiksa updateMerchantBannerSchema dan aturan gambar)
  * @returns banner setelah diubah
  * @throws 400 isian tidak valid, 404 banner tidak ada atau milik toko lain, 409 banner yang ditolak / nonaktif
- *         diajukan ulang padahal toko sudah punya banner aktif lain
+ *         diajukan ulang padahal toko sudah punya banner aktif lain, 409 BANNER_ARCHIVED bila banner diarsipkan admin
  */
 export async function updateMerchantBanner(userId: number, idRaw: unknown, body: unknown) {
   // 1. Ambil banner milik toko ini.
@@ -239,6 +242,8 @@ export async function updateMerchantBanner(userId: number, idRaw: unknown, body:
       ? await db.query<RowDataPacket[]>("SELECT * FROM banners WHERE id = ? AND merchant_id = ?", [id, merchantId])
       : [[]];
   if (!banner) throw bannerNotFound();
+  // Banner arsip tidak masuk antrean admin, jadi pengajuan ulang akan menunggu selamanya.
+  if (banner.archived_at) throw new AppError(409, "BANNER_ARCHIVED", "Banner ini diarsipkan admin.");
   // 2. Periksa isian dan voucher tujuan (memakai nilai tersimpan bila tidak dikirim).
   const input: UpdateMerchantBannerInput = parseBodyWithImage(
     updateMerchantBannerSchema,
@@ -290,17 +295,31 @@ export async function deleteMerchantBanner(userId: number, idRaw: unknown) {
 
 // ---------------- admin ----------------
 /**
- * Semua banner untuk admin: yang menunggu tinjauan di atas, lalu banner platform (urut `sort_order`), lalu sisanya.
- * @param status saringan status (`menunggu`, `disetujui`, `ditolak`, `nonaktif`), atau kosong untuk semua
+ * Banner untuk admin: yang menunggu tinjauan di atas, lalu banner platform (urut `sort_order`), lalu sisanya. Tanpa
+ * `archived`, hanya banner yang belum diarsipkan; dengan `archived` true, hanya banner arsip.
+ * @param status   saringan status (`menunggu`, `disetujui`, `ditolak`, `nonaktif`), atau kosong untuk semua
+ * @param archived `true` untuk daftar arsip
  * @returns daftar banner
  */
-export async function listAdminBanners(status?: string) {
+export async function listAdminBanners(status?: string, archived = false) {
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${BANNER_COLUMNS} FROM ${BANNER_FROM_SQL} ${status ? "WHERE b.status = ?" : ""}
+    `SELECT ${BANNER_COLUMNS} FROM ${BANNER_FROM_SQL} WHERE b.archived_at IS ${archived ? "NOT " : ""}NULL
+     ${status ? "AND b.status = ?" : ""}
      ORDER BY b.status = 'menunggu' DESC, b.merchant_id IS NULL DESC, b.sort_order, b.id DESC`,
     status ? [status] : [],
   );
   return rows.map(mapBanner);
+}
+
+// Banner platform bertujuan voucher wajib menunjuk voucher yang ada dan tidak diarsipkan. Mengembalikan id voucher,
+// atau null bila tujuannya bukan voucher.
+async function validateAdminPromo(input: AdminBannerInput) {
+  if (input.target !== "promo") return null;
+  const [[promo]] = input.promo_id
+    ? await db.query<RowDataPacket[]>("SELECT id FROM promos WHERE id = ? AND archived_at IS NULL", [input.promo_id])
+    : [[]];
+  if (!promo) throw invalidFields({ promo_id: ["Pilih voucher."] });
+  return input.promo_id as number;
 }
 
 /**
@@ -314,12 +333,7 @@ export async function listAdminBanners(status?: string) {
 export async function createAdminBanner(adminId: number, body: unknown) {
   // 1. Periksa isian dan voucher tujuan.
   const input: AdminBannerInput = parseBodyWithImage(adminBannerSchema, body, PLATFORM_PREFIX);
-  if (input.target === "promo") {
-    const [[promo]] = input.promo_id
-      ? await db.query<RowDataPacket[]>("SELECT id FROM promos WHERE id = ?", [input.promo_id])
-      : [[]];
-    if (!promo) throw invalidFields({ promo_id: ["Pilih voucher."] });
-  }
+  const promoId = await validateAdminPromo(input);
   return withTransaction(async (conn) => {
     // 2. Simpan sebagai banner platform yang sudah disetujui.
     const [result] = await conn.query<ResultSetHeader>(
@@ -329,7 +343,7 @@ export async function createAdminBanner(adminId: number, body: unknown) {
         input.title,
         input.image_url,
         input.target,
-        input.target === "promo" ? input.promo_id : null,
+        promoId,
         new Date(input.starts_at),
         new Date(input.ends_at),
         input.sort_order,
@@ -347,6 +361,88 @@ export async function createAdminBanner(adminId: number, body: unknown) {
     });
     return result.insertId;
   }).then(loadBanner);
+}
+
+/**
+ * Admin mengubah isi banner platform: judul, gambar, tujuan, voucher, dan masa tayang. Isian diperiksa dengan skema dan
+ * aturan gambar yang sama seperti saat membuat banner platform, jadi semua kolom dikirim lengkap. Status dan urutan
+ * tampil tidak diubah di sini (status lewat tinjauan `PATCH /admin/banners/:id`). Dicatat di log audit `banner.update`.
+ * @param adminId id admin yang mengubah
+ * @param idRaw   id banner dari alamat URL
+ * @param body    isi permintaan mentah (diperiksa adminBannerSchema dan aturan gambar)
+ * @returns banner setelah diubah
+ * @throws 400 isian tidak valid atau voucher tujuan tidak ada atau diarsipkan, 404 banner tidak ada, 409
+ *         MERCHANT_BANNER bila banner milik toko
+ */
+export async function updateAdminBannerContent(adminId: number, idRaw: unknown, body: unknown) {
+  // 1. Periksa isian dan voucher tujuan seperti saat membuat banner platform.
+  const input: AdminBannerInput = parseBodyWithImage(adminBannerSchema, body, PLATFORM_PREFIX);
+  const promoId = await validateAdminPromo(input);
+  const id = await withTransaction(async (conn) => {
+    // 2. Kunci banner; isi banner toko hanya boleh diubah penjualnya.
+    const banner = await lockRow(conn, "banners", idRaw, { notFound: "Banner tidak ditemukan." });
+    if (banner.merchant_id !== null)
+      throw new AppError(409, "MERCHANT_BANNER", "Isi banner toko hanya bisa diubah penjualnya.");
+    // 3. Simpan isi baru, lalu catat nilai sebelum dan sesudah di log audit.
+    const changes = {
+      title: input.title,
+      image_url: input.image_url,
+      target: input.target,
+      promo_id: promoId,
+      starts_at: new Date(input.starts_at),
+      ends_at: new Date(input.ends_at),
+    };
+    await conn.query("UPDATE banners SET ? WHERE id = ?", [changes, banner.id]);
+    await recordAudit(conn, {
+      adminId,
+      action: "banner.update",
+      targetType: "banner",
+      targetId: banner.id,
+      before: Object.fromEntries(Object.keys(changes).map((column) => [column, banner[column]])),
+      after: changes,
+    });
+    return banner.id as number;
+  });
+  return loadBanner(id);
+}
+
+/**
+ * Menolak memulihkan konten (banner atau pop-up) yang menunjuk voucher yang masih diarsipkan. Dipakai juga
+ * popup.service.
+ * @param conn sambungan transaksi
+ * @param row  baris konten yang akan dipulihkan (memuat `promo_id`)
+ * @returns selesai bila konten tidak menunjuk voucher arsip
+ * @throws 409 PROMO_ARCHIVED bila vouchernya diarsipkan
+ */
+export async function rejectArchivedPromo(conn: Conn, row: RowDataPacket) {
+  if (!row.promo_id) return;
+  const [[promo]] = await conn.query<RowDataPacket[]>("SELECT archived_at FROM promos WHERE id = ?", [row.promo_id]);
+  if (promo?.archived_at) throw new AppError(409, "PROMO_ARCHIVED", "Pulihkan dulu promo yang dipakai konten ini.");
+}
+
+/**
+ * Admin mengarsipkan atau memulihkan banner, baik banner platform maupun banner toko. Banner arsip tidak tayang walau
+ * masih dalam masa tayang. Idempoten; dicatat di log audit `banner.archive` / `banner.restore`.
+ * @param adminId id admin yang mengubah
+ * @param idRaw   id banner dari alamat URL
+ * @param archive `true` untuk mengarsipkan, `false` untuk memulihkan
+ * @returns banner setelah diubah
+ * @throws 404 banner tidak ada, 409 PROMO_ARCHIVED bila dipulihkan padahal vouchernya diarsipkan, 409 bila banner toko
+ *         dipulihkan padahal toko itu sudah punya banner aktif lain
+ */
+export async function setBannerArchived(adminId: number, idRaw: unknown, archive: boolean) {
+  const id = await setArchived(adminId, "banners", "banner", idRaw, archive, {
+    notFound: "Banner tidak ditemukan.",
+    // Saat dipulihkan: voucher tujuannya harus tidak diarsipkan, dan banner toko yang masih aktif tetap tunduk pada
+    // aturan satu banner aktif per toko.
+    check: async (conn, banner) => {
+      if (archive) return;
+      await rejectArchivedPromo(conn, banner);
+      const isActive = ["menunggu", "disetujui"].includes(banner.status) && banner.ends_at.getTime() > Date.now();
+      if (banner.merchant_id !== null && isActive) await ensureSingleActive(banner.merchant_id, banner.id);
+    },
+  });
+  return loadBanner(id);
 }
 
 // Nama tindakan di log audit untuk tiap status hasil tinjauan.

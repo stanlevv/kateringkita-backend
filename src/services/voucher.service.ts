@@ -30,13 +30,14 @@ export type VoucherCard = {
 
 // Kolom kartu voucher. `?` pertama diisi id pembeli untuk menghitung `claimed` (sudah diklaim pembeli ini atau belum).
 const VOUCHER_COLUMNS = `p.id, p.code, p.description, p.type, p.value, p.max_discount, p.min_subtotal, p.starts_at, p.ends_at, p.quota, p.used_count,
-  p.per_user_limit, p.is_active, p.is_public, p.merchant_id, m.slug, m.business_name,
+  p.per_user_limit, p.is_active, p.is_public, p.archived_at, p.merchant_id, m.slug, m.business_name,
   EXISTS (SELECT 1 FROM promo_claims c WHERE c.promo_id = p.id AND c.user_id = ?) AS claimed`;
 // Toko tersembunyi (belum diverifikasi atau akun pemiliknya nonaktif) → vouchernya tidak tampil.
 const VOUCHER_FROM_SQL = `promos p LEFT JOIN merchants m ON m.id = p.merchant_id LEFT JOIN users u ON u.id = m.user_id`;
 const MERCHANT_VISIBLE_SQL = "(p.merchant_id IS NULL OR (m.verification_status = 'verified' AND u.is_active))";
-// Syarat voucher tersedia: publik, aktif, sudah mulai, belum berakhir, dan tokonya tampil. Dua `?` = waktu sekarang.
-const AVAILABLE_SQL = `p.is_public AND p.is_active AND p.starts_at <= ? AND p.ends_at > ? AND ${MERCHANT_VISIBLE_SQL}`;
+// Syarat voucher tersedia: publik, aktif, tidak diarsipkan admin, sudah mulai, belum berakhir, dan tokonya tampil. Dua
+// `?` = waktu sekarang.
+const AVAILABLE_SQL = `p.is_public AND p.is_active AND p.archived_at IS NULL AND p.starts_at <= ? AND p.ends_at > ? AND ${MERCHANT_VISIBLE_SQL}`;
 
 // Kuota habis bila jumlah terpakai sudah mencapai kuota; kuota NULL = tanpa batas.
 const isSoldOut = (row: RowDataPacket) => row.quota !== null && row.used_count >= row.quota;
@@ -114,7 +115,8 @@ const voucherNotFound = () => new AppError(404, "NOT_FOUND", "Voucher tidak dite
  * @param userId id pembeli yang login
  * @param idRaw  id voucher dari alamat URL (belum tentu angka)
  * @returns kartu voucher dengan `claimed: true`
- * @throws 404 voucher tidak ada, 409 voucher tidak tersedia (tersembunyi, nonaktif, di luar periode, toko tersembunyi)
+ * @throws 404 voucher tidak ada, 409 voucher tidak tersedia (tersembunyi, nonaktif, diarsipkan, di luar periode, toko
+ *         tersembunyi)
  *         atau kuotanya sudah habis
  */
 export async function claimVoucher(userId: number, idRaw: unknown): Promise<VoucherCard> {
@@ -131,7 +133,7 @@ export async function claimVoucher(userId: number, idRaw: unknown): Promise<Vouc
   if (Number(row.claimed)) return toVoucherCard(row);
   // 3. Voucher harus tersedia dan kuotanya belum habis.
   const isInPeriod = new Date(row.starts_at).getTime() <= nowMs && nowMs < new Date(row.ends_at).getTime();
-  if (!row.is_public || !row.is_active || !isInPeriod || !Number(row.toko_ok))
+  if (!row.is_public || !row.is_active || row.archived_at || !isInPeriod || !Number(row.toko_ok))
     throw new AppError(409, "CONFLICT", "Voucher sedang tidak tersedia.");
   if (isSoldOut(row)) throw new AppError(409, "CONFLICT", "Kuota voucher sudah habis.");
   // 4. Catat klaim. INSERT IGNORE: dua klaim bersamaan tidak membuat baris ganda.
@@ -143,8 +145,9 @@ const formatRupiah = (amount: number) => `Rp ${Number(amount).toLocaleString("id
 
 /**
  * "Voucher Saya": semua voucher yang pernah diklaim pembeli, termasuk yang berakhir paling lama 30 hari lalu (tampil
- * sebagai tidak bisa dipakai). Bila dipanggil dari checkout dengan `merchant_id` / `subtotal` / `payment_method`,
- * kolom `usable` dan `reason` mengikuti keranjang itu.
+ * sebagai tidak bisa dipakai). Voucher yang diarsipkan admin tidak ditampilkan; klaimnya tetap tersimpan. Bila
+ * dipanggil dari checkout dengan `merchant_id` / `subtotal` / `payment_method`, kolom `usable` dan `reason` mengikuti
+ * keranjang itu.
  * @param userId id pembeli yang login
  * @param filter query yang sudah lolos myVouchersSchema; semuanya opsional
  * @returns kartu voucher ditambah `usable` (bisa dipakai) dan `reason` (alasan tidak bisa dipakai, atau null)
@@ -155,7 +158,7 @@ export async function listMyVouchers(userId: number, filter: MyVouchersQuery) {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${VOUCHER_COLUMNS}, (SELECT COUNT(*) FROM promo_redemptions x WHERE x.promo_id = p.id AND x.user_id = ?) AS dipakai
      FROM promo_claims k JOIN promos p ON p.id = k.promo_id LEFT JOIN merchants m ON m.id = p.merchant_id
-     WHERE k.user_id = ? AND p.ends_at > ? - INTERVAL 30 DAY ORDER BY p.ends_at, p.id`,
+     WHERE k.user_id = ? AND p.archived_at IS NULL AND p.ends_at > ? - INTERVAL 30 DAY ORDER BY p.ends_at, p.id`,
     [userId, userId, userId, new Date(nowMs)],
   );
   return rows.map((row) => {

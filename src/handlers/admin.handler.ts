@@ -18,6 +18,7 @@ import {
   createPromo,
   listPromos,
   setPromoActive,
+  setPromoArchived,
   updateServiceFee,
   updateCsContact,
   updatePromo,
@@ -180,13 +181,13 @@ export const setMasterActiveHandler =
   };
 
 /**
- * `GET /admin/promos`: daftar promo platform.
- * @param _req permintaan (tidak dibaca)
- * @param res  jawaban `{ data }`
+ * `GET /admin/promos`: daftar promo platform; `?archived=true` untuk daftar arsip.
+ * @param req permintaan; query `archived` opsional
+ * @param res jawaban `{ data }`
  * @returns selesai setelah jawaban dikirim
  */
-export const listPromosHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await listPromos() });
+export const listPromosHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await listPromos(req.query.archived === "true") });
 };
 /**
  * `POST /admin/promos`: membuat promo platform.
@@ -217,6 +218,17 @@ export const setPromoActiveHandler =
   (active: boolean): RequestHandler =>
   async (req, res) => {
     res.json({ data: await setPromoActive(getAdminId(req), req.params.id, active) });
+  };
+/**
+ * Membuat handler `POST /admin/promos/:id/archive` (archive = true) atau `.../restore` (archive = false).
+ * @param archive `true` untuk mengarsipkan, `false` untuk memulihkan
+ * @returns handler yang menjawab `{ data }` berisi promo sesudah diubah; galatnya 404 promo tidak ada atau 409
+ *          PROMO_IN_USE
+ */
+export const setPromoArchivedHandler =
+  (archive: boolean): RequestHandler =>
+  async (req, res) => {
+    res.json({ data: await setPromoArchived(getAdminId(req), req.params.id, archive) });
   };
 /**
  * `GET /admin/settings`: pengaturan aplikasi yang diatur admin (boleh dibaca semua tingkat admin).

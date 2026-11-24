@@ -1,23 +1,23 @@
-// Isi file: pop-up promo yang muncul saat aplikasi mobile dibuka. Hanya admin yang membuat dan mengubahnya; pembeli
-// dan tamu hanya melihat satu pop-up yang sedang tayang. Alurnya routes/catalog.ts atau routes/admin.ts →
-// handlers/popup.handler.ts → file ini → database.
+// Isi file: pop-up promo yang muncul saat aplikasi mobile dibuka. Hanya admin yang membuat, mengubah, mengarsipkan,
+// dan memulihkannya; pembeli dan tamu hanya melihat satu pop-up yang sedang tayang. Alurnya routes/catalog.ts atau
+// routes/admin.ts → handlers/popup.handler.ts → file ini → database.
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { PopupInput, UpdatePopupInput, popupSchema, updatePopupSchema } from "../dto/popup.dto";
 import { AppError } from "../utils/errors";
-import { recordAudit, withTransaction, lockRow } from "./admin-audit.service";
-import { parseBodyWithImage } from "./banner.service";
+import { recordAudit, withTransaction, lockRow, setArchived } from "./admin-audit.service";
+import { parseBodyWithImage, rejectArchivedPromo } from "./banner.service";
 import { clock } from "./catalog.service";
 import { VoucherCard, getAvailableVoucher } from "./voucher.service";
 
-// Aturan tayang: pop-up yang aktif dan dalam masa tayang (`starts_at` sampai `ends_at`), yang paling baru dibuat lebih
-// dulu; bila pop-up menunjuk sebuah voucher platform, voucher itu harus masih tersedia. Seberapa sering pop-up muncul
-// (sekali sehari, berhenti setelah vouchernya diklaim) diatur aplikasi mobile, bukan server.
+// Aturan tayang: pop-up yang tidak diarsipkan, aktif, dan dalam masa tayang (`starts_at` sampai `ends_at`), yang paling
+// baru dibuat lebih dulu; bila pop-up menunjuk sebuah voucher platform, voucher itu harus masih tersedia. Seberapa sering
+// pop-up muncul (sekali sehari, berhenti setelah vouchernya diklaim) diatur aplikasi mobile, bukan server.
 // Folder gambar pop-up di penyimpanan R2.
 const POPUP_PREFIX = "platform/popup/";
 
 const POPUP_COLUMNS =
-  "q.id, q.title, q.image_url, q.promo_id, q.starts_at, q.ends_at, q.is_active, q.created_at, p.code AS promo_code";
+  "q.id, q.title, q.image_url, q.promo_id, q.starts_at, q.ends_at, q.is_active, q.created_at, q.archived_at, p.code AS promo_code";
 const POPUP_FROM_SQL = "popups q LEFT JOIN promos p ON p.id = q.promo_id";
 
 // Satu baris pop-up dalam bentuk JSON untuk admin.
@@ -30,6 +30,7 @@ const mapPopup = (row: RowDataPacket) => ({
   ends_at: row.ends_at,
   is_active: Boolean(row.is_active),
   created_at: row.created_at,
+  archived_at: row.archived_at,
 });
 // Membaca satu pop-up (sudah pasti ada) dalam bentuk JSON.
 const loadPopup = async (id: number) =>
@@ -51,7 +52,7 @@ export async function getPublicPopup(userId: number | null): Promise<PublicPopup
   const nowMs = clock.now();
   const now = new Date(nowMs);
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT id, title, image_url, promo_id FROM popups WHERE is_active AND starts_at <= ? AND ends_at > ? ORDER BY id DESC LIMIT 5",
+    "SELECT id, title, image_url, promo_id FROM popups WHERE archived_at IS NULL AND is_active AND starts_at <= ? AND ends_at > ? ORDER BY id DESC LIMIT 5",
     [now, now],
   );
   // 2. Pop-up yang vouchernya mati atau lewat periode dilewati, lanjut ke pop-up berikutnya.
@@ -63,26 +64,48 @@ export async function getPublicPopup(userId: number | null): Promise<PublicPopup
   return null;
 }
 
-// Pop-up hanya boleh menunjuk voucher platform (`merchant_id` NULL). Mengembalikan id voucher, atau null bila kosong.
+// Pop-up hanya boleh menunjuk voucher platform (`merchant_id` NULL) yang tidak diarsipkan. Mengembalikan id voucher,
+// atau null bila kosong.
 async function validatePlatformVoucher(promoId: number | null | undefined) {
   if (!promoId) return null;
-  const [[promo]] = await db.query<RowDataPacket[]>("SELECT id FROM promos WHERE id = ? AND merchant_id IS NULL", [
-    promoId,
-  ]);
+  const [[promo]] = await db.query<RowDataPacket[]>(
+    "SELECT id FROM promos WHERE id = ? AND merchant_id IS NULL AND archived_at IS NULL",
+    [promoId],
+  );
   if (!promo)
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { promo_id: ["Pilih voucher platform."] });
   return promoId;
 }
 
 /**
- * Daftar pop-up untuk admin: 50 terbaru, status apa pun.
+ * Daftar pop-up untuk admin: 50 terbaru, status apa pun. Tanpa `archived`, hanya yang belum diarsipkan; dengan
+ * `archived` true, hanya pop-up arsip.
+ * @param archived `true` untuk daftar arsip
  * @returns daftar pop-up
  */
-export async function listPopups() {
+export async function listPopups(archived = false) {
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT ${POPUP_COLUMNS} FROM ${POPUP_FROM_SQL} ORDER BY q.id DESC LIMIT 50`,
+    `SELECT ${POPUP_COLUMNS} FROM ${POPUP_FROM_SQL} WHERE q.archived_at IS ${archived ? "NOT " : ""}NULL
+     ORDER BY q.id DESC LIMIT 50`,
   );
   return rows.map(mapPopup);
+}
+
+/**
+ * Admin mengarsipkan atau memulihkan pop-up. Pop-up arsip tidak tayang walau masih aktif dan dalam masa tayang.
+ * Idempoten; dicatat di log audit `popup.archive` / `popup.restore`.
+ * @param adminId id admin yang mengubah
+ * @param idRaw   id pop-up dari alamat URL
+ * @param archive `true` untuk mengarsipkan, `false` untuk memulihkan
+ * @returns pop-up setelah diubah
+ * @throws 404 pop-up tidak ada, 409 PROMO_ARCHIVED bila dipulihkan padahal vouchernya diarsipkan
+ */
+export async function setPopupArchived(adminId: number, idRaw: unknown, archive: boolean) {
+  const id = await setArchived(adminId, "popups", "popup", idRaw, archive, {
+    notFound: "Pop-up tidak ditemukan.",
+    check: (conn, popup) => (archive ? Promise.resolve() : rejectArchivedPromo(conn, popup)),
+  });
+  return loadPopup(id);
 }
 
 /**
