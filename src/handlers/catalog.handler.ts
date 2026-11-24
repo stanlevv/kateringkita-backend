@@ -62,12 +62,14 @@ export const listMenuReviewsHandler: RequestHandler = async (req, res) => {
 
 /**
  * GET /merchants: daftar toko publik untuk halaman SEO.
- * @param _req request tanpa parameter; tanpa login
+ * @param req request dengan query opsional `pickup_point_id` (bilangan bulat ≥ 1); tanpa login
  * @param res respons `{ data }` berisi ringkasan toko
  * @returns tidak ada; hasil dikirim lewat `res`
  */
-export const listPublicMerchantsHandler: RequestHandler = async (_req, res) => {
-  res.json({ data: await listPublicMerchants() });
+export const listPublicMerchantsHandler: RequestHandler = async (req, res) => {
+  // Pakai aturan `pickup_point_id` yang sama dengan GET /menus; kunci query lain diabaikan.
+  const { pickup_point_id } = parse(catalogQuerySchema.pick({ pickup_point_id: true }), req.query);
+  res.json({ data: await listPublicMerchants(pickup_point_id) });
 };
 
 /**
