@@ -399,3 +399,24 @@ export async function getMerchantProfile(slug: string, userId: number | null) {
     vouchers: await listMerchantVouchers(merchant.id, userId, nowMs),
   };
 }
+
+/**
+ * Daftar semua toko yang tampil untuk halaman publik (SEO): lolos {@link MERCHANT_VISIBLE}, toko tutup tetap ikut. Hanya
+ * data yang aman dibuka ke siapa pun; alamat, nomor WhatsApp, dan id pemilik tidak diambil.
+ * @returns ringkasan toko, urut nama usaha
+ */
+export async function listPublicMerchants() {
+  // shortcut: tanpa paginasi, tambahkan page/limit bila toko > 1.000
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT m.slug, m.business_name, m.logo_url, t.id AS t_id, t.name AS t_name, m.rating_avg, m.rating_count
+     FROM ${MERCHANT_FROM} WHERE ${MERCHANT_VISIBLE} ORDER BY m.business_name`,
+  );
+  return rows.map((merchant) => ({
+    slug: merchant.slug,
+    business_name: merchant.business_name,
+    logo_url: merchant.logo_url,
+    merchant_type: { id: merchant.t_id, name: merchant.t_name },
+    rating_avg: Number(merchant.rating_avg),
+    rating_count: merchant.rating_count,
+  }));
+}
