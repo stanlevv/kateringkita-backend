@@ -1,5 +1,5 @@
 // Isi file: daftar alamat (rute) akun di /api/v1: daftar, masuk, keluar, profil sendiri (/me), ganti sandi, unggah
-// foto profil, dan lupa sandi. Lapisan pertama dari alur routes → handlers (auth.handler) → services (auth.service,
+// foto profil, lupa sandi, dan verifikasi/ganti email. Lapisan pertama dari alur routes → handlers (auth.handler) → services (auth.service,
 // password-reset.service, upload.service) → database. Tiap rute menentukan urutan middleware: wajib login
 // (requireAuth), pemeriksa isi permintaan dengan skema zod (validate), dan pembatas jumlah percobaan (rate limit:
 // batas berapa kali sebuah aksi boleh diulang dalam waktu tertentu, untuk menahan tebak sandi dan spam).
@@ -7,6 +7,8 @@
 import { Router } from "express";
 import {
   changePasswordSchema,
+  emailOtpSchema,
+  emailVerifySchema,
   forgotPasswordSchema,
   loginSchema,
   registerCustomerSchema,
@@ -18,6 +20,8 @@ import {
 import { uploadSchema } from "../dto/upload.dto";
 import {
   changePasswordHandler,
+  requestEmailOtpHandler,
+  verifyEmailOtpHandler,
   forgotPasswordHandler,
   getMeHandler,
   loginHandler,
@@ -30,7 +34,14 @@ import {
   uploadAvatarHandler,
 } from "../handlers/auth.handler";
 import { requireAuth } from "../middleware/auth";
-import { loginLimiter, otpLimiter, passwordLimiter, registerLimiter, uploadLimiter } from "../middleware/rate-limiter";
+import {
+  emailOtpLimiter,
+  loginLimiter,
+  otpLimiter,
+  passwordLimiter,
+  registerLimiter,
+  uploadLimiter,
+} from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 /**
@@ -62,3 +73,9 @@ auth.post("/auth/password/forgot", validate(forgotPasswordSchema), otpLimiter, f
 auth.post("/auth/password/verify", validate(verifyOtpSchema), otpLimiter, verifyOtpHandler);
 
 auth.post("/auth/password/reset", validate(resetPasswordSchema), otpLimiter, resetPasswordHandler);
+
+// Verifikasi email dan ganti email: minta kode ke email (akun sekarang atau email baru), lalu masukkan kodenya.
+// Jumlah percobaan kode dibatasi per kode di service, jadi pembatas hanya dipasang di permintaan kirim kode.
+auth.post("/me/email/otp", requireAuth, validate(emailOtpSchema), emailOtpLimiter, requestEmailOtpHandler);
+
+auth.post("/me/email/verify", requireAuth, validate(emailVerifySchema), verifyEmailOtpHandler);

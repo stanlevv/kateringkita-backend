@@ -4,19 +4,14 @@
 // hash bcrypt (acakan satu arah) di tabel password_resets. Kode kedaluwarsa (tidak berlaku lagi) setelah 10 menit,
 // hanya boleh dicoba 5 kali, dan hangus setelah dipakai sekali.
 import bcrypt from "bcryptjs";
-import { randomInt } from "node:crypto";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { ResetPasswordInput } from "../dto/auth.dto";
-import { AppError } from "../utils/errors";
 import { mailer } from "../utils/mail";
+import { createOtpCode, invalidOtpCodeError } from "../utils/otp";
 
-// Tingkat kerja bcrypt (2^10 putaran), sama dengan hash kata sandi di auth.service.
+// Tingkat kerja bcrypt (2^10 putaran) untuk hash kata sandi baru, sama dengan auth.service.
 const BCRYPT_COST = 10;
-// Satu galat untuk semua kegagalan kode (tidak ada, kedaluwarsa, salah, jatah habis, sudah dipakai), supaya penebak
-// tidak bisa membedakan penyebabnya.
-const invalidCodeError = () =>
-  new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { code: ["Kode salah atau sudah kedaluwarsa."] });
 
 /**
  * Membuat kode OTP baru untuk sebuah email dan mengirimkannya lewat email. Bila email tidak terdaftar atau akunnya
@@ -35,8 +30,8 @@ export async function requestOtp(email: string) {
     [email],
   );
   if (!user) return;
-  // 2. Buat kode 6 angka dari pembangkit acak kriptografis (randomInt), dengan nol di depan bila perlu.
-  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  // 2. Buat kode 6 angka acak beserta hash-nya.
+  const { code, codeHash } = await createOtpCode();
   // 3. Hanguskan kode lama yang belum dipakai: hanya kode terbaru yang berlaku.
   await db.query("UPDATE password_resets SET used_at = UTC_TIMESTAMP() WHERE user_id = ? AND used_at IS NULL", [
     user.id,
@@ -44,7 +39,7 @@ export async function requestOtp(email: string) {
   // 4. Simpan hash kode baru yang berlaku 10 menit (waktu UTC).
   await db.query(
     "INSERT INTO password_resets (user_id, code_hash, expires_at) VALUES (?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 10 MINUTE))",
-    [user.id, await bcrypt.hash(code, BCRYPT_COST)],
+    [user.id, codeHash],
   );
   // 5. Kirim kode asli ke email pengguna.
   await mailer.send(
@@ -72,14 +67,14 @@ export async function verifyOtp(email: string, code: string): Promise<{ id: numb
      ORDER BY r.id DESC LIMIT 1`,
     [email],
   );
-  if (!reset) throw invalidCodeError();
+  if (!reset) throw invalidOtpCodeError();
   // 2. Pakai satu jatah percobaan; bila sudah 5 kali dicoba, tidak ada baris yang berubah dan kode ditolak.
   const [attemptUpdate] = await db.query<ResultSetHeader>(
     "UPDATE password_resets SET attempts = attempts + 1 WHERE id = ? AND attempts < 5",
     [reset.id],
   );
   // 3. Cocokkan kode yang diketik dengan hash tersimpan.
-  if (!attemptUpdate.affectedRows || !(await bcrypt.compare(code, reset.code_hash))) throw invalidCodeError();
+  if (!attemptUpdate.affectedRows || !(await bcrypt.compare(code, reset.code_hash))) throw invalidOtpCodeError();
   return { id: reset.id, user_id: reset.user_id };
 }
 
@@ -100,7 +95,7 @@ export async function resetPassword(input: ResetPasswordInput) {
     "UPDATE password_resets SET used_at = UTC_TIMESTAMP() WHERE id = ? AND used_at IS NULL",
     [reset.id],
   );
-  if (!markUsed.affectedRows) throw invalidCodeError();
+  if (!markUsed.affectedRows) throw invalidOtpCodeError();
   // 3. Urutannya sama dengan changePassword di auth.service: tulis hash baru dulu, baru cabut semua sesi.
   await db.query("UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?", [
     await bcrypt.hash(input.password, BCRYPT_COST),

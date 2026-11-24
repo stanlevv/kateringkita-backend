@@ -216,6 +216,31 @@ export const otpLimiter: RequestHandler & { reset: () => void } = Object.assign(
   },
 );
 
+// Kode verifikasi email: setiap permintaan mengirim email, jadi 5 permintaan per pengguna per 15 menit.
+const emailOtpByUser = createBucket(5, 15 * 60_000);
+
+/**
+ * Pembatas permintaan kode verifikasi email (`POST /me/email/otp`): 5 per pengguna per 15 menit. Semua permintaan
+ * dihitung, supaya fitur ini tidak bisa dipakai untuk membanjiri kotak masuk orang lain.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
+ * @throws 429 RATE_LIMITED bila batas sudah tercapai
+ */
+export const emailOtpLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, _res, next) => {
+    const now = Date.now();
+    const key = String((req as AuthedRequest).auth.userId);
+    if (isFull(emailOtpByUser, key, now)) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak permintaan. Coba lagi beberapa menit lagi."));
+    }
+    addHit(emailOtpByUser, key, now);
+    next();
+  }) as RequestHandler,
+  { reset: () => emailOtpByUser.hits.clear() },
+);
+
 // Asisten AI: setiap panggilan ke AI berbayar, jadi 10 pertanyaan per pengguna per 10 menit.
 const assistantByUser = createBucket(10, 10 * 60_000);
 
