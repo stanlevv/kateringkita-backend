@@ -4,21 +4,22 @@ import app from "../src/app";
 import db from "../src/config/db";
 import { chatLimiter } from "../src/middleware/rate-limiter";
 import * as notification from "../src/services/notification.service";
-import { placeOrder, prepareCheckout } from "./helpers/merchant";
+import { createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // Notifikasi chat untuk penjual: pesan dari pembeli memberi notifikasi `chat_message` ke penjual, digabung per
 // pesanan selama belum dibaca.
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let merchantUserId: number;
 let customerUserId: number;
+let otherCustomerToken: string;
 
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
 const post = (urlPath: string, token: string, body?: object) => {
   const req = request(app).post(`/api/v1${urlPath}`).set(authHeader(token));
   return body === undefined ? req : req.send(body);
 };
-const confirmedOrder = async () => {
-  const code = await placeOrder(setup.customerToken, setup.menu);
+const confirmedOrder = async (token = setup.customerToken) => {
+  const code = await placeOrder(token, setup.menu);
   await post(`/merchant/orders/${code}/confirm`, setup.tokenA).expect(200);
   return code;
 };
@@ -38,6 +39,7 @@ beforeAll(async () => {
   merchantUserId = merchant.user_id;
   const [[customer]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
   customerUserId = customer.id;
+  otherCustomerToken = await createCustomer(1);
 });
 beforeEach(async () => {
   chatLimiter.reset();
@@ -68,6 +70,11 @@ describe("notifikasi chat untuk penjual", () => {
       },
     ]);
     expect(list.body.meta.unread_count).toBe(1);
+    const filtered = await request(app)
+      .get("/api/v1/me/notifications?type=chat_message")
+      .set(authHeader(setup.tokenA))
+      .expect(200);
+    expect(filtered.body.data).toEqual(list.body.data);
   });
 
   test("pesan kedua saat notifikasi belum dibaca → tetap satu baris, created_at maju", async () => {
@@ -99,6 +106,18 @@ describe("notifikasi chat untuk penjual", () => {
     expect(await chatNotifications(merchantUserId)).toHaveLength(0);
     await buyerSends(code);
     expect(await chatNotifications(customerUserId)).toHaveLength(0);
+  });
+
+  test("dua pembeli dari pesanan berbeda di toko yang sama mengirim bersamaan → keduanya 201, dua notifikasi", async () => {
+    // Penjual belum punya notifikasi belum dibaca: kedua transaksi sama-sama tidak menemukan baris untuk diperbarui
+    // lalu menyisipkan baris baru. Di REPEATABLE READ keduanya saling menunggu kunci celah (deadlock).
+    const [codeBudi, codeOther] = await Promise.all([confirmedOrder(), confirmedOrder(otherCustomerToken)]);
+    await Promise.all([
+      buyerSends(codeBudi),
+      post(`/orders/${codeOther}/messages`, otherCustomerToken, { body: "Saya juga sudah sampai" }).expect(201),
+    ]);
+    const rows = await chatNotifications(merchantUserId);
+    expect(rows.map((row: any) => row.data.order_code).sort()).toEqual([codeBudi, codeOther].sort());
   });
 
   test("penulisan notifikasi gagal → pesan tetap terkirim dan tersimpan, galat dicatat ke log", async () => {

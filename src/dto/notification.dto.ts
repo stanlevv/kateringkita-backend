@@ -7,9 +7,10 @@ import { listQueryBase } from "./order.dto";
 /**
  * Tipe notifikasi yang benar-benar ditulis ke tabel `notifications`: `order_status` (status pesanan berubah), `promo`
  * (promo toko untuk pembeli yang memfavoritkan menunya), `info` (pengumuman admin, serta balasan atau penutupan tiket
- * bantuan), dan `moderation` (foto menu penjual dihapus admin). Tambahkan di sini bila ada tipe baru yang disimpan.
+ * bantuan), `moderation` (foto menu penjual dihapus admin), dan `chat_message` (pembeli mengirim pesan di chat pesanan,
+ * untuk penjual). Tambahkan di sini bila ada tipe baru yang disimpan.
  */
-export const NOTIFICATION_TYPES = ["order_status", "promo", "info", "moderation"] as const;
+export const NOTIFICATION_TYPES = ["order_status", "promo", "info", "moderation", "chat_message"] as const;
 
 /**
  * Query `GET /me/notifications`: `unread` ("true" = hanya yang belum dibaca), `type` (filter tab Pesanan/Promo/Info

@@ -200,7 +200,9 @@ async function loadMessages(orderId: number, afterId = 0): Promise<ChatMessage[]
 
 /**
  * Mengirim pesan teks dan/atau foto ke chat pesanan. Baris pesanan dikunci selama pesan disimpan, sehingga pesan tidak
- * bisa lolos tepat saat pesanan diselesaikan atau dibatalkan.
+ * bisa lolos tepat saat pesanan diselesaikan atau dibatalkan. Transaksi memakai tingkat isolasi READ COMMITTED:
+ * pencarian notifikasi chat penjual tidak mengunci celah (rentang kosong) di indeks, sehingga pembeli dari pesanan
+ * berbeda di toko yang sama bisa menyisipkan notifikasi bersamaan tanpa saling menunggu sampai deadlock.
  * @param party pihak pengirim
  * @param code  kode pesanan
  * @param input isi pesan (sudah lolos sendMessageSchema)
@@ -227,22 +229,24 @@ export async function sendMessage(party: ChatParty, code: string, input: SendMes
     // 4. Pesan pembeli memberi tahu penjual; pesan penjual tidak membuat notifikasi.
     if (party.role === "customer") await notifyMerchant(conn, order.orderId);
     return toChatMessage(row);
-  });
+  }, "READ COMMITTED");
 }
 
 // Menulis notifikasi chat untuk penjual di dalam transaksi pesan, dibatasi titik simpan (SAVEPOINT): bila gagal, hanya
-// tulisan notifikasi yang dibatalkan dan galatnya dicatat ke log server, sedangkan pesannya tetap tersimpan. Tidak ada
-// baris users/orders baru yang dikunci, jadi urutan kunci users → orders dari lockChatOrder tetap terjaga.
+// tulisan notifikasi yang dibatalkan dan galatnya dicatat ke log server, sedangkan pesannya tetap tersimpan. Menyisipkan
+// notifikasi mengunci baris akun penjual (kunci baca dari foreign key ke users) sesudah pesanan; aman karena semua jalur
+// mengambil kunci akun penjual paling akhir, jadi urutan users pembeli → orders dari lockChatOrder tidak berbalik.
 async function notifyMerchant(conn: Conn, orderId: number): Promise<void> {
   await conn.query("SAVEPOINT chat_notification");
   try {
     await createChatNotification(conn, orderId);
   } catch (error) {
-    await conn.query("ROLLBACK TO SAVEPOINT chat_notification");
+    // Catat dulu: bila transaksinya sudah dibatalkan database, rollback di bawah ikut gagal dan galat asli bisa hilang.
     console.error(
       `Gagal menyimpan notifikasi chat pesanan ${orderId}:`,
       error instanceof Error ? error.message : error,
     );
+    await conn.query("ROLLBACK TO SAVEPOINT chat_notification");
   }
 }
 
