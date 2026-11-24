@@ -60,7 +60,7 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-describe("migrasi 018_chat_pesanan", () => {
+describe("migrasi 019_chat_pesanan", () => {
   test("FK: pesan, penanda baca, dan laporan ikut terhapus bersama pesanan; pengirim dihapus → NULL", async () => {
     const [rows] = await db.query<any[]>(
       `SELECT TABLE_NAME AS t, REFERENCED_TABLE_NAME AS ref, DELETE_RULE AS rule_name FROM information_schema.REFERENTIAL_CONSTRAINTS
