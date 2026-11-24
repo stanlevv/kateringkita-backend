@@ -1,10 +1,17 @@
 import request from "supertest";
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
 import { chatLimiter } from "../src/middleware/rate-limiter";
-import { ChatParty, getChatState, listMessages, loadChatOrder, sendMessage } from "../src/services/order-chat.service";
+import {
+  ChatParty,
+  getChatState,
+  listMessages,
+  loadChatOrder,
+  markRead,
+  sendMessage,
+} from "../src/services/order-chat.service";
 import { createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
 // Chat pesanan sisi pembeli: /orders/:code/messages, kolom `chat` di pesanan pembeli, /me/chats/unread
@@ -56,11 +63,11 @@ afterAll(() => {
 describe("migrasi 018_chat_pesanan", () => {
   test("FK: pesan, penanda baca, dan laporan ikut terhapus bersama pesanan; pengirim dihapus → NULL", async () => {
     const [rows] = await db.query<any[]>(
-      `SELECT TABLE_NAME AS t, REFERENCED_TABLE_NAME AS ref, DELETE_RULE AS aturan FROM information_schema.REFERENTIAL_CONSTRAINTS
+      `SELECT TABLE_NAME AS t, REFERENCED_TABLE_NAME AS ref, DELETE_RULE AS rule_name FROM information_schema.REFERENTIAL_CONSTRAINTS
        WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME IN ('order_messages', 'order_chat_reads', 'order_chat_reports')
        ORDER BY t, ref`,
     );
-    expect(rows.map((row: any) => `${row.t}>${row.ref}:${row.aturan}`)).toEqual([
+    expect(rows.map((row: any) => `${row.t}>${row.ref}:${row.rule_name}`)).toEqual([
       "order_chat_reads>orders:CASCADE",
       "order_chat_reports>orders:CASCADE",
       "order_chat_reports>users:SET NULL",
@@ -213,15 +220,36 @@ describe("belum dibaca dan tanda Dibaca", () => {
     // Tanda "Dibaca" pembeli bergantung pada penanda baca penjual.
     const order = await loadChatOrder(merchantParty, code);
     expect((await getChatState(merchantParty, order)).unread_count).toBe(1);
-    const { markRead } = await import("../src/services/order-chat.service");
     await markRead(merchantParty, code);
     const chat = (await get(`/orders/${code}/messages`).expect(200)).body.data.chat;
     expect(chat.other_party_last_read_id).toBeGreaterThan(mine.id);
   });
 });
 
+describe("read dengan last_id", () => {
+  test("pesan penjual yang masuk sesudah last_id tetap belum dibaca dan tidak ikut 'Dibaca'", async () => {
+    const code = await confirmedOrder();
+    const first = await sendMessage(merchantParty, code, { body: "Pesanan sudah siap" });
+    const second = await sendMessage(merchantParty, code, { body: "Saya di depan gerbang" });
+    await post(`/orders/${code}/messages/read`, { last_id: first.id }).expect(204);
+    expect((await get(`/orders/${code}`).expect(200)).body.data.chat.unread_count).toBe(1);
+    const order = await loadChatOrder(merchantParty, code);
+    const merchantChat = await getChatState(merchantParty, order);
+    expect(merchantChat.other_party_last_read_id).toBe(first.id);
+    expect(merchantChat.other_party_last_read_id).toBeLessThan(second.id);
+    // last_id melebihi pesan terakhir penjual dipotong ke pesan terakhir penjual.
+    await post(`/orders/${code}/messages/read`, { last_id: second.id + 1000 }).expect(204);
+    expect((await getChatState(merchantParty, order)).other_party_last_read_id).toBe(second.id);
+    for (const lastId of [-1, 1.5, "abc"]) await post(`/orders/${code}/messages/read`, { last_id: lastId }).expect(400);
+  });
+});
+
 describe("pesanan tamu QR meja", () => {
   test("chat.available false dan kirim pesan 409 CHAT_UNAVAILABLE", async () => {
+    const savedServerKey = env.MIDTRANS_SERVER_KEY;
+    onTestFinished(() => {
+      env.MIDTRANS_SERVER_KEY = savedServerKey;
+    });
     env.MIDTRANS_SERVER_KEY = undefined;
     await request(app)
       .patch("/api/v1/merchant/profile")

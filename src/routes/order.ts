@@ -23,10 +23,13 @@ import {
   countMyUnreadChatsHandler,
   listMyOrderMessagesHandler,
   markMyOrderMessagesReadHandler,
+  reportChatHandler,
+  requestChatUploadHandler,
   sendMyOrderMessageHandler,
 } from "../handlers/order-chat.handler";
+import { uploadSchema } from "../dto/upload.dto";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { chatLimiter } from "../middleware/rate-limiter";
+import { chatLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 /**
@@ -64,6 +67,15 @@ order.post("/orders/:code/reorder", ...customerOnly, reorderHandler);
 order.get("/orders/:code/messages", ...customerOnly, listMyOrderMessagesHandler);
 order.post("/orders/:code/messages", ...customerOnly, chatLimiter, sendMyOrderMessageHandler);
 order.post("/orders/:code/messages/read", ...customerOnly, markMyOrderMessagesReadHandler);
+// Alamat unggah foto chat (batas unggah sama dengan foto lain) dan laporan chat ke admin.
+order.post(
+  "/orders/:code/messages/upload",
+  ...customerOnly,
+  validate(uploadSchema),
+  uploadLimiter,
+  requestChatUploadHandler,
+);
+order.post("/orders/:code/chat-report", ...customerOnly, reportChatHandler);
 // Jumlah pesan penjual yang belum dibaca di semua pesanan, untuk badge chat.
 order.get("/me/chats/unread", ...customerOnly, countMyUnreadChatsHandler);
 

@@ -1,13 +1,17 @@
 // Isi file: chat pembeli ↔ penjual untuk satu pesanan, dipakai untuk koordinasi titik temu dan pengambilan makanan.
-// Alurnya routes/order.ts → handlers/order-chat.handler.ts → file ini → database (tabel order_messages,
-// order_chat_reads, order_chat_reports). Setiap fungsi menerima `party`, yaitu pihak yang meminta (pembeli atau
-// penjual), dan hanya melayani pesanan milik pihak itu. Chat hanya bisa dikirimi pesan saat pesanan sudah diterima
-// toko dan belum selesai (status confirmed, cooking, ready); di luar itu riwayatnya tetap bisa dibaca.
+// Alurnya routes/order.ts dan routes/merchant.ts → handlers/order-chat.handler.ts → file ini → database (tabel
+// order_messages, order_chat_reads, order_chat_reports). Setiap fungsi chat menerima `party`, yaitu pihak yang meminta
+// (pembeli atau penjual), dan hanya melayani pesanan milik pihak itu. Chat hanya bisa dikirimi pesan dan foto saat
+// pesanan sudah diterima toko dan belum selesai (status confirmed, cooking, ready); di luar itu riwayatnya tetap bisa
+// dibaca. Admin hanya bisa membaca chat yang dilaporkan, lewat laporannya (listChatReports, getChatReport).
+import { z } from "zod";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { AppError } from "../utils/errors";
 import { Conn, withTransaction } from "./admin-audit.service";
-import { SendMessageInput } from "../dto/order-chat.dto";
+import { createUpload, validateImageUrl } from "./upload.service";
+import { ListChatReportsQuery, SendMessageInput } from "../dto/order-chat.dto";
+import { uploadSchema } from "../dto/upload.dto";
 
 /** Peran pihak di dalam chat: pembeli (`customer`) atau penjual (`merchant`). */
 export type ChatRole = "customer" | "merchant";
@@ -49,6 +53,8 @@ const otherRole = (role: ChatRole): ChatRole => (role === "customer" ? "merchant
 // Syarat SQL kepemilikan pesanan (alias tabel orders `o`): pembeli lewat customer_id, penjual lewat merchant_id.
 const ownerCondition = (party: ChatParty): [string, number] =>
   party.role === "customer" ? ["o.customer_id = ?", party.userId] : ["o.merchant_id = ?", party.merchantId];
+// Folder unggah foto chat satu pesanan; dipakai saat membuat alamat unggah dan saat memeriksa URL foto pesan.
+const chatPhotoFolder = (orderId: number) => `orders/${orderId}/chat/`;
 
 /**
  * Menentukan kenapa chat tertutup. Pesanan tamu QR meja tidak punya akun pembeli, jadi chatnya tidak tersedia.
@@ -65,6 +71,17 @@ export const getClosedReason = (status: string, customerId: number | null): Chat
 };
 
 /**
+ * Kolom SQL `chat_unread`: jumlah pesan pihak lawan yang belum dibaca satu pihak, dipakai bersama alias tabel orders
+ * `o`. Peran ditulis langsung ke SQL; nilainya selalu salah satu dari dua peran tetap, bukan masukan pengguna.
+ * @param role peran pihak yang membaca
+ * @returns potongan SQL satu kolom, untuk diletakkan di daftar kolom SELECT
+ */
+export const chatUnreadColumn = (role: ChatRole) =>
+  `(SELECT COUNT(*) FROM order_messages cm WHERE cm.order_id = o.id AND cm.sender_role = '${otherRole(role)}'
+      AND cm.id > COALESCE((SELECT cr.last_read_message_id FROM order_chat_reads cr
+        WHERE cr.order_id = o.id AND cr.reader_role = '${role}'), 0)) AS chat_unread`;
+
+/**
  * Kolom SQL untuk keadaan chat satu pesanan dilihat dari satu pihak, dipakai bersama alias tabel orders `o`:
  * `chat_unread` (pesan pihak lawan yang belum dibaca), `chat_other_read_id` (pesan terakhir yang sudah dibaca pihak
  * lawan), dan `chat_reported` (pihak ini sudah melaporkan chat). Peran ditulis langsung ke SQL; nilainya selalu salah
@@ -74,9 +91,7 @@ export const getClosedReason = (status: string, customerId: number | null): Chat
  */
 export const chatStateColumns = (role: ChatRole) => {
   const other = otherRole(role);
-  return `(SELECT COUNT(*) FROM order_messages cm WHERE cm.order_id = o.id AND cm.sender_role = '${other}'
-      AND cm.id > COALESCE((SELECT cr.last_read_message_id FROM order_chat_reads cr
-        WHERE cr.order_id = o.id AND cr.reader_role = '${role}'), 0)) AS chat_unread,
+  return `${chatUnreadColumn(role)},
     (SELECT cr.last_read_message_id FROM order_chat_reads cr
       WHERE cr.order_id = o.id AND cr.reader_role = '${other}') AS chat_other_read_id,
     EXISTS (SELECT 1 FROM order_chat_reports rp
@@ -159,49 +174,47 @@ export async function listMessages(
   code: string,
   afterId = 0,
 ): Promise<{ messages: ChatMessage[]; chat: ChatState }> {
-  // 1. Pastikan pesanan milik pihak ini.
+  // 1. Pastikan pesanan milik pihak ini, lalu ambil pesan sesudah `afterId`.
   const order = await loadChatOrder(party, code);
-  // 2. Ambil pesan sesudah `afterId`, urut id, supaya cek berkala tidak mendapat pesan dobel atau terlewat.
+  const messages = await loadMessages(order.orderId, afterId);
+  // 2. Sertakan keadaan chat terbaru (terbuka/tertutup, belum dibaca, tanda dibaca pihak lawan).
+  return { messages, chat: await getChatState(party, order) };
+}
+
+// Pesan satu pesanan dengan id lebih besar dari `afterId`, urut id, supaya cek berkala tidak mendapat pesan dobel atau
+// terlewat. Dipakai pembeli, penjual, dan admin (lewat laporan); hak akses diperiksa pemanggil.
+// shortcut: tanpa after_id seluruh riwayat dikirim sekaligus (chat satu pesanan biasanya puluhan pesan); beri paginasi bila chat mencapai ratusan pesan
+async function loadMessages(orderId: number, afterId = 0): Promise<ChatMessage[]> {
   const [rows] = await db.query<RowDataPacket[]>(
     `SELECT ${MESSAGE_COLUMNS} FROM order_messages WHERE order_id = ? AND id > ? ORDER BY id`,
-    [order.orderId, afterId],
+    [orderId, afterId],
   );
-  // 3. Sertakan keadaan chat terbaru (terbuka/tertutup, belum dibaca, tanda dibaca pihak lawan).
-  return { messages: rows.map(toChatMessage), chat: await getChatState(party, order) };
+  return rows.map(toChatMessage);
 }
 
 /**
- * Mengirim pesan ke chat pesanan. Baris pesanan dikunci selama pesan disimpan, sehingga pesan tidak bisa lolos tepat
- * saat pesanan diselesaikan atau dibatalkan.
+ * Mengirim pesan teks dan/atau foto ke chat pesanan. Baris pesanan dikunci selama pesan disimpan, sehingga pesan tidak
+ * bisa lolos tepat saat pesanan diselesaikan atau dibatalkan.
  * @param party pihak pengirim
  * @param code  kode pesanan
  * @param input isi pesan (sudah lolos sendMessageSchema)
  * @returns pesan yang baru disimpan
  * @throws 404 pesanan tidak ada atau bukan milik pihak itu; 409 CHAT_NOT_OPEN (toko belum menerima pesanan),
- *         CHAT_CLOSED (pesanan selesai, batal, atau kadaluarsa), atau CHAT_UNAVAILABLE (pesanan tamu QR meja)
+ *         CHAT_CLOSED (pesanan selesai, batal, atau kadaluarsa), atau CHAT_UNAVAILABLE (pesanan tamu QR meja);
+ *         400 VALIDATION_ERROR di `image_url` bila foto bukan unggahan ke folder chat pesanan ini
  */
 export async function sendMessage(party: ChatParty, code: string, input: SendMessageInput): Promise<ChatMessage> {
   return withTransaction(async (conn) => {
-    // 1. Kunci baris pembeli dulu, baru pesanan: urutan sama dengan transitionOrder, supaya kirim pesan dan perubahan
-    //    status yang bersamaan tidak saling menunggu (deadlock). Penjual: customer_id tidak pernah berubah, jadi aman
-    //    dibaca tanpa kunci; pesanan tamu tidak punya pembeli untuk dikunci.
-    let customerId: number | null = party.userId;
-    if (party.role === "merchant") {
-      const [[owner]] = await conn.query<RowDataPacket[]>(
-        "SELECT customer_id FROM orders WHERE code = ? AND merchant_id = ?",
-        [code, party.merchantId],
-      );
-      customerId = owner?.customer_id ?? null;
-    }
-    if (customerId !== null) await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [customerId]);
-    // 2. Kunci pesanan lalu pastikan chat sedang terbuka.
-    const order = await loadChatOrder(party, code, conn);
+    // 1. Kunci pesanan lalu pastikan chat sedang terbuka.
+    const order = await lockChatOrder(conn, party, code);
     const closedReason = getClosedReason(order.status, order.customerId);
     if (closedReason) throw CLOSED_ERRORS[closedReason]();
+    // 2. Foto hanya boleh dari folder chat pesanan ini, bukan dari pesanan lain atau domain lain.
+    validateImageUrl(input.image_url, null, chatPhotoFolder(order.orderId), "image_url");
     // 3. Simpan pesan, lalu baca lagi supaya waktu kirimnya sama persis dengan yang tersimpan.
     const [result] = await conn.query<ResultSetHeader>(
-      "INSERT INTO order_messages (order_id, sender_role, sender_user_id, body) VALUES (?, ?, ?, ?)",
-      [order.orderId, party.role, party.userId, input.body],
+      "INSERT INTO order_messages (order_id, sender_role, sender_user_id, body, image_url) VALUES (?, ?, ?, ?, ?)",
+      [order.orderId, party.role, party.userId, input.body ?? null, input.image_url ?? null],
     );
     const [[row]] = await conn.query<RowDataPacket[]>(`SELECT ${MESSAGE_COLUMNS} FROM order_messages WHERE id = ?`, [
       result.insertId,
@@ -210,41 +223,176 @@ export async function sendMessage(party: ChatParty, code: string, input: SendMes
   });
 }
 
+// Mengunci pesanan di dalam transaksi sebelum chat ditulisi (kirim pesan, laporan). Baris pembeli dikunci dulu, baru
+// pesanan: urutan sama dengan transitionOrder, supaya penulisan chat dan perubahan status yang bersamaan tidak saling
+// menunggu (deadlock). Penjual: customer_id tidak pernah berubah, jadi aman dibaca tanpa kunci; pesanan tamu tidak
+// punya pembeli untuk dikunci. Pesanan pihak lain dijawab 404 oleh loadChatOrder.
+async function lockChatOrder(conn: Conn, party: ChatParty, code: string): Promise<ChatOrder> {
+  let customerId: number | null = party.userId;
+  if (party.role === "merchant") {
+    const [[owner]] = await conn.query<RowDataPacket[]>(
+      "SELECT customer_id FROM orders WHERE code = ? AND merchant_id = ?",
+      [code, party.merchantId],
+    );
+    customerId = owner?.customer_id ?? null;
+  }
+  if (customerId !== null) await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [customerId]);
+  return loadChatOrder(party, code, conn);
+}
+
 /**
- * Menandai semua pesan chat pesanan sudah dibaca oleh pihak yang meminta. Penanda tidak pernah mundur, jadi
- * permintaan lama yang datang terlambat tidak membuat pesan kembali "belum dibaca". Boleh juga setelah chat ditutup.
- * @param party pihak yang membaca
- * @param code  kode pesanan
- * @returns selesai setelah penanda disimpan (tidak ada yang disimpan bila chat masih kosong)
+ * Menandai pesan chat pesanan sudah dibaca oleh pihak yang meminta. Penanda tidak pernah mundur, jadi permintaan lama
+ * yang datang terlambat tidak membuat pesan kembali "belum dibaca". Boleh juga setelah chat ditutup.
+ * @param party  pihak yang membaca
+ * @param code   kode pesanan
+ * @param lastId id pesan terakhir yang tampil di layar. Bila diisi, penanda = yang lebih kecil antara `lastId` dan id
+ *               pesan terakhir pihak lawan, supaya pesan lawan yang masuk sesudahnya tidak ikut "Dibaca". Bila tidak
+ *               diisi, semua pesan dianggap sudah dibaca
+ * @returns selesai setelah penanda disimpan (tidak ada yang disimpan bila belum ada pesan yang bisa ditandai)
  * @throws 404 pesanan tidak ada atau bukan milik pihak itu
  */
-export async function markRead(party: ChatParty, code: string): Promise<void> {
-  // 1. Cari pesan terakhir di chat ini.
+export async function markRead(party: ChatParty, code: string, lastId?: number): Promise<void> {
+  // 1. Cari pesan terakhir di chat ini (bila lastId diisi: pesan terakhir pihak lawan), lalu tentukan penandanya.
   const order = await loadChatOrder(party, code);
-  const [[latest]] = await db.query<RowDataPacket[]>("SELECT MAX(id) AS id FROM order_messages WHERE order_id = ?", [
-    order.orderId,
-  ]);
+  const [[latest]] = await db.query<RowDataPacket[]>(
+    `SELECT MAX(id) AS id FROM order_messages WHERE order_id = ?${lastId === undefined ? "" : " AND sender_role = ?"}`,
+    [order.orderId, otherRole(party.role)],
+  );
   if (latest.id === null) return;
+  const readId = lastId === undefined ? latest.id : Math.min(lastId, Number(latest.id));
   // 2. Simpan sebagai penanda baca pihak ini; bila sudah ada, ambil yang lebih besar.
   await db.query(
     `INSERT INTO order_chat_reads (order_id, reader_role, last_read_message_id, updated_at)
      VALUES (?, ?, ?, UTC_TIMESTAMP())
      ON DUPLICATE KEY UPDATE last_read_message_id = GREATEST(last_read_message_id, ?), updated_at = UTC_TIMESTAMP()`,
-    [order.orderId, party.role, latest.id, latest.id],
+    [order.orderId, party.role, readId, readId],
   );
 }
 
 /**
- * Jumlah pesan penjual yang belum dibaca pembeli di semua pesanannya, untuk badge chat di aplikasi.
- * @param userId id pembeli yang login
- * @returns jumlah pesan belum dibaca
+ * Pesanan yang punya pesan pihak lawan belum dibaca, untuk badge chat dan daftar chat masuk. `total` = jumlah semua
+ * pesan belum dibaca (bukan jumlah chat), sama dengan total `unread_count` semua pesanan.
+ * @param party pihak yang membaca
+ * @returns `{ total, orders }`; tiap pesanan berisi `code`, `unread_count`, dan `last_message_at` (waktu pesan belum
+ *          dibaca yang terakhir), urut dari yang terbaru
  */
-export async function countCustomerUnread(userId: number): Promise<number> {
-  const [[row]] = await db.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total FROM order_messages cm JOIN orders o ON o.id = cm.order_id
-     LEFT JOIN order_chat_reads cr ON cr.order_id = o.id AND cr.reader_role = 'customer'
-     WHERE o.customer_id = ? AND cm.sender_role = 'merchant' AND cm.id > COALESCE(cr.last_read_message_id, 0)`,
-    [userId],
+// shortcut: jumlah pesanan tidak dibatasi karena biasanya hanya pesanan aktif yang punya pesan belum dibaca; beri LIMIT bila daftarnya membesar
+export async function listUnreadChats(party: ChatParty) {
+  // 1. Hitung pesan pihak lawan sesudah penanda baca pihak ini, per pesanan.
+  const [condition, ownerId] = ownerCondition(party);
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT o.code, COUNT(*) AS unread_count, MAX(cm.created_at) AS last_message_at
+     FROM order_messages cm JOIN orders o ON o.id = cm.order_id
+     LEFT JOIN order_chat_reads cr ON cr.order_id = o.id AND cr.reader_role = ?
+     WHERE ${condition} AND cm.sender_role = ? AND cm.id > COALESCE(cr.last_read_message_id, 0)
+     GROUP BY o.id, o.code ORDER BY last_message_at DESC, o.id DESC`,
+    [party.role, ownerId, otherRole(party.role)],
   );
-  return Number(row.total);
+  // 2. Susun daftar dan jumlahkan.
+  const orders = rows.map((row) => ({
+    code: row.code as string,
+    unread_count: Number(row.unread_count),
+    last_message_at: row.last_message_at as Date,
+  }));
+  return { total: orders.reduce((sum, order) => sum + order.unread_count, 0), orders };
+}
+
+/**
+ * Membuat alamat unggah foto chat di folder `orders/<id pesanan>/chat/`. Hanya boleh selama chat terbuka.
+ * @param party pihak yang mengunggah
+ * @param code  kode pesanan
+ * @param input tipe dan ukuran foto (sudah lolos uploadSchema)
+ * @returns hasil createUpload: `upload_url`, `public_url`, dan `expires_at`
+ * @throws 404 pesanan tidak ada atau bukan milik pihak itu; 409 CHAT_NOT_OPEN, CHAT_CLOSED, atau CHAT_UNAVAILABLE;
+ *         503 pengaturan R2 belum diisi
+ */
+export async function requestChatUpload(party: ChatParty, code: string, input: z.infer<typeof uploadSchema>) {
+  const order = await loadChatOrder(party, code);
+  const closedReason = getClosedReason(order.status, order.customerId);
+  if (closedReason) throw CLOSED_ERRORS[closedReason]();
+  return createUpload(chatPhotoFolder(order.orderId), input);
+}
+
+/**
+ * Melaporkan chat pesanan ke admin. Setiap pihak hanya bisa melapor sekali per pesanan; laporan tetap boleh setelah
+ * chat ditutup.
+ * @param party  pihak pelapor
+ * @param code   kode pesanan
+ * @param reason alasan laporan (sudah lolos reportChatSchema)
+ * @returns laporan yang baru disimpan: `id`, `reporter_role`, `reason`, dan `created_at`
+ * @throws 404 pesanan tidak ada atau bukan milik pihak itu; 409 CHAT_UNAVAILABLE (pesanan tamu QR meja) atau
+ *         ALREADY_REPORTED (pihak ini sudah melaporkan chat ini)
+ */
+export async function reportChat(party: ChatParty, code: string, reason: string) {
+  return withTransaction(async (conn) => {
+    // 1. Kunci pesanan; pesanan tamu QR meja tidak punya chat untuk dilaporkan.
+    const order = await lockChatOrder(conn, party, code);
+    if (order.customerId === null) throw CLOSED_ERRORS.unavailable();
+    // 2. Simpan laporan. Indeks unik (pesanan, pihak) menolak laporan kedua dari pihak yang sama.
+    let reportId: number;
+    try {
+      const [result] = await conn.query<ResultSetHeader>(
+        "INSERT INTO order_chat_reports (order_id, reporter_role, reporter_user_id, reason) VALUES (?, ?, ?, ?)",
+        [order.orderId, party.role, party.userId, reason],
+      );
+      reportId = result.insertId;
+    } catch (error) {
+      if ((error as { code?: string })?.code === "ER_DUP_ENTRY")
+        throw new AppError(409, "ALREADY_REPORTED", "Chat ini sudah kamu laporkan.");
+      throw error;
+    }
+    // 3. Baca lagi supaya waktu laporan sama persis dengan yang tersimpan.
+    const [[row]] = await conn.query<RowDataPacket[]>(
+      "SELECT id, reporter_role, reason, created_at FROM order_chat_reports WHERE id = ?",
+      [reportId],
+    );
+    return { id: row.id, reporter_role: row.reporter_role as ChatRole, reason: row.reason, created_at: row.created_at };
+  });
+}
+
+// Kolom laporan untuk admin (alias rp = order_chat_reports, o = orders, u = akun pelapor).
+const REPORT_SELECT = `SELECT rp.id, rp.order_id, o.code AS order_code, rp.reporter_role, u.full_name AS reporter_name,
+    rp.reason, rp.created_at
+  FROM order_chat_reports rp JOIN orders o ON o.id = rp.order_id LEFT JOIN users u ON u.id = rp.reporter_user_id`;
+// Baris REPORT_SELECT → bentuk JSON laporan.
+const toChatReport = (row: RowDataPacket) => ({
+  id: row.id as number,
+  order_code: row.order_code as string,
+  reporter_role: row.reporter_role as ChatRole,
+  reporter_name: (row.reporter_name ?? null) as string | null,
+  reason: row.reason as string,
+  created_at: row.created_at as Date,
+});
+
+/**
+ * Daftar laporan chat untuk admin, terbaru dulu.
+ * @param filter halaman dan jumlah per halaman
+ * @returns `{ data, meta: { page, limit, total } }`; tiap laporan berisi `id`, `order_code`, `reporter_role`,
+ *          `reporter_name` (null bila akun pelapor dihapus), `reason`, dan `created_at`
+ */
+export async function listChatReports(filter: ListChatReportsQuery) {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `${REPORT_SELECT} ORDER BY rp.created_at DESC, rp.id DESC LIMIT ? OFFSET ?`,
+    [filter.limit, (filter.page - 1) * filter.limit],
+  );
+  const [[countRow]] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM order_chat_reports");
+  return { data: rows.map(toChatReport), meta: { page: filter.page, limit: filter.limit, total: Number(countRow.n) } };
+}
+
+/**
+ * Satu laporan chat beserta seluruh pesan pesanan itu, urut id. Ini satu-satunya jalan admin membaca isi chat, jadi
+ * chat yang tidak dilaporkan tidak bisa dibaca admin.
+ * @param reportId id laporan dari path
+ * @returns laporan seperti di {@link listChatReports}, ditambah `messages`
+ * @throws 404 id tidak valid atau laporan tidak ada
+ */
+export async function getChatReport(reportId: number) {
+  // 1. Cari laporannya; id yang bukan bilangan bulat positif pasti tidak ada.
+  const [[row]] =
+    Number.isInteger(reportId) && reportId > 0
+      ? await db.query<RowDataPacket[]>(`${REPORT_SELECT} WHERE rp.id = ?`, [reportId])
+      : [[]];
+  if (!row) throw new AppError(404, "NOT_FOUND", "Laporan tidak ditemukan.");
+  // 2. Sertakan seluruh riwayat chat pesanan itu.
+  return { ...toChatReport(row), messages: await loadMessages(row.order_id) };
 }
