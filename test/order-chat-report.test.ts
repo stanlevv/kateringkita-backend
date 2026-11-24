@@ -116,6 +116,12 @@ describe("GET /admin/chat-reports", () => {
   test("tidak ada jalur admin ke chat yang tidak dilaporkan: id tidak ada / bukan angka 404", async () => {
     await get("/admin/chat-reports/999999", superToken).expect(404);
     await get("/admin/chat-reports/abc", superToken).expect(404);
+    // Number() membaca "1e1" sebagai 10 dan "0x.." sebagai heksadesimal; keduanya harus tetap 404.
+    const reportId = Number((await get("/admin/chat-reports", superToken)).body.data[0].id);
+    await get(`/admin/chat-reports/${reportId}`, superToken).expect(200);
+    await get("/admin/chat-reports/1e1", superToken).expect(404);
+    await get(`/admin/chat-reports/${reportId}e0`, superToken).expect(404);
+    await get(`/admin/chat-reports/0x${reportId.toString(16)}`, superToken).expect(404);
     const unreported = await confirmedOrder();
     await get(`/admin/orders/${unreported}/messages`, superToken).expect(404);
     await get(`/admin/chat-reports/${unreported}`, superToken).expect(404);

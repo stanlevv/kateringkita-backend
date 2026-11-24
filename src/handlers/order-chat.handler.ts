@@ -145,8 +145,10 @@ export const listChatReportsHandler: RequestHandler = async (req, res) => {
  * @param req permintaan dengan `:id` laporan
  * @param res jawaban `{ data }` berisi laporan dan `messages`
  * @returns selesai setelah jawaban dikirim
- * @throws 404 laporan tidak ada
+ * @throws 404 id bukan angka desimal atau laporan tidak ada
  */
 export const getChatReportHandler: RequestHandler = async (req, res) => {
-  res.json({ data: await getChatReport(Number(req.params.id)) });
+  // Hanya angka desimal; Number() sendiri menerima "1e1" dan "0x10" sebagai 10 dan 16.
+  const id = String(req.params.id);
+  res.json({ data: await getChatReport(/^\d+$/.test(id) ? Number(id) : NaN) });
 };

@@ -414,17 +414,16 @@ export async function listChatReports(filter: ListChatReportsQuery) {
 /**
  * Satu laporan chat beserta seluruh pesan pesanan itu, urut id. Ini satu-satunya jalan admin membaca isi chat, jadi
  * chat yang tidak dilaporkan tidak bisa dibaca admin.
- * @param reportId id laporan dari path
+ * @param reportId id laporan dari path (NaN bila path bukan angka desimal)
  * @returns laporan seperti di {@link listChatReports}, ditambah `messages`
  * @throws 404 id tidak valid atau laporan tidak ada
  */
 export async function getChatReport(reportId: number) {
   // 1. Cari laporannya; id yang bukan bilangan bulat positif pasti tidak ada.
-  const [[row]] =
-    Number.isInteger(reportId) && reportId > 0
-      ? await db.query<RowDataPacket[]>(`${REPORT_SELECT} WHERE rp.id = ?`, [reportId])
-      : [[]];
-  if (!row) throw new AppError(404, "NOT_FOUND", "Laporan tidak ditemukan.");
+  const notFound = () => new AppError(404, "NOT_FOUND", "Laporan tidak ditemukan.");
+  if (!Number.isSafeInteger(reportId) || reportId < 1) throw notFound();
+  const [[row]] = await db.query<RowDataPacket[]>(`${REPORT_SELECT} WHERE rp.id = ?`, [reportId]);
+  if (!row) throw notFound();
   // 2. Sertakan seluruh riwayat chat pesanan itu.
   return { ...toChatReport(row), messages: await loadMessages(row.order_id) };
 }
