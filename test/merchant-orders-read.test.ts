@@ -13,6 +13,7 @@ const ORDER_KEYS = [
   "cancel_reason",
   "cancelled_at",
   "cancelled_by",
+  "chat_unread_count",
   "code",
   "completed_at",
   "confirmed_at",

@@ -16,6 +16,7 @@ const ORDER_KEYS = [
   "can_review",
   "cancel_reason",
   "cancelled_by",
+  "chat",
   "code",
   "created_at",
   "discount",
@@ -32,6 +33,7 @@ const ORDER_KEYS = [
   "service_fee",
   "status",
   "subtotal",
+  "timeline",
   "total",
   "updated_at",
 ];

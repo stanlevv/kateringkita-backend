@@ -84,6 +84,7 @@ import {
   getAdminTicketHandler,
   closeAdminTicketHandler,
 } from "../handlers/ticket.handler";
+import { getChatReportHandler, listChatReportsHandler } from "../handlers/order-chat.handler";
 import { validate } from "../middleware/validate";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
@@ -204,6 +205,11 @@ admin.get("/tickets", listAdminTicketsHandler);
 admin.get("/tickets/:code", getAdminTicketHandler);
 admin.post("/tickets/:code/messages", replyAdminTicketHandler);
 admin.post("/tickets/:code/close", closeAdminTicketHandler);
+
+// Chat pesanan yang dilaporkan pembeli atau penjual; semua tingkat admin boleh membaca, tidak ada rute untuk menulis.
+// Hanya chat yang dilaporkan yang bisa dibaca, lewat laporannya.
+admin.get("/chat-reports", listChatReportsHandler);
+admin.get("/chat-reports/:id", getChatReportHandler);
 
 // Path admin yang tidak dikenal berhenti di sini (404), tidak diteruskan ke router /api/v1 lain.
 admin.use(() => {

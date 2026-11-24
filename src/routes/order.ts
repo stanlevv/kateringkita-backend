@@ -1,6 +1,7 @@
 // Isi file: daftar alamat (rute) pesanan pembeli di /api/v1: quote, checkout, detail, daftar, batal, selesai,
-// ulasan, pesan lagi, dan bayar. Lapisan pertama dari alur routes → handlers (order.handler) → services
-// (order.service, va-payment.service) → database: menentukan siapa yang boleh masuk dan skema isi permintaan.
+// ulasan, pesan lagi, bayar, dan chat dengan penjual. Lapisan pertama dari alur routes → handlers (order.handler,
+// order-chat.handler) → services (order.service, va-payment.service, order-chat.service) → database: menentukan siapa
+// yang boleh masuk dan skema isi permintaan.
 import { Router } from "express";
 import { quoteSchema, reviewSchema, vaSchema } from "../dto/order.dto";
 import {
@@ -18,7 +19,17 @@ import {
   completeMyOrderHandler,
   getMyOrderWhatsappHandler,
 } from "../handlers/order.handler";
+import {
+  countMyUnreadChatsHandler,
+  listMyOrderMessagesHandler,
+  markMyOrderMessagesReadHandler,
+  reportChatHandler,
+  requestChatUploadHandler,
+  sendMyOrderMessageHandler,
+} from "../handlers/order-chat.handler";
+import { uploadSchema } from "../dto/upload.dto";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { chatLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 /**
@@ -51,6 +62,22 @@ order.post("/orders/:code/reviews", ...customerOnly, validate(reviewSchema), cre
 
 // Pesan lagi: susun ulang pesanan lama lalu hitung harganya.
 order.post("/orders/:code/reorder", ...customerOnly, reorderHandler);
+
+// Chat dengan penjual untuk pesanan ini. Kirim pesan dibatasi 30 per menit per pembeli.
+order.get("/orders/:code/messages", ...customerOnly, listMyOrderMessagesHandler);
+order.post("/orders/:code/messages", ...customerOnly, chatLimiter, sendMyOrderMessageHandler);
+order.post("/orders/:code/messages/read", ...customerOnly, markMyOrderMessagesReadHandler);
+// Alamat unggah foto chat (batas unggah sama dengan foto lain) dan laporan chat ke admin.
+order.post(
+  "/orders/:code/messages/upload",
+  ...customerOnly,
+  validate(uploadSchema),
+  uploadLimiter,
+  requestChatUploadHandler,
+);
+order.post("/orders/:code/chat-report", ...customerOnly, reportChatHandler);
+// Jumlah pesan penjual yang belum dibaca di semua pesanan, untuk badge chat.
+order.get("/me/chats/unread", ...customerOnly, countMyUnreadChatsHandler);
 
 // Pembayaran: Virtual Account Midtrans untuk pesanan VA (bank dipilih pembeli).
 order.post("/orders/:code/va", ...customerOnly, validate(vaSchema), createVaHandler);

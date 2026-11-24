@@ -1,10 +1,10 @@
 // Isi file: daftar route semua fitur penjual di bawah /api/v1/merchant: profil toko, menu dan kuota, unggah foto,
-// banner, pesanan, laporan, promo, ulasan, asisten AI, meja, dan pencairan. Alurnya request masuk → middleware (login,
-// peran penjual, pemeriksa body, pembatas laju) → handler → service → database.
+// banner, pesanan dan chat dengan pembeli, laporan, promo, ulasan, asisten AI, meja, dan pencairan. Alurnya request
+// masuk → middleware (login, peran penjual, pemeriksa body, pembatas laju) → handler → service → database.
 import { Router } from "express";
 import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
 import { openStatusSchema, updateProfileSchema } from "../dto/merchant.dto";
-import { merchantUploadSchema } from "../dto/upload.dto";
+import { merchantUploadSchema, uploadSchema } from "../dto/upload.dto";
 import {
   createMerchantBannerHandler,
   listMerchantBannersHandler,
@@ -41,7 +41,16 @@ import {
   uploadPhotoHandler,
   getMerchantOrderWhatsappHandler,
 } from "../handlers/merchant.handler";
-import { assistantLimiter, passwordLimiter, uploadLimiter } from "../middleware/rate-limiter";
+import {
+  listMerchantUnreadChatsHandler,
+  listMerchantUnrepliedChatsHandler,
+  listMyOrderMessagesHandler,
+  markMyOrderMessagesReadHandler,
+  reportChatHandler,
+  requestChatUploadHandler,
+  sendMyOrderMessageHandler,
+} from "../handlers/order-chat.handler";
+import { assistantLimiter, chatLimiter, passwordLimiter, uploadLimiter } from "../middleware/rate-limiter";
 import { validate } from "../middleware/validate";
 
 // `validate(schema)` = memeriksa body dengan skema zod sebelum handler jalan (400 bila tidak sesuai). Pembatas laju
@@ -86,6 +95,18 @@ merchant.get("/orders/:code", getMerchantOrderHandler);
 
 // Tautan chat WhatsApp ke pembeli.
 merchant.get("/orders/:code/whatsapp", getMerchantOrderWhatsappHandler);
+
+// Chat dengan pembeli untuk pesanan toko; harus dipasang sebelum rute aksi `/orders/:code/:aksi` di bawah. Kirim
+// pesan dibatasi 30 per menit per penjual.
+merchant.get("/orders/:code/messages", listMyOrderMessagesHandler);
+merchant.post("/orders/:code/messages", chatLimiter, sendMyOrderMessageHandler);
+merchant.post("/orders/:code/messages/read", markMyOrderMessagesReadHandler);
+merchant.post("/orders/:code/messages/upload", validate(uploadSchema), uploadLimiter, requestChatUploadHandler);
+merchant.post("/orders/:code/chat-report", reportChatHandler);
+// Pesanan toko yang punya pesan pembeli belum dibaca, untuk badge chat.
+merchant.get("/chats/unread", listMerchantUnreadChatsHandler);
+// Pesanan toko yang pesan terakhirnya dari pembeli (belum dibalas), untuk daftar "Chat belum dibalas".
+merchant.get("/chats/unreplied", listMerchantUnrepliedChatsHandler);
 
 // Laporan penjualan.
 merchant.get("/reports/summary", getReportSummaryHandler);

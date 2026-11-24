@@ -65,6 +65,7 @@
 | Semua non-tunai lewat Midtrans (VA + bayar online Snap untuk pre-order), rekening & pencairan dana toko, daftar refund admin                                                              | Selesai  |
 | Broadcast pengumuman, notifikasi promo, kontak CS                                                                                                                                         | Selesai  |
 | Tiket bantuan (CS) dua arah pembeli ↔ tim admin, notifikasi balasan                                                                                                                       | Selesai  |
+| Chat pesanan pembeli ↔ penjual (teks dan foto, buka saat pesanan diterima sampai selesai), laporan chat ke admin                                                                          | Selesai  |
 | Voucher: klaim voucher, Voucher Saya, voucher tersembunyi, maksimal satu voucher toko + satu voucher platform per pesanan                                                                 | Selesai  |
 | Banner beranda (diajukan penjual, disetujui admin) dan pop-up promo aplikasi mobile yang diatur admin                                                                                     | Selesai  |
 | Perbaikan hasil audit keamanan November 2026 (lihat bagian Keamanan di bawah)                                                                                                             | Sebagian |

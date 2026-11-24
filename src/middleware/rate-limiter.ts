@@ -327,3 +327,33 @@ export const ticketLimiter: RequestHandler & { reset: () => void } = Object.assi
   }) as RequestHandler,
   { reset: () => ticketByUser.hits.clear() },
 );
+
+// Chat pesanan: 30 pesan per pengguna per menit. Hanya pesan yang tersimpan (201) yang dihitung.
+const chatByUser = createBucket(30, 60_000);
+
+/**
+ * Pembatas kirim pesan chat pesanan: 30 pesan yang berhasil dikirim per pengguna per menit.
+ * @param req  request masuk
+ * @param res  respons yang akan dikirim
+ * @param next fungsi Express untuk lanjut ke middleware atau route berikutnya
+ * @returns tidak ada; memanggil `next()` bila masih dalam batas, atau `next(galat 429)` bila tidak
+ * @throws 429 RATE_LIMITED bila batas sudah tercapai
+ */
+export const chatLimiter: RequestHandler & { reset: () => void } = Object.assign(
+  ((req, res, next) => {
+    // 1. Tolak bila batas pengguna ini sudah tercapai.
+    const now = Date.now();
+    const key = String((req as AuthedRequest).auth.userId);
+    if (isFull(chatByUser, key, now)) {
+      return next(new AppError(429, "RATE_LIMITED", "Terlalu banyak pesan. Tunggu sebentar."));
+    }
+    // 2. Jatah diambil sekarang supaya banyak permintaan bersamaan tidak lolos semua; dikembalikan bila pesan tidak
+    //    jadi tersimpan (contoh 400 atau 409).
+    addHit(chatByUser, key, now);
+    res.on("finish", () => {
+      if (res.statusCode !== 201) removeHit(chatByUser, key);
+    });
+    next();
+  }) as RequestHandler,
+  { reset: () => chatByUser.hits.clear() },
+);

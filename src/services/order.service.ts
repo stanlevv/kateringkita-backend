@@ -23,6 +23,7 @@ import {
 } from "./order-cart.service";
 import { MyOrdersQuery, OrderInput, QuoteInput, quoteSchema } from "../dto/order.dto";
 import { Status, transitionOrder } from "./order-status.service";
+import { chatStateColumns, toChatState } from "./order-chat.service";
 
 /**
  * Menghitung rincian harga sebelum pembeli checkout. Tidak menyimpan apa pun ke database.
@@ -430,8 +431,11 @@ export async function createOrder(userId: number, idempotencyKey: string, data: 
 export const ORDER_COLUMNS = `o.id, o.code, o.status, o.payment_method, o.payment_status, o.hold_until, o.pickup_at,
   GREATEST(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), o.hold_until), 0) AS seconds_left, o.pickup_point_id, p.name AS p_name,
   o.subtotal, o.discount, o.service_fee, o.total, o.note, o.cancel_reason, o.cancelled_by, o.created_at, o.updated_at`;
-// Kolom + tabel untuk pesanan versi pembeli: ditambah data toko dan jumlah menu yang belum diulas pembeli.
+// Kolom + tabel untuk pesanan versi pembeli: ditambah data toko, jam tiap langkah (untuk halaman Lacak Pesanan),
+// keadaan chat dengan penjual, dan jumlah menu yang belum diulas pembeli. Jam langkah dan chat sengaja tidak masuk
+// ORDER_COLUMNS agar respons penjual tidak berubah.
 const CUSTOMER_ORDER_SELECT = `${ORDER_COLUMNS}, o.merchant_id, m.business_name, m.wa_number,
+  o.confirmed_at, o.cooking_at, o.ready_at, o.completed_at, o.cancelled_at, o.customer_id, ${chatStateColumns("customer")},
   (SELECT COUNT(*) FROM order_items i WHERE i.order_id = o.id AND NOT EXISTS
     (SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.menu_id = i.menu_id)) AS belum_diulas
   FROM orders o JOIN merchants m ON m.id = o.merchant_id JOIN pickup_points p ON p.id = o.pickup_point_id`;
@@ -512,7 +516,8 @@ export const mapOrderBase = (order: RowDataPacket, items: Item[]) => {
 
 /**
  * Menyusun respons pesanan versi pembeli: {@link mapOrderBase} ditambah data toko dan tanda tombol yang boleh tampil
- * (`can_cancel`, `can_complete`, `can_review`), supaya aplikasi tidak perlu menebak aturannya sendiri.
+ * (`can_cancel`, `can_complete`, `can_review`), `timeline` (jam tiap langkah, `null` bila belum dicapai), dan `chat`
+ * (keadaan chat dengan penjual, lihat {@link toChatState}), supaya aplikasi tidak perlu menebak aturannya sendiri.
  * Aturannya: batal boleh selama pesanan menunggu dan belum lewat batas waktu, atau sudah diterima toko tetapi bayar
  * tunai; selesai boleh saat pesanan siap diambil; ulasan boleh setelah selesai bila masih ada menu yang belum diulas.
  * @param order baris pesanan dari database (kolom {@link CUSTOMER_ORDER_SELECT})
@@ -522,6 +527,14 @@ export const mapOrderBase = (order: RowDataPacket, items: Item[]) => {
 export const mapCustomerOrder = (order: RowDataPacket, items: Item[]) => ({
   ...mapOrderBase(order, items),
   merchant: { id: order.merchant_id, business_name: order.business_name, wa_number: order.wa_number },
+  timeline: {
+    confirmed_at: order.confirmed_at,
+    cooking_at: order.cooking_at,
+    ready_at: order.ready_at,
+    completed_at: order.completed_at,
+    cancelled_at: order.cancelled_at,
+  },
+  chat: toChatState(order),
   can_cancel:
     (order.status === "holding" && Number(order.seconds_left) > 0) ||
     (order.status === "confirmed" && order.payment_method === "cod"),

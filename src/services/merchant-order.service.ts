@@ -20,18 +20,20 @@ import {
   waLink,
 } from "./order.service";
 import { getMerchantId } from "./merchant-menu.service";
+import { chatUnreadColumn } from "./order-chat.service";
 import { MerchantOrdersQuery } from "../dto/merchant-order.dto";
 
-// Kolom + tabel untuk pesanan versi penjual: ditambah data pembeli, meja, dan waktu tiap perubahan status. Titik temu
-// dan meja memakai LEFT JOIN (tetap ikut walau kosong), karena pesanan meja tidak punya titik temu.
+// Kolom + tabel untuk pesanan versi penjual: ditambah data pembeli, meja, waktu tiap perubahan status, dan jumlah
+// pesan chat pembeli yang belum dibaca. Titik temu dan meja memakai LEFT JOIN (tetap ikut walau kosong), karena
+// pesanan meja tidak punya titik temu.
 const MERCHANT_ORDER_SELECT = `${ORDER_COLUMNS}, o.customer_name, o.customer_phone, o.table_id, mt.label AS table_label,
-  o.confirmed_at, o.cooking_at, o.ready_at, o.completed_at, o.cancelled_at
+  o.confirmed_at, o.cooking_at, o.ready_at, o.completed_at, o.cancelled_at, ${chatUnreadColumn("merchant")}
   FROM orders o LEFT JOIN pickup_points p ON p.id = o.pickup_point_id LEFT JOIN merchant_tables mt ON mt.id = o.table_id`;
 
 /**
  * Menyusun respons pesanan versi penjual: bagian bersama dari mapOrderBase (tanpa data toko dan tanda tombol milik
- * pembeli), ditambah nama/nomor pembeli dan waktu tiap perubahan status. Pesanan meja: `pickup_point` null dan
- * `table` terisi.
+ * pembeli), ditambah nama/nomor pembeli, waktu tiap perubahan status, dan `chat_unread_count` (pesan chat pembeli yang
+ * belum dibaca penjual). Pesanan meja: `pickup_point` null dan `table` terisi.
  * @param order baris pesanan dari database (kolom MERCHANT_ORDER_SELECT)
  * @param items menu-menu pesanan ini
  * @returns objek pesanan untuk penjual
@@ -47,6 +49,7 @@ export const mapMerchantOrder = (order: RowDataPacket, items: Item[]) => ({
   ready_at: order.ready_at,
   completed_at: order.completed_at,
   cancelled_at: order.cancelled_at,
+  chat_unread_count: Number(order.chat_unread),
 });
 
 /**
