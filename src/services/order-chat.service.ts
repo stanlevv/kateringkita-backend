@@ -55,6 +55,11 @@ const ownerCondition = (party: ChatParty): [string, number] =>
   party.role === "customer" ? ["o.customer_id = ?", party.userId] : ["o.merchant_id = ?", party.merchantId];
 // Folder unggah foto chat satu pesanan; dipakai saat membuat alamat unggah dan saat memeriksa URL foto pesan.
 const chatPhotoFolder = (orderId: number) => `orders/${orderId}/chat/`;
+// Menolak penulisan ke chat yang tertutup (kirim pesan, minta alamat unggah foto) dengan galat sesuai alasannya.
+const assertChatOpen = (order: ChatOrder) => {
+  const closedReason = getClosedReason(order.status, order.customerId);
+  if (closedReason) throw CLOSED_ERRORS[closedReason]();
+};
 
 /**
  * Menentukan kenapa chat tertutup. Pesanan tamu QR meja tidak punya akun pembeli, jadi chatnya tidak tersedia.
@@ -207,8 +212,7 @@ export async function sendMessage(party: ChatParty, code: string, input: SendMes
   return withTransaction(async (conn) => {
     // 1. Kunci pesanan lalu pastikan chat sedang terbuka.
     const order = await lockChatOrder(conn, party, code);
-    const closedReason = getClosedReason(order.status, order.customerId);
-    if (closedReason) throw CLOSED_ERRORS[closedReason]();
+    assertChatOpen(order);
     // 2. Foto hanya boleh dari folder chat pesanan ini, bukan dari pesanan lain atau domain lain.
     validateImageUrl(input.image_url, null, chatPhotoFolder(order.orderId), "image_url");
     // 3. Simpan pesan, lalu baca lagi supaya waktu kirimnya sama persis dengan yang tersimpan.
@@ -228,6 +232,7 @@ export async function sendMessage(party: ChatParty, code: string, input: SendMes
 // menunggu (deadlock). Penjual: customer_id tidak pernah berubah, jadi aman dibaca tanpa kunci; pesanan tamu tidak
 // punya pembeli untuk dikunci. Pesanan pihak lain dijawab 404 oleh loadChatOrder.
 async function lockChatOrder(conn: Conn, party: ChatParty, code: string): Promise<ChatOrder> {
+  // 1. Tentukan pembeli pesanan: pembeli = akun yang meminta; penjual = customer_id pesanan tokonya (null bila tamu).
   let customerId: number | null = party.userId;
   if (party.role === "merchant") {
     const [[owner]] = await conn.query<RowDataPacket[]>(
@@ -236,7 +241,9 @@ async function lockChatOrder(conn: Conn, party: ChatParty, code: string): Promis
     );
     customerId = owner?.customer_id ?? null;
   }
+  // 2. Kunci baris pembeli lebih dulu.
   if (customerId !== null) await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [customerId]);
+  // 3. Baru kunci dan baca pesanannya (404 bila bukan milik pihak ini).
   return loadChatOrder(party, code, conn);
 }
 
@@ -247,19 +254,20 @@ async function lockChatOrder(conn: Conn, party: ChatParty, code: string): Promis
  * @param code   kode pesanan
  * @param lastId id pesan terakhir yang tampil di layar. Bila diisi, penanda = yang lebih kecil antara `lastId` dan id
  *               pesan terakhir pihak lawan, supaya pesan lawan yang masuk sesudahnya tidak ikut "Dibaca". Bila tidak
- *               diisi, semua pesan dianggap sudah dibaca
- * @returns selesai setelah penanda disimpan (tidak ada yang disimpan bila belum ada pesan yang bisa ditandai)
+ *               diisi, penanda = id pesan terakhir pihak lawan (semua pesannya dianggap sudah dibaca)
+ * @returns selesai setelah penanda disimpan (tidak ada yang disimpan bila pihak lawan belum mengirim pesan)
  * @throws 404 pesanan tidak ada atau bukan milik pihak itu
  */
 export async function markRead(party: ChatParty, code: string, lastId?: number): Promise<void> {
-  // 1. Cari pesan terakhir di chat ini (bila lastId diisi: pesan terakhir pihak lawan), lalu tentukan penandanya.
+  // 1. Cari pesan terakhir pihak lawan, lalu tentukan penandanya.
   const order = await loadChatOrder(party, code);
-  const [[latest]] = await db.query<RowDataPacket[]>(
-    `SELECT MAX(id) AS id FROM order_messages WHERE order_id = ?${lastId === undefined ? "" : " AND sender_role = ?"}`,
+  const [[latestRow]] = await db.query<RowDataPacket[]>(
+    "SELECT MAX(id) AS id FROM order_messages WHERE order_id = ? AND sender_role = ?",
     [order.orderId, otherRole(party.role)],
   );
-  if (latest.id === null) return;
-  const readId = lastId === undefined ? latest.id : Math.min(lastId, Number(latest.id));
+  if (latestRow.id === null) return;
+  const latest = Number(latestRow.id);
+  const readId = Math.min(lastId ?? latest, latest);
   // 2. Simpan sebagai penanda baca pihak ini; bila sudah ada, ambil yang lebih besar.
   await db.query(
     `INSERT INTO order_chat_reads (order_id, reader_role, last_read_message_id, updated_at)
@@ -276,8 +284,10 @@ export async function markRead(party: ChatParty, code: string, lastId?: number):
  * @returns `{ total, orders }`; tiap pesanan berisi `code`, `unread_count`, dan `last_message_at` (waktu pesan belum
  *          dibaca yang terakhir), urut dari yang terbaru
  */
-// shortcut: jumlah pesanan tidak dibatasi karena biasanya hanya pesanan aktif yang punya pesan belum dibaca; beri LIMIT bila daftarnya membesar
 export async function listUnreadChats(party: ChatParty) {
+  // shortcut: jumlah pesanan tidak dibatasi dan biaya kueri ikut membesar bersama riwayat pesan toko/pembeli, padahal
+  // fungsi ini dipanggil tiap sinkron 5 detik dan tiap pindah halaman; biasanya hanya pesanan aktif yang punya pesan
+  // belum dibaca. Batasi ke pesanan aktif atau beri LIMIT bila riwayatnya membesar dan kueri mulai lambat.
   // 1. Hitung pesan pihak lawan sesudah penanda baca pihak ini, per pesanan.
   const [condition, ownerId] = ownerCondition(party);
   const [rows] = await db.query<RowDataPacket[]>(
@@ -340,8 +350,7 @@ export async function listUnrepliedChats(merchantId: number) {
  */
 export async function requestChatUpload(party: ChatParty, code: string, input: z.infer<typeof uploadSchema>) {
   const order = await loadChatOrder(party, code);
-  const closedReason = getClosedReason(order.status, order.customerId);
-  if (closedReason) throw CLOSED_ERRORS[closedReason]();
+  assertChatOpen(order);
   return createUpload(chatPhotoFolder(order.orderId), input);
 }
 

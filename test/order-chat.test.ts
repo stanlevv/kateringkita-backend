@@ -222,7 +222,8 @@ describe("belum dibaca dan tanda Dibaca", () => {
     expect((await getChatState(merchantParty, order)).unread_count).toBe(1);
     await markRead(merchantParty, code);
     const chat = (await get(`/orders/${code}/messages`).expect(200)).body.data.chat;
-    expect(chat.other_party_last_read_id).toBeGreaterThan(mine.id);
+    // Tanpa last_id penandanya = pesan terakhir pembeli; pesan penjual sendiri tidak ikut ditandai.
+    expect(chat.other_party_last_read_id).toBe(mine.id);
   });
 });
 
