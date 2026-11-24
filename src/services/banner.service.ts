@@ -231,7 +231,7 @@ export async function createMerchantBanner(userId: number, body: unknown) {
  * @param body   isi permintaan mentah (diperiksa updateMerchantBannerSchema dan aturan gambar)
  * @returns banner setelah diubah
  * @throws 400 isian tidak valid, 404 banner tidak ada atau milik toko lain, 409 banner yang ditolak / nonaktif
- *         diajukan ulang padahal toko sudah punya banner aktif lain
+ *         diajukan ulang padahal toko sudah punya banner aktif lain, 409 BANNER_ARCHIVED bila banner diarsipkan admin
  */
 export async function updateMerchantBanner(userId: number, idRaw: unknown, body: unknown) {
   // 1. Ambil banner milik toko ini.
@@ -242,6 +242,8 @@ export async function updateMerchantBanner(userId: number, idRaw: unknown, body:
       ? await db.query<RowDataPacket[]>("SELECT * FROM banners WHERE id = ? AND merchant_id = ?", [id, merchantId])
       : [[]];
   if (!banner) throw bannerNotFound();
+  // Banner arsip tidak masuk antrean admin, jadi pengajuan ulang akan menunggu selamanya.
+  if (banner.archived_at) throw new AppError(409, "BANNER_ARCHIVED", "Banner ini diarsipkan admin.");
   // 2. Periksa isian dan voucher tujuan (memakai nilai tersimpan bila tidak dikirim).
   const input: UpdateMerchantBannerInput = parseBodyWithImage(
     updateMerchantBannerSchema,

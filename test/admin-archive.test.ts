@@ -240,6 +240,31 @@ describe("arsip banner dan pop-up", () => {
     await admin("post", `/popups/${id}/archive`).expect(200);
   });
 
+  test("banner toko arsip: penjual tak bisa ajukan ulang; pulihkan ditolak bila ada banner aktif lain", async () => {
+    const insertBanner = async (status: string) =>
+      (
+        await db.query<any>(
+          `INSERT INTO banners (merchant_id, title, image_url, target, status, starts_at, ends_at)
+           VALUES (?, 'Banner toko B', 'https://foto.test/b.png', 'merchant', ?, UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() + INTERVAL 2 DAY)`,
+          [setup.idB, status],
+        )
+      )[0].insertId as number;
+    const asMerchantB = (method: "get" | "patch", path: string) =>
+      request(app)[method](`/api/v1/merchant${path}`).set(authHeader(setup.tokenB));
+    const id = await insertBanner("disetujui");
+    await admin("post", `/banners/${id}/archive`).expect(200);
+
+    const mine = (await asMerchantB("get", "/banners").expect(200)).body.data.find((b: any) => b.id === id);
+    expect(typeof mine.archived_at).toBe("string");
+    const res = await asMerchantB("patch", `/banners/${id}`).send({ title: "Ajukan ulang" }).expect(409);
+    expect(res.body.error).toMatchObject({ code: "BANNER_ARCHIVED", message: "Banner ini diarsipkan admin." });
+
+    const other = await insertBanner("menunggu");
+    const restore = await admin("post", `/banners/${id}/restore`).expect(409);
+    expect(restore.body.error.message).toBe("Toko ini sudah punya banner aktif.");
+    await db.query("DELETE FROM banners WHERE id IN (?, ?)", [id, other]);
+  });
+
   test("id tidak ada → 404", async () => {
     for (const path of ["/promos/999999/archive", "/banners/999999/restore", "/popups/abc/archive"])
       await admin("post", path).expect(404);

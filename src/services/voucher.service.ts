@@ -145,8 +145,9 @@ const formatRupiah = (amount: number) => `Rp ${Number(amount).toLocaleString("id
 
 /**
  * "Voucher Saya": semua voucher yang pernah diklaim pembeli, termasuk yang berakhir paling lama 30 hari lalu (tampil
- * sebagai tidak bisa dipakai). Voucher yang diarsipkan admin tidak ditampilkan; klaimnya tetap tersimpan. Bila dipanggil dari checkout dengan `merchant_id` / `subtotal` / `payment_method`,
- * kolom `usable` dan `reason` mengikuti keranjang itu.
+ * sebagai tidak bisa dipakai). Voucher yang diarsipkan admin tidak ditampilkan; klaimnya tetap tersimpan. Bila
+ * dipanggil dari checkout dengan `merchant_id` / `subtotal` / `payment_method`, kolom `usable` dan `reason` mengikuti
+ * keranjang itu.
  * @param userId id pembeli yang login
  * @param filter query yang sudah lolos myVouchersSchema; semuanya opsional
  * @returns kartu voucher ditambah `usable` (bisa dipakai) dan `reason` (alasan tidak bisa dipakai, atau null)
