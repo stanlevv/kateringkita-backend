@@ -168,6 +168,29 @@ describe("timeline langkah pesanan", () => {
     const listed = (await listOrders("?tab=active").expect(200)).body.data.find((order: any) => order.code === code);
     expect(listed.timeline).toEqual(timeline);
   });
+
+  test("completed_at terisi setelah selesai, cancelled_at terisi setelah batal", async () => {
+    const getTimeline = async (code: string) =>
+      (
+        await request(app)
+          .get(`/api/v1/orders/${code}`)
+          .set("Authorization", `Bearer ${setup.customerToken}`)
+          .expect(200)
+      ).body.data.timeline;
+    const completed = await placeOrder(setup.customerToken, setup.menu, 1);
+    for (const action of ["confirm", "cook", "ready"]) await merchantAction(completed, action).expect(200);
+    await postAction(completed, "complete").expect(200);
+    const completedTimeline = await getTimeline(completed);
+    expect(completedTimeline.completed_at).toMatch(ISO);
+    expect(completedTimeline.cancelled_at).toBeNull();
+
+    const cancelled = await placeOrder(setup.customerToken, setup.menu, 1);
+    await postAction(cancelled, "cancel", { reason: "Salah pesan" }).expect(200);
+    const cancelledTimeline = await getTimeline(cancelled);
+    expect(cancelledTimeline.cancelled_at).toMatch(ISO);
+    expect(cancelledTimeline.completed_at).toBeNull();
+    expect(cancelledTimeline.confirmed_at).toBeNull();
+  });
 });
 
 describe("POST /orders/:code/cancel", () => {
