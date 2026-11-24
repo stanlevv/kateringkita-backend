@@ -73,8 +73,13 @@ const toChecklist = (row: RowDataPacket) =>
 // Penyaring untuk membuang kolom chk_* dari data yang dikirim (sudah dipindah ke checklist).
 const isNotChecklistColumn = ([key]: [string, unknown]) => !key.startsWith("chk_");
 
-// Tanda khusus LIKE (%, _, dan garis miring terbalik) di kata kunci dibuat harfiah supaya tidak menjadi pola.
-const escapeLike = (text: string) => text.replace(/[\\%_]/g, "\\$&");
+/**
+ * Tanda khusus LIKE (%, _, dan garis miring terbalik) di kata kunci dibuat harfiah supaya tidak menjadi pola. Dipakai
+ * juga daftar pembeli (admin-customer.service).
+ * @param text kata kunci dari pengguna
+ * @returns kata kunci yang aman dipakai di dalam pola LIKE
+ */
+export const escapeLike = (text: string) => text.replace(/[\\%_]/g, "\\$&");
 
 /**
  * Daftar penjual per halaman, terbaru dulu, dengan filter opsional.
