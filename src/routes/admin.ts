@@ -198,7 +198,8 @@ admin.post("/master/:kind", createMasterDataHandler);
 admin.patch("/master/:kind/:id", updateMasterDataHandler);
 toggle("/master/:kind/:id", setMasterActiveHandler);
 
-// Promo platform (termasuk arsip dan pulihkan), pengaturan aplikasi (mengubahnya khusus super), pengumuman, dan ringkasan beranda.
+// Promo platform (termasuk arsip dan pulihkan), pengaturan aplikasi (mengubahnya khusus super), pengumuman, dan
+// ringkasan beranda.
 admin.get("/promos", listPromosHandler);
 admin.post("/promos", createPromoHandler);
 admin.patch("/promos/:id", updatePromoHandler);

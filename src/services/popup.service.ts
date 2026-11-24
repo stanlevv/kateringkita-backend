@@ -1,6 +1,6 @@
 // Isi file: pop-up promo yang muncul saat aplikasi mobile dibuka. Hanya admin yang membuat, mengubah, mengarsipkan,
-// dan memulihkannya; pembeli dan tamu hanya melihat satu pop-up yang sedang tayang. Alurnya routes/catalog.ts atau routes/admin.ts →
-// handlers/popup.handler.ts → file ini → database.
+// dan memulihkannya; pembeli dan tamu hanya melihat satu pop-up yang sedang tayang. Alurnya routes/catalog.ts atau
+// routes/admin.ts → handlers/popup.handler.ts → file ini → database.
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import db from "../config/db";
 import { PopupInput, UpdatePopupInput, popupSchema, updatePopupSchema } from "../dto/popup.dto";
@@ -10,9 +10,9 @@ import { parseBodyWithImage, rejectArchivedPromo } from "./banner.service";
 import { clock } from "./catalog.service";
 import { VoucherCard, getAvailableVoucher } from "./voucher.service";
 
-// Aturan tayang: pop-up yang tidak diarsipkan, aktif, dan dalam masa tayang (`starts_at` sampai `ends_at`), yang paling baru dibuat lebih
-// dulu; bila pop-up menunjuk sebuah voucher platform, voucher itu harus masih tersedia. Seberapa sering pop-up muncul
-// (sekali sehari, berhenti setelah vouchernya diklaim) diatur aplikasi mobile, bukan server.
+// Aturan tayang: pop-up yang tidak diarsipkan, aktif, dan dalam masa tayang (`starts_at` sampai `ends_at`), yang paling
+// baru dibuat lebih dulu; bila pop-up menunjuk sebuah voucher platform, voucher itu harus masih tersedia. Seberapa sering
+// pop-up muncul (sekali sehari, berhenti setelah vouchernya diklaim) diatur aplikasi mobile, bukan server.
 // Folder gambar pop-up di penyimpanan R2.
 const POPUP_PREFIX = "platform/popup/";
 

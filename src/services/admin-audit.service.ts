@@ -1,7 +1,7 @@
 // Isi file: alat bersama untuk menulis ke database dengan aman, yaitu transaksi, kunci baris, dan log audit admin,
-// ditambah arsip konten admin (setArchived) dan daftar log audit untuk panel admin (GET /admin/audit-logs). Hampir semua service yang mengubah data
-// memakai withTransaction dari sini; alurnya routes → handlers → services (file ini dipanggil dari dalamnya)
-// → database.
+// ditambah arsip konten admin (setArchived) dan daftar log audit untuk panel admin (GET /admin/audit-logs). Hampir
+// semua service yang mengubah data memakai withTransaction dari sini; alurnya routes → handlers → services (file ini
+// dipanggil dari dalamnya) → database.
 //
 // Istilah:
 // - Transaksi DB: sekumpulan perintah SQL yang dianggap satu paket. Bila semua berhasil, hasilnya disimpan (commit);
