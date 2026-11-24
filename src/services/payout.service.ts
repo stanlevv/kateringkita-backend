@@ -14,7 +14,7 @@ import { recordAudit, withTransaction } from "./admin-audit.service";
 // potongan voucher platform menjadi urusan platform, dan biaya Midtrans ditanggung platform. Pesanan tunai (COD)
 // dibayar langsung ke penjual, jadi tidak pernah masuk saldo.
 // Pesanan yang masuk saldo: selesai, dibayar non-tunai, lunas, dan belum pernah dicairkan (`payout_id` kosong).
-const ELIGIBLE_ORDERS_SQL =
+export const ELIGIBLE_ORDERS_SQL =
   "o.status = 'completed' AND o.payment_method IN ('va', 'online') AND o.payment_status = 'paid' AND o.payout_id IS NULL";
 const MERCHANT_SHARE_SQL = "o.subtotal - o.merchant_discount";
 const ORDERS_FROM_SQL = "orders o";
@@ -241,7 +241,7 @@ export async function listPayoutHistory(page: number) {
 // kedaluwarsa (ditolak penjual, atau dibayar setelah batas waktu bayar habis). Pengembalian dilakukan admin di luar
 // aplikasi (dashboard Midtrans atau transfer), lalu ditandai di sini. Syarat `refunded_at IS NULL` membuat pembayaran
 // yang pernah ditandai refund tidak masuk antrean lagi walau statusnya berubah lagi.
-const REFUND_DUE_SQL =
+export const REFUND_DUE_SQL =
   "p.provider = 'midtrans' AND p.status = 'paid' AND p.refunded_at IS NULL AND o.status IN ('cancelled', 'expired')";
 
 /**

@@ -23,7 +23,7 @@ import {
   updatePromo,
 } from "../services/admin-promo.service";
 import { sendAnnouncement } from "../services/admin-announcement.service";
-import { getAdminSummary } from "../services/admin-summary.service";
+import { getAdminQueues, getAdminSummary } from "../services/admin-summary.service";
 import { getFinanceSummary } from "../services/admin-finance.service";
 import { adminRangeSchema } from "../dto/merchant-report.dto";
 import { parse } from "../middleware/validate";
@@ -260,6 +260,15 @@ export const updateServiceFeeHandler: RequestHandler = async (req, res) => {
  */
 export const getSummaryHandler: RequestHandler = async (_req, res) => {
   res.json({ data: await getAdminSummary() });
+};
+/**
+ * `GET /admin/queues`: hitungan antrean "Perlu tindakan" untuk dashboard dan lencana menu admin.
+ * @param req permintaan; tingkat admin dibaca dari token
+ * @param res jawaban `{ data }` berisi enam hitungan; dua hitungan uang `null` bila admin bukan super
+ * @returns selesai setelah jawaban dikirim
+ */
+export const getQueuesHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await getAdminQueues((req as AuthedRequest).auth.adminLevel) });
 };
 
 // Filter daftar moderasi dari query: ?q=&status=active|moderated&page&limit (halaman bawaan 20, maks 100).
