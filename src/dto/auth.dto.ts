@@ -141,6 +141,22 @@ export type RegisterMerchantInput = z.infer<typeof registerMerchantSchema>;
 // Lupa sandi lewat kode OTP (kode 6 angka sekali pakai) yang dikirim ke email.
 const OTP_CODE_MSG = "Kode berisi 6 angka.";
 const otpCodeSchema = z.string(OTP_CODE_MSG).regex(/^\d{6}$/, OTP_CODE_MSG);
+/**
+ * Isi `POST /me/email/otp`: tanpa `email` (atau email yang sama) berarti verifikasi email akun sekarang; email lain
+ * berarti ganti email, dan `current_password` wajib (dicek di service).
+ */
+export const emailOtpSchema = z.object({
+  email: emailSchema.optional(),
+  current_password: z
+    .string("Kata sandi lama wajib diisi.")
+    .min(1, "Kata sandi lama wajib diisi.")
+    .max(72, "Kata sandi maksimal 72 karakter.")
+    .optional(),
+});
+/** Isi `POST /me/email/otp` yang sudah lolos {@link emailOtpSchema}. */
+export type EmailOtpInput = z.infer<typeof emailOtpSchema>;
+/** Isi `POST /me/email/verify`: kode 6 angka dari email. */
+export const emailVerifySchema = z.object({ code: otpCodeSchema });
 /** Isi `POST /auth/password/forgot`: email tujuan kode. */
 export const forgotPasswordSchema = z.object({ email: emailSchema });
 /** Isi `POST /auth/password/verify`: email dan kode 6 angka. */

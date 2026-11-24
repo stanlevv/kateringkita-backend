@@ -31,6 +31,7 @@ export type PublicUser = {
   role: "admin" | "merchant" | "customer";
   full_name: string;
   email: string | null;
+  email_verified: boolean; // true setelah email dibuktikan dengan kode OTP
   phone: string;
   avatar_url: string | null;
   favorite_pickup_point_id: number | null;
@@ -103,6 +104,7 @@ export async function insertUser(
     role,
     full_name: input.full_name,
     email,
+    email_verified: false,
     phone: input.phone,
     avatar_url: null,
     favorite_pickup_point_id: null,
@@ -178,6 +180,7 @@ const toPublicUser = (row: RowDataPacket): PublicUser => ({
   role: row.role,
   full_name: row.full_name,
   email: row.email,
+  email_verified: Boolean(row.email_verified_at),
   phone: row.phone,
   avatar_url: row.avatar_url,
   favorite_pickup_point_id: row.favorite_pickup_point_id,
@@ -246,6 +249,9 @@ export async function updateMe(
       }
       await assertPassword(current_password, rows[0].password_hash);
     }
+    // Email yang berganti lewat rute ini belum dibuktikan dengan kode OTP, jadi status verifikasinya dihapus.
+    // (Ganti email dengan kode OTP ada di email-verification.service.)
+    if ("email" in columnValues && columnValues.email !== rows[0].email) columnValues.email_verified_at = null;
   }
   // 3. Foto profil hanya boleh hasil unggahan pengguna ini sendiri (folder users/<id>/avatar/).
   if (avatar_url !== undefined) {
@@ -331,8 +337,14 @@ export async function login(input: LoginInput, userAgent?: string) {
   return { token, expires_at: expiresAt.toISOString(), user: toPublicUser(user) };
 }
 
-// Memastikan kata sandi yang diketik cocok dengan hash tersimpan; bila tidak, galat 400 di kolom current_password.
-async function assertPassword(plainPassword: string, passwordHash: string): Promise<void> {
+/**
+ * Memastikan kata sandi yang diketik cocok dengan hash tersimpan.
+ * @param plainPassword kata sandi yang diketik pengguna
+ * @param passwordHash  hash kata sandi tersimpan di tabel users
+ * @returns tidak ada nilai bila cocok
+ * @throws 400 VALIDATION_ERROR (kolom `current_password`) bila tidak cocok
+ */
+export async function assertPassword(plainPassword: string, passwordHash: string): Promise<void> {
   if (!(await bcrypt.compare(plainPassword, passwordHash))) {
     throw new AppError(400, "VALIDATION_ERROR", "Data tidak valid.", { current_password: ["Kata sandi lama salah."] });
   }
