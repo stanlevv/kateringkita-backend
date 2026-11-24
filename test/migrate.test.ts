@@ -20,7 +20,7 @@ describe("migrasi", () => {
     firstRun = await migrate(url);
   });
 
-  test("DB kosong → semua migrasi diterapkan berurutan, 34 tabel + schema_migrations", async () => {
+  test("DB kosong → semua migrasi diterapkan berurutan, 37 tabel + schema_migrations", async () => {
     expect(firstRun).toEqual(ALL_MIGRATIONS);
     expect(firstRun.slice(0, 4)).toEqual(["001_init.sql", "002_admin.sql", "003_checkout.sql", "004_moderasi.sql"]);
     const conn = await mysql.createConnection(url);
@@ -29,8 +29,9 @@ describe("migrasi", () => {
     );
     await conn.end();
     // 001–003: 22 tabel; 005 meja, 006 ai_providers, 007 server_logs, 008 ai_usage, 010 payouts, 011 merchant_favorites,
-    // 012 support_tickets + support_ticket_messages, 013 ai_results, 014 promo_claims, 015 banners, 016 popups
-    expect(rows[0].n).toBe(35);
+    // 012 support_tickets + support_ticket_messages, 013 ai_results, 014 promo_claims, 015 banners, 016 popups,
+    // 018 order_messages + order_chat_reads + order_chat_reports
+    expect(rows[0].n).toBe(38);
   });
 
   test("seed master terisi", async () => {
