@@ -31,6 +31,7 @@ import {
   getSummaryHandler,
   setMasterActiveHandler,
   setPromoActiveHandler,
+  setPromoArchivedHandler,
   updateServiceFeeHandler,
   updateMasterDataHandler,
   updatePromoHandler,
@@ -56,9 +57,16 @@ import {
   createAdminBannerHandler,
   listAdminBannersHandler,
   reviewBannerHandler,
+  setBannerArchivedHandler,
+  updateAdminBannerContentHandler,
   uploadAdminHandler,
 } from "../handlers/banner.handler";
-import { createPopupHandler, listPopupsHandler, updatePopupHandler } from "../handlers/popup.handler";
+import {
+  createPopupHandler,
+  listPopupsHandler,
+  setPopupArchivedHandler,
+  updatePopupHandler,
+} from "../handlers/popup.handler";
 import { uploadLimiter } from "../middleware/rate-limiter";
 import { listAiResultsHandler, verifyAiResultHandler } from "../handlers/ai-result.handler";
 import {
@@ -115,15 +123,18 @@ import { AppError } from "../utils/errors";
 /** Router panel admin; dipasang di app.ts pada /api/v1/admin setelah penjaga login, peran, dan tingkat admin. */
 export const admin = Router();
 
-// Memasang pasangan rute POST <path>/activate (handler(true)) dan POST <path>/deactivate (handler(false)).
-const toggle = (path: string, handler: (active: boolean) => RequestHandler) => {
-  for (const [action, active] of [
-    ["activate", true],
-    ["deactivate", false],
-  ] as const) {
-    admin.post(`${path}/${action}`, handler(active));
-  }
+// Memasang pasangan rute POST <path>/activate (handler(true)) dan POST <path>/deactivate (handler(false)); dengan
+// `names` lain, contoh ARCHIVE_ROUTES, nama kedua rutenya mengikuti.
+const toggle = (
+  path: string,
+  handler: (active: boolean) => RequestHandler,
+  names: readonly [string, string] = ["activate", "deactivate"],
+) => {
+  admin.post(`${path}/${names[0]}`, handler(true));
+  admin.post(`${path}/${names[1]}`, handler(false));
 };
+// Arsip konten admin: POST <path>/archive (handler(true)) dan POST <path>/restore (handler(false)).
+const ARCHIVE_ROUTES = ["archive", "restore"] as const;
 
 // Log audit: catatan setiap perubahan yang dilakukan admin.
 admin.get("/audit-logs", listAuditLogsHandler);
@@ -187,11 +198,12 @@ admin.post("/master/:kind", createMasterDataHandler);
 admin.patch("/master/:kind/:id", updateMasterDataHandler);
 toggle("/master/:kind/:id", setMasterActiveHandler);
 
-// Promo platform, pengaturan aplikasi (mengubahnya khusus super), pengumuman, dan ringkasan beranda.
+// Promo platform (termasuk arsip dan pulihkan), pengaturan aplikasi (mengubahnya khusus super), pengumuman, dan ringkasan beranda.
 admin.get("/promos", listPromosHandler);
 admin.post("/promos", createPromoHandler);
 admin.patch("/promos/:id", updatePromoHandler);
 toggle("/promos/:id", setPromoActiveHandler);
+toggle("/promos/:id", setPromoArchivedHandler, ARCHIVE_ROUTES);
 admin.get("/settings", getSettingsHandler);
 admin.put("/settings/service-fee", updateServiceFeeHandler);
 admin.put("/settings/cs-contact", validate(csContactSchema), updateCsContactHandler);
@@ -227,16 +239,19 @@ admin.delete("/ai-providers/:id", deleteAiProviderHandler);
 admin.post("/ai-providers/:id/test", testAiProviderHandler);
 // Pemakaian AI: token, panggilan, gagal, latensi.
 admin.get("/ai-usage", getAiUsageHandler);
-// Banner beranda: semua tingkat admin melihat, super dan ops membuat dan meninjau; unggah gambar platform untuk banner
-// dan pop-up.
+// Banner beranda: semua tingkat admin melihat; super dan ops membuat, meninjau, mengubah isi banner platform, serta
+// mengarsipkan dan memulihkan. Unggah gambar platform untuk banner dan pop-up.
 admin.get("/banners", listAdminBannersHandler);
 admin.post("/banners", createAdminBannerHandler);
 admin.patch("/banners/:id", reviewBannerHandler);
+admin.patch("/banners/:id/content", updateAdminBannerContentHandler);
+toggle("/banners/:id", setBannerArchivedHandler, ARCHIVE_ROUTES);
 admin.post("/uploads", validate(adminUploadSchema), uploadLimiter, uploadAdminHandler);
-// Pop-up promo aplikasi mobile: semua tingkat melihat, super dan ops membuat dan mengubah.
+// Pop-up promo aplikasi mobile: semua tingkat melihat; super dan ops membuat, mengubah, mengarsipkan, dan memulihkan.
 admin.get("/popups", listPopupsHandler);
 admin.post("/popups", createPopupHandler);
 admin.patch("/popups/:id", updatePopupHandler);
+toggle("/popups/:id", setPopupArchivedHandler, ARCHIVE_ROUTES);
 // Hasil AI tersimpan diperiksa manual: ops dan super memberi keputusan, support hanya melihat. Path-nya /hasil-ai,
 // tidak berawalan "ai-", jadi tidak termasuk rute khusus super.
 admin.get("/hasil-ai", listAiResultsHandler);

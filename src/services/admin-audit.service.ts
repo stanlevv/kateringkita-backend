@@ -1,5 +1,5 @@
 // Isi file: alat bersama untuk menulis ke database dengan aman, yaitu transaksi, kunci baris, dan log audit admin,
-// ditambah daftar log audit untuk panel admin (GET /admin/audit-logs). Hampir semua service yang mengubah data
+// ditambah arsip konten admin (setArchived) dan daftar log audit untuk panel admin (GET /admin/audit-logs). Hampir semua service yang mengubah data
 // memakai withTransaction dari sini; alurnya routes → handlers → services (file ini dipanggil dari dalamnya)
 // → database.
 //
@@ -128,6 +128,52 @@ export async function lockRow(
       : [[]];
   if (!rows[0]) throw new AppError(404, "NOT_FOUND", options.notFound ?? "Data tidak ditemukan.");
   return rows[0];
+}
+
+/**
+ * Mengarsipkan atau memulihkan satu konten admin (promo platform, banner, atau pop-up) dengan mengisi atau
+ * mengosongkan kolom `archived_at`. Baris tidak pernah dihapus, jadi riwayat yang menunjuknya tetap utuh. Bila baris
+ * sudah dalam keadaan tujuan, tidak ada yang ditulis dan tidak ada log (idempoten). Selain itu perubahan dicatat di log
+ * audit `<targetType>.archive` atau `<targetType>.restore`.
+ * @param adminId    id admin yang mengubah
+ * @param table      nama tabel (selalu ditulis di kode): `promos`, `banners`, atau `popups`
+ * @param targetType jenis data di log audit, contoh `promo`
+ * @param idRaw      id baris dari URL, belum diperiksa
+ * @param archive    `true` untuk mengarsipkan, `false` untuk memulihkan
+ * @param options    `where` dan `notFound` diteruskan ke lockRow; `check` = pemeriksaan tambahan yang dijalankan hanya
+ *                   bila keadaannya benar-benar berubah, dan boleh melempar galat untuk menolak
+ * @returns id baris konten
+ * @throws 404 bila baris tidak ada, atau galat apa pun yang dilempar `check`
+ */
+export async function setArchived(
+  adminId: number,
+  table: "promos" | "banners" | "popups",
+  targetType: string,
+  idRaw: unknown,
+  archive: boolean,
+  options: { where?: string; notFound?: string; check?: (conn: Conn, row: RowDataPacket) => Promise<void> } = {},
+): Promise<number> {
+  return withTransaction(async (conn) => {
+    // 1. Kunci baris; sudah dalam keadaan tujuan berarti selesai tanpa log.
+    const row = await lockRow(conn, table, idRaw, options);
+    if ((row.archived_at !== null) === archive) return row.id as number;
+    // 2. Pemeriksaan khusus jenis konten, lalu simpan waktu arsip (atau kosongkan saat dipulihkan).
+    await options.check?.(conn, row);
+    await conn.query(`UPDATE ${table} SET archived_at = ${archive ? "UTC_TIMESTAMP()" : "NULL"} WHERE id = ?`, [
+      row.id,
+    ]);
+    // 3. Catat nilai lama dan baru di log audit.
+    const [[after]] = await conn.query<RowDataPacket[]>(`SELECT archived_at FROM ${table} WHERE id = ?`, [row.id]);
+    await recordAudit(conn, {
+      adminId,
+      action: `${targetType}.${archive ? "archive" : "restore"}`,
+      targetType,
+      targetId: row.id,
+      before: { archived_at: row.archived_at },
+      after: { archived_at: after.archived_at },
+    });
+    return row.id as number;
+  });
 }
 
 /**

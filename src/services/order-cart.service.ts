@@ -341,9 +341,10 @@ export async function applyVouchers(
   let platformPromo: RowDataPacket | null = null;
   if (codes.length > 2) throw promoInvalid("Maksimal 2 voucher per pesanan.");
   if (codes.length) {
-    // 1. Cari voucher berdasarkan kode (hanya voucher platform atau voucher toko ini), lalu masukkan ke slotnya.
+    // 1. Cari voucher berdasarkan kode (hanya voucher platform atau voucher toko ini, dan bukan voucher arsip), lalu
+    //    masukkan ke slotnya. Voucher arsip dijawab sama seperti kode yang tidak ada.
     const [rows] = await conn.query<RowDataPacket[]>(
-      "SELECT * FROM promos WHERE code IN (?) AND (merchant_id IS NULL OR merchant_id = ?)",
+      "SELECT * FROM promos WHERE code IN (?) AND (merchant_id IS NULL OR merchant_id = ?) AND archived_at IS NULL",
       [codes, cart.merchant.id],
     );
     const promosByCode = new Map(rows.map((promo) => [String(promo.code), promo]));
