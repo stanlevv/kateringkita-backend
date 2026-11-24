@@ -86,6 +86,29 @@ import {
 } from "../handlers/ticket.handler";
 import { getChatReportHandler, listChatReportsHandler } from "../handlers/order-chat.handler";
 import { validate } from "../middleware/validate";
+import { adminAccountUpdateSchema } from "../dto/admin-user.dto";
+import { registerCustomerSchema, registerMerchantSchema } from "../dto/auth.dto";
+import { updateProfileSchema } from "../dto/merchant.dto";
+import { menuPatchSchema, menuSchema } from "../dto/merchant-menu.dto";
+import {
+  createCustomerHandler,
+  getCustomerDetailHandler,
+  listCustomersHandler,
+  setCustomerActiveHandler,
+  updateCustomerHandler,
+} from "../handlers/admin-customer.handler";
+import {
+  createMerchantHandler,
+  createMerchantMenuHandler,
+  deleteMerchantMenuHandler,
+  getMerchantMenuHandler,
+  listMerchantMenusHandler,
+  setMerchantAccountActiveHandler,
+  updateMerchantMenuHandler,
+  updateMerchantOwnerHandler,
+  updateMerchantStoreHandler,
+} from "../handlers/admin-merchant-edit.handler";
+import { parseCustomerId } from "../services/admin-customer.service";
 import { ACTION_NAMES } from "../services/admin-merchant.service";
 import { AppError } from "../utils/errors";
 
@@ -134,6 +157,29 @@ for (const name of ACTION_NAMES) {
     merchantActionHandler(name),
   );
 }
+
+// Penjual: tambah, ubah profil toko dan akun pemilik, nonaktifkan/aktifkan akun, dan kelola menu toko. Aturan isinya
+// sama dengan yang dipakai penjual sendiri (skema pendaftaran, profil toko, dan menu).
+admin.post("/merchants", validate(registerMerchantSchema), createMerchantHandler);
+admin.patch("/merchants/:id", checkMerchantId, validate(updateProfileSchema), updateMerchantStoreHandler);
+admin.patch("/merchants/:id/owner", checkMerchantId, validate(adminAccountUpdateSchema), updateMerchantOwnerHandler);
+toggle("/merchants/:id/account", setMerchantAccountActiveHandler);
+admin.get("/merchants/:id/menus", listMerchantMenusHandler);
+admin.get("/merchants/:id/menus/:menuId", getMerchantMenuHandler);
+admin.post("/merchants/:id/menus", checkMerchantId, validate(menuSchema), createMerchantMenuHandler);
+admin.patch("/merchants/:id/menus/:menuId", checkMerchantId, validate(menuPatchSchema), updateMerchantMenuHandler);
+admin.delete("/merchants/:id/menus/:menuId", deleteMerchantMenuHandler);
+
+// Pembeli: daftar, detail, tambah, ubah, dan nonaktifkan/aktifkan akun.
+const checkCustomerId: RequestHandler = (req, _res, next) => {
+  parseCustomerId(req.params.id);
+  next();
+};
+admin.get("/customers", listCustomersHandler);
+admin.get("/customers/:id", getCustomerDetailHandler);
+admin.post("/customers", validate(registerCustomerSchema), createCustomerHandler);
+admin.patch("/customers/:id", checkCustomerId, validate(adminAccountUpdateSchema), updateCustomerHandler);
+toggle("/customers/:id", setCustomerActiveHandler);
 
 // Data master: :kind = categories, pickup-points, atau merchant-types.
 admin.get("/master/:kind", listMasterDataHandler);
