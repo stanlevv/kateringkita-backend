@@ -1,6 +1,6 @@
 // Isi file: handler HTTP untuk akun: daftar, masuk, keluar, profil sendiri, ganti sandi, unggah foto profil, dan lupa
-// sandi. Lapisan kedua dari alur routes → handlers → services → database: isi permintaan sudah diperiksa skema zod di
-// routes/auth.ts, lalu handler memanggil auth.service, password-reset.service, atau upload.service dan mengirim
+// sandi, serta verifikasi/ganti email. Lapisan kedua dari alur routes → handlers → services → database: isi permintaan sudah diperiksa skema zod di
+// routes/auth.ts, lalu handler memanggil auth.service, password-reset.service, email-verification.service, atau upload.service dan mengirim
 // jawabannya sebagai JSON `{ data: ... }`. Data pengguna yang login dibaca dari `req.auth` (diisi requireAuth).
 import { RequestHandler } from "express";
 import { AuthedRequest } from "../middleware/auth";
@@ -13,6 +13,7 @@ import {
   registerMerchant,
   updateMe,
 } from "../services/auth.service";
+import { requestEmailOtp, verifyEmailOtp } from "../services/email-verification.service";
 import { verifyOtp, requestOtp, resetPassword } from "../services/password-reset.service";
 import { createUpload } from "../services/upload.service";
 
@@ -90,4 +91,17 @@ export const verifyOtpHandler: RequestHandler = async (req, res) => {
 export const resetPasswordHandler: RequestHandler = async (req, res) => {
   await resetPassword(req.body);
   res.json({ data: { ok: true } });
+};
+
+/**
+ * `POST /me/email/otp`: mengirim kode verifikasi ke email akun, atau ke email baru bila pengguna ingin ganti email.
+ * Dijawab `{ email }` (alamat yang dikirimi kode).
+ */
+export const requestEmailOtpHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await requestEmailOtp((req as AuthedRequest).auth.userId, req.body) });
+};
+
+/** `POST /me/email/verify`: memeriksa kode; bila benar email terverifikasi (dan diganti). Dijawab seperti `GET /me`. */
+export const verifyEmailOtpHandler: RequestHandler = async (req, res) => {
+  res.json({ data: await verifyEmailOtp((req as AuthedRequest).auth.userId, req.body.code) });
 };
