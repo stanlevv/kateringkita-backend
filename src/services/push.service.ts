@@ -46,17 +46,23 @@ if (!env.FIREBASE_SERVICE_ACCOUNT && env.NODE_ENV === "production") {
   console.warn("FIREBASE_SERVICE_ACCOUNT kosong: push notifikasi mati");
 }
 
-function getTransport(): PushTransport | null {
-  if (transport === undefined) {
-    transport = null;
-    if (env.FIREBASE_SERVICE_ACCOUNT) {
-      try {
-        transport = firebaseTransport(env.FIREBASE_SERVICE_ACCOUNT);
-      } catch (error) {
-        console.error("FIREBASE_SERVICE_ACCOUNT tidak valid, push mati:", error);
-      }
-    }
+/**
+ * Membuat pengirim bawaan dari kunci service account; `null` bila kosong atau tidak valid. Galatnya sengaja tidak
+ * dicatat utuh: pesan galat JSON.parse mengutip potongan isi kunci.
+ * @param serviceAccount isi FIREBASE_SERVICE_ACCOUNT
+ */
+export function createDefaultTransport(serviceAccount: string | undefined): PushTransport | null {
+  if (!serviceAccount) return null;
+  try {
+    return firebaseTransport(serviceAccount);
+  } catch (error) {
+    console.error("FIREBASE_SERVICE_ACCOUNT tidak valid, push mati:", error instanceof Error ? error.name : "galat");
+    return null;
   }
+}
+
+function getTransport(): PushTransport | null {
+  if (transport === undefined) transport = createDefaultTransport(env.FIREBASE_SERVICE_ACCOUNT);
   return transport;
 }
 

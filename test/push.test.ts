@@ -3,7 +3,12 @@ import request from "supertest";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
-import { sendPushToUser, setPushTransport, type PushMessage } from "../src/services/push.service";
+import {
+  createDefaultTransport,
+  sendPushToUser,
+  setPushTransport,
+  type PushMessage,
+} from "../src/services/push.service";
 import { createCustomer, login, prepareMerchants } from "./helpers/merchant";
 
 const URL = "/api/v1/me/push-token";
@@ -72,4 +77,13 @@ test("transport melempar → sendPushToUser resolve, console.error dipanggil", a
 test("transport null → resolve tanpa query galat", async () => {
   setPushTransport(null);
   await expect(sendPushToUser(userA, message)).resolves.toBeUndefined();
+});
+
+test("service account rusak → transport mati, satu console.error tanpa isi kunci", () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  expect(createDefaultTransport('{"private_key": "RAHASIA-123"')).toBeNull();
+  expect(createDefaultTransport("RAHASIA-123")).toBeNull();
+  expect(error).toHaveBeenCalledTimes(2);
+  expect(JSON.stringify(error.mock.calls)).not.toContain("RAHASIA-123");
+  error.mockRestore();
 });
