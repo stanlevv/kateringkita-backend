@@ -55,6 +55,20 @@ export async function recordAudit(conn: Pick<PoolConnection, "query">, entry: Au
   );
 }
 
+// Tugas "setelah commit" per sambungan transaksi; kunci hanya ada selama withTransaction berjalan.
+const afterCommitTasks = new WeakMap<object, Array<() => Promise<unknown>>>();
+
+/**
+ * Mendaftarkan tugas yang baru dijalankan setelah transaksi berhasil disimpan (contoh: kirim push). Bila transaksi
+ * dibatalkan tugas dibuang; bila `conn` bukan sambungan dari withTransaction tugas diabaikan. Tugas jalan berurutan
+ * tanpa ditunggu, dan galatnya hanya dicatat di log supaya tidak mengubah hasil transaksi.
+ * @param conn sambungan transaksi yang diterima `work` dari withTransaction
+ * @param task pekerjaan yang dijalankan setelah commit
+ */
+export function afterCommit(conn: Pick<PoolConnection, "query">, task: () => Promise<unknown>): void {
+  afterCommitTasks.get(conn)?.push(task);
+}
+
 /**
  * Menjalankan pekerjaan di dalam satu transaksi: disimpan (commit) bila pekerjaan selesai, dibatalkan (rollback) bila
  * pekerjaan melempar galat. Sambungan selalu dikembalikan ke pool di akhir.
@@ -70,12 +84,18 @@ export async function withTransaction<T>(
 ): Promise<T> {
   // 1. Pinjam satu sambungan dari pool; semua perintah transaksi harus lewat sambungan yang sama.
   const conn = await db.getConnection();
+  const tasks: Array<() => Promise<unknown>> = [];
+  afterCommitTasks.set(conn, tasks);
   try {
     // 2. Atur tingkat isolasi (bila diminta), mulai transaksi, jalankan pekerjaan, lalu simpan.
     if (isolationLevel) await conn.query(`SET TRANSACTION ISOLATION LEVEL ${isolationLevel}`);
     await conn.beginTransaction();
     const result = await work(conn);
     await conn.commit();
+    // Tugas setelah commit jalan berurutan di latar belakang; galat satu tugas tidak menghentikan yang lain.
+    void (async () => {
+      for (const task of tasks) await task().catch((error) => console.error("Tugas setelah commit gagal:", error));
+    })();
     return result;
   } catch (error) {
     // 3. Ada yang gagal: batalkan semua perubahan, lalu teruskan galatnya.
@@ -83,6 +103,7 @@ export async function withTransaction<T>(
     throw error;
   } finally {
     // 4. Kembalikan sambungan ke pool, berhasil atau gagal.
+    afterCommitTasks.delete(conn);
     conn.release();
   }
 }
