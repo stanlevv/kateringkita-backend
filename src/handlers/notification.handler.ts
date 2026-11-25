@@ -7,6 +7,7 @@ import { bodyObject } from "../dto/order.dto";
 import { AuthedRequest } from "../middleware/auth";
 import { parse } from "../middleware/validate";
 import { listNotifications, markAsRead } from "../services/notification.service";
+import { registerPushToken, unregisterPushToken } from "../services/push-token.service";
 
 // id pengguna yang login, sudah dipasang middleware requireAuth di rute.
 const getUserId = (req: Request) => (req as AuthedRequest).auth.userId;
@@ -32,4 +33,27 @@ export const listNotificationsHandler: RequestHandler = async (req, res) => {
  */
 export const markAsReadHandler: RequestHandler = async (req, res) => {
   res.json({ data: await markAsRead(getUserId(req), parse(markAsReadSchema, bodyObject(req.body))) });
+};
+
+/**
+ * `PUT /me/push-token`: menyimpan token FCM perangkat pembeli, terikat ke sesi login ini.
+ * @param req permintaan; isinya sudah diperiksa pushTokenSchema di rute
+ * @param res jawaban 204 tanpa isi
+ * @returns selesai setelah jawaban dikirim
+ */
+export const registerPushTokenHandler: RequestHandler = async (req, res) => {
+  const { userId, jti } = (req as AuthedRequest).auth;
+  await registerPushToken(userId, jti, req.body);
+  res.status(204).end();
+};
+
+/**
+ * `DELETE /me/push-token`: menghapus token perangkat milik sesi login ini (tanpa isi permintaan).
+ * @param req permintaan
+ * @param res jawaban 204 tanpa isi
+ * @returns selesai setelah jawaban dikirim
+ */
+export const unregisterPushTokenHandler: RequestHandler = async (req, res) => {
+  await unregisterPushToken((req as AuthedRequest).auth.jti);
+  res.status(204).end();
 };
