@@ -49,6 +49,27 @@ describe("afterCommit", () => {
     spy.mockRestore();
   });
 
+  test("tugas melempar sinkron → tercatat di log, tugas berikutnya tetap jalan", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    const second = vi.fn(async () => {});
+    const result = await withTransaction(async (conn) => {
+      afterCommit(conn, (() => {
+        throw new Error("sinkron");
+      }) as () => Promise<unknown>);
+      afterCommit(conn, second);
+      return "ok";
+    });
+    expect(result).toBe("ok");
+    await vi.waitFor(() => expect(second).toHaveBeenCalled());
+    expect(spy).toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    process.off("unhandledRejection", unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   test("conn di luar withTransaction → diabaikan", () => {
     const task = vi.fn(async () => {});
     expect(() => afterCommit(db, task)).not.toThrow();

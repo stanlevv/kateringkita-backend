@@ -94,7 +94,10 @@ export async function withTransaction<T>(
     await conn.commit();
     // Tugas setelah commit jalan berurutan di latar belakang; galat satu tugas tidak menghentikan yang lain.
     void (async () => {
-      for (const task of tasks) await task().catch((error) => console.error("Tugas setelah commit gagal:", error));
+      for (const task of tasks)
+        await Promise.resolve()
+          .then(task)
+          .catch((error) => console.error("Tugas setelah commit gagal:", error));
     })();
     return result;
   } catch (error) {
