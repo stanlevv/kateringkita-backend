@@ -170,7 +170,7 @@ describe("push ke pembeli", () => {
     transport.mockRejectedValue(new Error("fcm down"));
     const code = await prepareOrder();
     await merchantAction(code, "confirm").expect(200);
-    await vi.waitFor(() => expect(logError).toHaveBeenCalledWith("Gagal mengirim push:", expect.any(Error)));
+    await vi.waitFor(() => expect(logError).toHaveBeenCalledWith("Gagal mengirim push:", "fcm down"));
     logError.mockRestore();
     expect(await getNotifications()).toMatchObject([{ title: "Pesanan dikonfirmasi", data: { order_code: code } }]);
   });

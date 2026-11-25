@@ -5,6 +5,7 @@ import app from "../src/app";
 import db from "../src/config/db";
 import {
   createDefaultTransport,
+  otherFailureCodes,
   sendPushToUser,
   setPushTransport,
   type PushMessage,
@@ -59,7 +60,7 @@ test("token milik pembeli lain tidak ikut", async () => {
 });
 
 test("invalidTokens dari transport dihapus dari tabel", async () => {
-  await put(tokenA, "bad-1");
+  await put(await login("pembeli1@mail.com"), "bad-1"); // sesi lain: satu sesi hanya satu token
   setPushTransport(vi.fn().mockResolvedValue({ invalidTokens: ["bad-1"] }));
   await sendPushToUser(userA, message);
   expect(await count("bad-1")).toBe(0);
@@ -85,5 +86,25 @@ test("service account rusak → transport mati, satu console.error tanpa isi kun
   expect(createDefaultTransport("RAHASIA-123")).toBeNull();
   expect(error).toHaveBeenCalledTimes(2);
   expect(JSON.stringify(error.mock.calls)).not.toContain("RAHASIA-123");
+  error.mockRestore();
+});
+
+test("otherFailureCodes: kode berbeda selain token mati, tanpa duplikat", () => {
+  const responses = [
+    {},
+    { error: { code: "messaging/registration-token-not-registered" } },
+    { error: { code: "messaging/quota-exceeded" } },
+    { error: { code: "messaging/quota-exceeded" } },
+    { error: {} },
+  ];
+  expect(otherFailureCodes(responses)).toEqual(["messaging/quota-exceeded", "unknown"]);
+  expect(otherFailureCodes([{}, { error: { code: "messaging/invalid-registration-token" } }])).toEqual([]);
+});
+
+test("galat database tidak mencatat objek galat (SQL berisi token)", async () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  setPushTransport(vi.fn().mockRejectedValue(Object.assign(new Error("boom"), { sql: "SELECT 'TOKEN-RAHASIA'" })));
+  await sendPushToUser(userA, message);
+  expect(JSON.stringify(error.mock.calls)).not.toContain("TOKEN-RAHASIA");
   error.mockRestore();
 });
