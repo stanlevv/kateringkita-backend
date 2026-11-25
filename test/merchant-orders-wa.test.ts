@@ -46,8 +46,8 @@ test("templat toko dipakai; placeholder asing dibiarkan; nama dengan & # ter-enc
 });
 
 test("DEFAULT_WA_TEMPLATE sama persis dengan fe/lib/wa-template.ts", () => {
-  // salinan repo tim menaruh frontend di folder fe/, salinan lokal lain bisa memakai folder frontend/
-  const templatePath = ["fe", "frontend"]
+  // CI menaruh frontend di fe/; clone lokal bisa memakai frontend/ atau kateringkita-frontend/
+  const templatePath = ["fe", "frontend", "kateringkita-frontend"]
     .map((folder) => join(__dirname, "../..", folder, "lib/wa-template.ts"))
     .find((filePath) => existsSync(filePath));
   const feSource = readFileSync(templatePath ?? join(__dirname, "../../fe/lib/wa-template.ts"), "utf8");
