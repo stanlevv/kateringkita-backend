@@ -1,9 +1,11 @@
 import request from "supertest";
-import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi, type Mock } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { getWibDate } from "../src/services/merchant-quota.service";
 import { withTransaction } from "../src/services/admin-audit.service";
+import { expireHeldOrders } from "../src/services/order-expiry.service";
+import { sendPushToUser, setPushTransport, type PushMessage, type PushTransport } from "../src/services/push.service";
 import { OrderAction, Actor, Status, transitionOrder } from "../src/services/order-status.service";
 import { placeOrder, prepareCheckout } from "./helpers/merchant";
 
@@ -131,6 +133,70 @@ describe("notifikasi untuk pembeli", () => {
     expect(text).not.toContain("081234567890");
     expect(text).not.toContain("Budi");
     expect(await getNotifications(siti)).toEqual([]);
+  });
+});
+
+describe("push ke pembeli", () => {
+  const DEVICE = "fcm-transisi";
+  const sentinel: PushMessage = { title: "Penanda", body: "-", data: { type: "order_status", order_code: "-" } };
+  let transport: Mock<PushTransport>;
+  beforeAll(async () => {
+    await request(app)
+      .put("/api/v1/me/push-token")
+      .set("Authorization", `Bearer ${setup.customerToken}`)
+      .send({ token: DEVICE, platform: "android" })
+      .expect(204);
+  });
+  beforeEach(() => {
+    transport = vi.fn<PushTransport>().mockResolvedValue({ invalidTokens: [] });
+    setPushTransport(transport);
+  });
+  afterEach(() => setPushTransport(null));
+
+  test("penjual konfirmasi → push ke pembeli dengan judul 'Pesanan dikonfirmasi' dan data {type:'order_status', order_code}", async () => {
+    const code = await prepareOrder();
+    await merchantAction(code, "confirm").expect(200);
+    await vi.waitFor(() =>
+      expect(transport).toHaveBeenCalledWith([DEVICE], {
+        title: "Pesanan dikonfirmasi",
+        body: `${MERCHANT_NAME} sudah mengonfirmasi pesanan ${code}.`,
+        data: { type: "order_status", order_code: code },
+      }),
+    );
+  });
+
+  test("transport melempar → konfirmasi tetap 200 dan notifikasi lonceng tersimpan", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    transport.mockRejectedValue(new Error("fcm down"));
+    const code = await prepareOrder();
+    await merchantAction(code, "confirm").expect(200);
+    await vi.waitFor(() => expect(logError).toHaveBeenCalledWith("Gagal mengirim push:", expect.any(Error)));
+    logError.mockRestore();
+    expect(await getNotifications()).toMatchObject([{ title: "Pesanan dikonfirmasi", data: { order_code: code } }]);
+  });
+
+  test("kadaluarsa otomatis (expireHeldOrders) → push 'Pesanan kedaluwarsa'", async () => {
+    const code = await prepareOrder();
+    await passHoldDeadline(code);
+    await expireHeldOrders();
+    await vi.waitFor(() =>
+      expect(transport).toHaveBeenCalledWith(
+        [DEVICE],
+        expect.objectContaining({ title: "Pesanan kedaluwarsa", data: { type: "order_status", order_code: code } }),
+      ),
+    );
+  });
+
+  test("pembeli membatalkan sendiri → tanpa push", async () => {
+    const code = await prepareOrder();
+    await request(app)
+      .post(`/api/v1/orders/${code}/cancel`)
+      .set("Authorization", `Bearer ${setup.customerToken}`)
+      .send({})
+      .expect(200);
+    // Push penanda dikirim sesudahnya: bila pembatalan memicu push, panggilannya sudah masuk lebih dulu.
+    await sendPushToUser(budi, sentinel);
+    expect(transport.mock.calls).toEqual([[[DEVICE], sentinel]]);
   });
 });
 

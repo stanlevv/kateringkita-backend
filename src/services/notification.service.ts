@@ -2,11 +2,14 @@
 // disimpan di tabel `notifications`. File ini membuat notifikasi perubahan status pesanan, menampilkan daftar
 // notifikasi, dan menandai notifikasi sudah dibaca. Alurnya routes/notification.ts → handlers/notification.handler.ts
 // → file ini → database; order-status.service memanggil createOrderNotification saat penjual atau sistem mengubah
-// status pesanan, dan order-chat.service memanggil createChatNotification saat pembeli mengirim pesan chat.
+// status pesanan, dan order-chat.service memanggil createChatNotification saat pembeli atau penjual mengirim pesan
+// chat. Notifikasi untuk pembeli (status pesanan dan balasan chat) juga dikirim sebagai push setelah transaksi tersimpan.
 // Tanda sudah dibaca = kolom `read_at` berisi waktu notifikasi dibaca; NULL berarti belum dibaca.
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { PoolConnection } from "mysql2/promise";
 import db from "../config/db";
+import { afterCommit } from "./admin-audit.service";
+import { sendPushToUser } from "./push.service";
 import type { Status } from "./order-status.service";
 import type { ListNotificationsQuery, MarkAsReadInput } from "../dto/notification.dto";
 
@@ -44,7 +47,8 @@ export const ORDER_NOTIFICATION_TEMPLATES: Partial<
 /**
  * Menyimpan notifikasi perubahan status pesanan untuk pembelinya. Dipanggil di dalam transaksi perubahan status
  * (order-status.service), setelah baris pembeli di tabel `users` dikunci, supaya notifikasi ikut batal bila
- * perubahan status batal. Isi notifikasi dipotong menjadi paling banyak 255 karakter.
+ * perubahan status batal. Isi notifikasi dipotong menjadi paling banyak 255 karakter. Setelah transaksi tersimpan,
+ * notifikasi yang sama dikirim sebagai push ke perangkat pembeli (lewat afterCommit, tidak ditunggu).
  * @param conn     koneksi di dalam transaksi pemanggil
  * @param order    pesanan yang berubah: id pembeli (null untuk pesanan meja tanpa akun), id toko, dan kode pesanan
  * @param toStatus status tujuan pesanan
@@ -70,37 +74,58 @@ export async function createOrderNotification(
     "INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, 'order_status', ?, ?, ?, UTC_TIMESTAMP())",
     [order.customer_id, title, body.slice(0, 255), JSON.stringify({ order_code: order.code, status: toStatus })],
   );
+  // 3. Push setelah commit; nilai disalin sekarang karena `conn` sudah dilepas saat tugas jalan.
+  const customerId = order.customer_id;
+  const data = { type: "order_status" as const, order_code: order.code };
+  afterCommit(conn, () => sendPushToUser(customerId, { title, body, data }));
 }
 
 /**
- * Memberi tahu penjual bahwa pembeli mengirim pesan di chat pesanan (notifikasi bertipe `chat_message`). Selama
- * notifikasi chat pesanan yang sama belum dibaca penjual, notifikasi itu dimajukan waktunya, bukan ditambah baris baru,
- * supaya daftar notifikasi tidak penuh satu entri per pesan. Dipanggil sendMessage di dalam transaksi pesan, setelah
- * pesanan dikunci, sehingga pesan-pesan pesanan yang sama tidak bisa membuat dua notifikasi sekaligus.
- * @param conn    koneksi di dalam transaksi pemanggil
- * @param orderId id pesanan yang menerima pesan dari pembeli
- * @returns tidak ada; satu notifikasi untuk akun pemilik toko tersimpan atau diperbarui
+ * Memberi tahu lawan bicara bahwa ada pesan baru di chat pesanan (notifikasi bertipe `chat_message`): penjual saat
+ * pembeli mengirim pesan, pembeli saat penjual membalas. Selama notifikasi chat pesanan yang sama belum dibaca
+ * penerimanya, notifikasi itu dimajukan waktunya, bukan ditambah baris baru, supaya daftar notifikasi tidak penuh satu
+ * entri per pesan. Untuk pembeli, notifikasi baru (bukan yang dimajukan) juga dikirim sebagai push setelah transaksi
+ * tersimpan, jadi satu rentetan balasan hanya memberi satu push sampai pembeli membuka chatnya. Dipanggil sendMessage
+ * di dalam transaksi pesan, setelah pesanan dikunci, sehingga pesan-pesan pesanan yang sama tidak bisa membuat dua
+ * notifikasi sekaligus.
+ * @param conn      koneksi di dalam transaksi pemanggil
+ * @param orderId   id pesanan yang menerima pesan
+ * @param recipient penerima notifikasi: `merchant` (akun pemilik toko) atau `customer` (pembeli pesanan)
+ * @returns tidak ada; satu notifikasi untuk penerima tersimpan atau diperbarui (tidak ada bila pesanan tanpa pembeli)
  */
-export async function createChatNotification(conn: Pick<PoolConnection, "query">, orderId: number): Promise<void> {
+export async function createChatNotification(
+  conn: Pick<PoolConnection, "query">,
+  orderId: number,
+  recipient: "merchant" | "customer",
+): Promise<void> {
   // 1. Kode pesanan diambil dari database (bukan dari URL) supaya penggabungan selalu memakai penulisan yang sama.
   const [[order]] = await conn.query<RowDataPacket[]>(
-    "SELECT o.code, m.user_id FROM orders o JOIN merchants m ON m.id = o.merchant_id WHERE o.id = ?",
+    "SELECT o.code, o.customer_id, m.user_id FROM orders o JOIN merchants m ON m.id = o.merchant_id WHERE o.id = ?",
     [orderId],
   );
-  const body = `Pembeli mengirim pesan di pesanan ${order.code}.`;
+  const toCustomer = recipient === "customer";
+  // Pesanan meja tidak punya akun pembeli, jadi tidak ada penerima.
+  const userId: number | null = toCustomer ? order.customer_id : order.user_id;
+  if (userId === null) return;
+  const title = toCustomer ? "Penjual membalas pesan" : "Pesan baru dari pembeli";
+  const body = toCustomer
+    ? `Penjual membalas pesan di pesanan ${order.code}.`
+    : `Pembeli mengirim pesan di pesanan ${order.code}.`;
   // 2. Ada notifikasi chat pesanan ini yang belum dibaca → majukan waktunya saja.
   const [updated] = await conn.query<ResultSetHeader>(
     `UPDATE notifications SET body = ?, created_at = UTC_TIMESTAMP()
      WHERE user_id = ? AND type = 'chat_message' AND read_at IS NULL
        AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.order_code')) = ?`,
-    [body, order.user_id, order.code],
+    [body, userId, order.code],
   );
   if (updated.affectedRows > 0) return;
-  // 3. Belum ada (atau sudah dibaca semua) → sisipkan notifikasi baru.
+  // 3. Belum ada (atau sudah dibaca semua) → sisipkan notifikasi baru; pembeli juga dikirimi push setelah commit.
   await conn.query(
-    "INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, 'chat_message', 'Pesan baru dari pembeli', ?, ?, UTC_TIMESTAMP())",
-    [order.user_id, body, JSON.stringify({ order_code: order.code })],
+    "INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, 'chat_message', ?, ?, ?, UTC_TIMESTAMP())",
+    [userId, title, body, JSON.stringify({ order_code: order.code })],
   );
+  const data = { type: "chat_message" as const, order_code: String(order.code) };
+  if (toCustomer) afterCommit(conn, () => sendPushToUser(userId, { title, body, data }));
 }
 
 // Jumlah semua notifikasi pengguna yang belum dibaca, tanpa filter apa pun (angka penanda di aplikasi).

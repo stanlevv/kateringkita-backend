@@ -200,9 +200,10 @@ async function loadMessages(orderId: number, afterId = 0): Promise<ChatMessage[]
 
 /**
  * Mengirim pesan teks dan/atau foto ke chat pesanan. Baris pesanan dikunci selama pesan disimpan, sehingga pesan tidak
- * bisa lolos tepat saat pesanan diselesaikan atau dibatalkan. Transaksi memakai tingkat isolasi READ COMMITTED:
- * pencarian notifikasi chat penjual tidak mengunci celah (rentang kosong) di indeks, sehingga pembeli dari pesanan
- * berbeda di toko yang sama bisa menyisipkan notifikasi bersamaan tanpa saling menunggu sampai deadlock.
+ * bisa lolos tepat saat pesanan diselesaikan atau dibatalkan. Pesan pembeli memberi notifikasi ke penjual; pesan penjual
+ * memberi notifikasi ke pembeli, ditambah push setelah transaksi tersimpan. Transaksi memakai tingkat isolasi READ
+ * COMMITTED: pencarian notifikasi chat penjual tidak mengunci celah (rentang kosong) di indeks, sehingga pembeli dari
+ * pesanan berbeda di toko yang sama bisa menyisipkan notifikasi bersamaan tanpa saling menunggu sampai deadlock.
  * @param party pihak pengirim
  * @param code  kode pesanan
  * @param input isi pesan (sudah lolos sendMessageSchema)
@@ -226,20 +227,21 @@ export async function sendMessage(party: ChatParty, code: string, input: SendMes
     const [[row]] = await conn.query<RowDataPacket[]>(`SELECT ${MESSAGE_COLUMNS} FROM order_messages WHERE id = ?`, [
       result.insertId,
     ]);
-    // 4. Pesan pembeli memberi tahu penjual; pesan penjual tidak membuat notifikasi.
-    if (party.role === "customer") await notifyMerchant(conn, order.orderId);
+    // 4. Beri tahu lawan bicara: pesan pembeli ke penjual, pesan penjual ke pembeli.
+    await notifyRecipient(conn, order.orderId, otherRole(party.role));
     return toChatMessage(row);
   }, "READ COMMITTED");
 }
 
-// Menulis notifikasi chat untuk penjual di dalam transaksi pesan, dibatasi titik simpan (SAVEPOINT): bila gagal, hanya
-// tulisan notifikasi yang dibatalkan dan galatnya dicatat ke log server, sedangkan pesannya tetap tersimpan. Menyisipkan
-// notifikasi mengunci baris akun penjual (kunci baca dari foreign key ke users) sesudah pesanan; aman karena semua jalur
-// mengambil kunci akun penjual paling akhir, jadi urutan users pembeli → orders dari lockChatOrder tidak berbalik.
-async function notifyMerchant(conn: Conn, orderId: number): Promise<void> {
+// Menulis notifikasi chat untuk penerima (penjual atau pembeli) di dalam transaksi pesan, dibatasi titik simpan
+// (SAVEPOINT): bila gagal, hanya tulisan notifikasi yang dibatalkan dan galatnya dicatat ke log server, sedangkan
+// pesannya tetap tersimpan. Menyisipkan notifikasi mengunci baris akun penerima (kunci baca dari foreign key ke users)
+// sesudah pesanan. Untuk penjual aman karena semua jalur mengambil kunci akun penjual paling akhir; untuk pembeli aman
+// karena lockChatOrder sudah mengunci baris pembeli itu (FOR UPDATE) sebelum pesanan, jadi tidak ada kunci baru.
+async function notifyRecipient(conn: Conn, orderId: number, recipient: ChatRole): Promise<void> {
   await conn.query("SAVEPOINT chat_notification");
   try {
-    await createChatNotification(conn, orderId);
+    await createChatNotification(conn, orderId, recipient);
   } catch (error) {
     // Catat dulu: bila transaksinya sudah dibatalkan database, rollback di bawah ikut gagal dan galat asli bisa hilang.
     console.error(
@@ -272,18 +274,28 @@ async function lockChatOrder(conn: Conn, party: ChatParty, code: string): Promis
 
 /**
  * Menandai pesan chat pesanan sudah dibaca oleh pihak yang meminta. Penanda tidak pernah mundur, jadi permintaan lama
- * yang datang terlambat tidak membuat pesan kembali "belum dibaca". Boleh juga setelah chat ditutup.
+ * yang datang terlambat tidak membuat pesan kembali "belum dibaca". Boleh juga setelah chat ditutup. Pembeli yang membuka
+ * chat juga menandai notifikasi chat pesanan itu sudah dibaca, supaya balasan penjual berikutnya dikirimi push lagi.
  * @param party  pihak yang membaca
  * @param code   kode pesanan
  * @param lastId id pesan terakhir yang tampil di layar. Bila diisi, penanda = yang lebih kecil antara `lastId` dan id
  *               pesan terakhir pihak lawan, supaya pesan lawan yang masuk sesudahnya tidak ikut "Dibaca". Bila tidak
  *               diisi, penanda = id pesan terakhir pihak lawan (semua pesannya dianggap sudah dibaca)
- * @returns selesai setelah penanda disimpan (tidak ada yang disimpan bila pihak lawan belum mengirim pesan)
+ * @returns selesai setelah penanda disimpan (penanda tidak disimpan bila pihak lawan belum mengirim pesan)
  * @throws 404 pesanan tidak ada atau bukan milik pihak itu
  */
 export async function markRead(party: ChatParty, code: string, lastId?: number): Promise<void> {
-  // 1. Cari pesan terakhir pihak lawan, lalu tentukan penandanya.
+  // 1. Pastikan pesanan milik pihak ini. Pembeli: tandai notifikasi chat pesanan ini dibaca; kodenya dari database,
+  //    bukan dari URL, supaya sama persis dengan yang tersimpan di notifikasi.
   const order = await loadChatOrder(party, code);
+  if (party.role === "customer")
+    await db.query(
+      `UPDATE notifications SET read_at = UTC_TIMESTAMP()
+       WHERE user_id = ? AND type = 'chat_message' AND read_at IS NULL
+         AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.order_code')) = (SELECT code FROM orders WHERE id = ?)`,
+      [party.userId, order.orderId],
+    );
+  // 2. Cari pesan terakhir pihak lawan, lalu tentukan penandanya.
   const [[latestRow]] = await db.query<RowDataPacket[]>(
     "SELECT MAX(id) AS id FROM order_messages WHERE order_id = ? AND sender_role = ?",
     [order.orderId, otherRole(party.role)],
@@ -291,7 +303,7 @@ export async function markRead(party: ChatParty, code: string, lastId?: number):
   if (latestRow.id === null) return;
   const latest = Number(latestRow.id);
   const readId = Math.min(lastId ?? latest, latest);
-  // 2. Simpan sebagai penanda baca pihak ini; bila sudah ada, ambil yang lebih besar.
+  // 3. Simpan sebagai penanda baca pihak ini; bila sudah ada, ambil yang lebih besar.
   await db.query(
     `INSERT INTO order_chat_reads (order_id, reader_role, last_read_message_id, updated_at)
      VALUES (?, ?, ?, UTC_TIMESTAMP())
