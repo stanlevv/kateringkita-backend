@@ -46,6 +46,8 @@ const envSchema = z
     SMTP_USER: optional(z.string()),
     SMTP_PASS: optional(z.string()),
     SMTP_FROM: optional(z.string()),
+    // Kunci service account Firebase (JSON mentah atau base64) untuk push FCM. Kosong = push dimatikan.
+    FIREBASE_SERVICE_ACCOUNT: optional(z.string()),
     // Gemini (AI Google) untuk asisten toko. Kosong = asisten dijawab 503.
     GEMINI_API_KEY: optional(z.string()),
     GEMINI_MODEL: z.preprocess((value) => (value === "" ? undefined : value), z.string().default("gemini-2.5-flash")),

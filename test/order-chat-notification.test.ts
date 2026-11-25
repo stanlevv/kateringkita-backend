@@ -1,17 +1,22 @@
 import request from "supertest";
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi, type Mock } from "vitest";
 import app from "../src/app";
 import db from "../src/config/db";
 import { chatLimiter } from "../src/middleware/rate-limiter";
 import * as notification from "../src/services/notification.service";
+import { sendPushToUser, setPushTransport, type PushMessage, type PushTransport } from "../src/services/push.service";
 import { createCustomer, placeOrder, prepareCheckout } from "./helpers/merchant";
 
-// Notifikasi chat untuk penjual: pesan dari pembeli memberi notifikasi `chat_message` ke penjual, digabung per
-// pesanan selama belum dibaca.
+// Notifikasi chat: pesan pembeli memberi notifikasi `chat_message` ke penjual, balasan penjual memberi notifikasi
+// `chat_message` + push ke pembeli; keduanya digabung per pesanan selama belum dibaca.
 let setup: Awaited<ReturnType<typeof prepareCheckout>>;
 let merchantUserId: number;
 let customerUserId: number;
 let otherCustomerToken: string;
+let transport: Mock<PushTransport>;
+const DEVICE = "fcm-chat";
+// Penanda bertipe order_status supaya tidak ikut chatPushes.
+const sentinel: PushMessage = { title: "Penanda", body: "-", data: { type: "order_status", order_code: "-" } };
 
 const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
 const post = (urlPath: string, token: string, body?: object) => {
@@ -25,6 +30,24 @@ const confirmedOrder = async (token = setup.customerToken) => {
 };
 const buyerSends = (code: string, body = "Saya sudah di titik temu") =>
   post(`/orders/${code}/messages`, setup.customerToken, { body }).expect(201);
+const merchantReplies = (code: string, body = "Pesanan sudah siap") =>
+  post(`/merchant/orders/${code}/messages`, setup.tokenA, { body }).expect(201);
+const chatPush = (code: string) => [
+  [DEVICE],
+  {
+    title: "Penjual membalas pesan",
+    body: `Penjual membalas pesan di pesanan ${code}.`,
+    data: { type: "chat_message", order_code: code },
+  },
+];
+// Push chat saja; push status dari konfirmasi pesanan (confirmedOrder) diabaikan.
+const chatPushes = () => transport.mock.calls.filter(([, message]) => message.data.type === "chat_message");
+// Push penanda dikirim sesudah aksi: push chat yang dipicu aksi itu (bila ada) sudah masuk lebih dulu.
+const chatPushesAfterSentinel = async () => {
+  await sendPushToUser(customerUserId, sentinel);
+  await vi.waitFor(() => expect(transport).toHaveBeenCalledWith([DEVICE], sentinel));
+  return chatPushes();
+};
 const chatNotifications = async (userId: number) =>
   (
     await db.query<any[]>(
@@ -40,14 +63,22 @@ beforeAll(async () => {
   const [[customer]] = await db.query<any[]>("SELECT id FROM users WHERE email = 'budi@mail.com'");
   customerUserId = customer.id;
   otherCustomerToken = await createCustomer(1);
+  await request(app)
+    .put("/api/v1/me/push-token")
+    .set(authHeader(setup.customerToken))
+    .send({ token: DEVICE, platform: "android" })
+    .expect(204);
 });
 beforeEach(async () => {
   chatLimiter.reset();
   // Batas 3 pesanan menunggu per pembeli: pesanan lama yang masih menunggu dikadaluarsakan.
   await db.query("UPDATE orders SET status = 'expired' WHERE status = 'holding'");
   await db.query("DELETE FROM notifications");
+  transport = vi.fn<PushTransport>().mockResolvedValue({ invalidTokens: [] });
+  setPushTransport(transport);
 });
 afterAll(() => {
+  setPushTransport(null);
   vi.restoreAllMocks();
 });
 
@@ -100,12 +131,12 @@ describe("notifikasi chat untuk penjual", () => {
     expect(rows[1].read_at).toBeNull();
   });
 
-  test("pesan penjual tidak membuat notifikasi; pembeli tidak pernah mendapat chat_message", async () => {
+  test("pesan pembeli → notifikasi penjual seperti sebelumnya dan tanpa push", async () => {
     const code = await confirmedOrder();
-    await post(`/merchant/orders/${code}/messages`, setup.tokenA, { body: "Pesanan sudah siap" }).expect(201);
-    expect(await chatNotifications(merchantUserId)).toHaveLength(0);
     await buyerSends(code);
+    expect(await chatNotifications(merchantUserId)).toHaveLength(1);
     expect(await chatNotifications(customerUserId)).toHaveLength(0);
+    expect(await chatPushesAfterSentinel()).toEqual([]);
   });
 
   test("dua pembeli dari pesanan berbeda di toko yang sama mengirim bersamaan → keduanya 201, dua notifikasi", async () => {
@@ -140,5 +171,48 @@ describe("notifikasi chat untuk penjual", () => {
     const [[stored]] = await db.query<any[]>("SELECT body FROM order_messages WHERE id = ?", [sent.body.data.id]);
     expect(stored.body).toBe("Pesan tetap masuk");
     expect(await chatNotifications(merchantUserId)).toHaveLength(0);
+  });
+});
+
+describe("notifikasi chat untuk pembeli", () => {
+  test("penjual membalas → 1 notifikasi chat_message untuk pembeli + 1 push", async () => {
+    const code = await confirmedOrder();
+    await merchantReplies(code);
+    const rows = await chatNotifications(customerUserId);
+    expect(rows).toMatchObject([
+      {
+        title: "Penjual membalas pesan",
+        body: `Penjual membalas pesan di pesanan ${code}.`,
+        data: { order_code: code },
+        read_at: null,
+      },
+    ]);
+    expect(await chatNotifications(merchantUserId)).toHaveLength(0);
+    await vi.waitFor(() => expect(chatPushes()).toEqual([chatPush(code)]));
+  });
+
+  test("balasan kedua sebelum dibaca → notifikasi dimajukan, tanpa push kedua", async () => {
+    const code = await confirmedOrder();
+    await merchantReplies(code);
+    await vi.waitFor(() => expect(chatPushes()).toHaveLength(1));
+    const [first] = await chatNotifications(customerUserId);
+    await db.query("UPDATE notifications SET created_at = '2026-01-01 00:00:00' WHERE id = ?", [first.id]);
+    await merchantReplies(code, "Sudah di titik temu");
+    const rows = await chatNotifications(customerUserId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].created_at.getTime()).toBeGreaterThan(Date.parse("2026-01-01T00:00:00Z"));
+    expect(await chatPushesAfterSentinel()).toEqual([chatPush(code)]);
+  });
+
+  test("pembeli membuka chat (POST read) → notifikasi chat terbaca; balasan berikutnya push lagi", async () => {
+    const code = await confirmedOrder();
+    await merchantReplies(code);
+    await post(`/orders/${code}/messages/read`, setup.customerToken, {}).expect(204);
+    expect((await chatNotifications(customerUserId))[0].read_at).not.toBeNull();
+    await merchantReplies(code, "Halo lagi");
+    const rows = await chatNotifications(customerUserId);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].read_at).toBeNull();
+    await vi.waitFor(() => expect(chatPushes()).toEqual([chatPush(code), chatPush(code)]));
   });
 });

@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vite
 import app from "../src/app";
 import db from "../src/config/db";
 import { env } from "../src/config/env";
+import { setPushTransport } from "../src/services/push.service";
 import { sendNotification } from "./helpers/midtrans";
 import { menuRow, placeOrder, prepareCheckout } from "./helpers/merchant";
 
@@ -148,6 +149,28 @@ describe("notifikasi Midtrans", () => {
     await postNotification({ order_id: code }).expect(200);
     expect((await orderRow(code)).status).toBe("confirmed");
     expect(await pay(code)).toHaveLength(1);
+  });
+
+  test("webhook lunas → push 'Pesanan dikonfirmasi' ke pembeli", async () => {
+    await request(app)
+      .put("/api/v1/me/push-token")
+      .set("Authorization", `Bearer ${setup.customerToken}`)
+      .send({ token: "fcm-va", platform: "android" })
+      .expect(204);
+    const transport = vi.fn().mockResolvedValue({ invalidTokens: [] });
+    setPushTransport(transport);
+    try {
+      const code = await prepareVaOrder();
+      await postNotification({ order_id: code }).expect(200);
+      await vi.waitFor(() =>
+        expect(transport).toHaveBeenCalledWith(
+          ["fcm-va"],
+          expect.objectContaining({ title: "Pesanan dikonfirmasi", data: { type: "order_status", order_code: code } }),
+        ),
+      );
+    } finally {
+      setPushTransport(null);
+    }
   });
 
   test("signature salah → 403; nominal beda / pending tidak melunasi; expire menandai VA kedaluwarsa", async () => {
