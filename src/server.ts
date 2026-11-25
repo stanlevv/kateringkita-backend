@@ -4,6 +4,7 @@ import "dotenv/config";
 import app from "./app";
 import { env } from "./config/env";
 import { startExpiryJob } from "./services/order-expiry.service";
+import { warmUpPushTransport } from "./services/push.service";
 import { startLogCleanupJob } from "./services/server-log.service";
 
 // Express 5 memanggil callback dengan galat bila port gagal dibuka; jangan jalankan job tanpa server
@@ -12,4 +13,5 @@ app.listen(env.PORT, (err?: Error) => {
   console.log(`Server KateringKita running on port ${env.PORT}`);
   startExpiryJob();
   startLogCleanupJob();
+  warmUpPushTransport();
 });

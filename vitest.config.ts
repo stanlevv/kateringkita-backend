@@ -15,6 +15,8 @@ export default defineConfig({
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? "mysql://root:root@127.0.0.1:3306/kateringkita_test",
       JWT_SECRET: "test-secret-yang-panjangnya-minimal-32-karakter",
       CORS_ORIGIN: "http://localhost:3000",
+      // kosong = push mati; test tidak boleh memanggil FCM sungguhan
+      FIREBASE_SERVICE_ACCOUNT: "",
     },
   },
 });

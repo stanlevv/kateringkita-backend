@@ -80,3 +80,13 @@ test("penjual dan admin → 403; tanpa login → 401", async () => {
   await request(app).delete(URL).expect(401);
   await request(app).delete(URL).set("Authorization", `Bearer ${adminToken}`).expect(403);
 });
+
+test("satu sesi hanya memegang satu token; sesi lain akun yang sama tidak tersentuh", async () => {
+  const second = await login("pembeli1@mail.com");
+  await put(second, { token: "fcm-6-lain", platform: "android" }).expect(204);
+  await put(tokenA, { token: "fcm-6a", platform: "android" }).expect(204);
+  await put(tokenA, { token: "fcm-6b", platform: "android" }).expect(204);
+  expect(await rows("fcm-6a")).toHaveLength(0);
+  expect(await rows("fcm-6b")).toHaveLength(1);
+  expect(await rows("fcm-6-lain")).toHaveLength(1);
+});

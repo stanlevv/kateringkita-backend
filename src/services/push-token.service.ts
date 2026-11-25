@@ -6,17 +6,29 @@ import type { PushTokenInput } from "../dto/push-token.dto";
 
 /**
  * Menyimpan token perangkat untuk sesi login ini. Token yang sudah ada (milik akun atau sesi lain) dipindahkan ke
- * akun dan sesi ini, jadi memanggil dua kali tetap satu baris.
+ * akun dan sesi ini, jadi memanggil dua kali tetap satu baris. Satu sesi paling banyak memegang satu token: token
+ * lama sesi ini dihapus.
  * @param userId id pembeli yang login
  * @param jti    id sesi login saat ini
  * @param input  token FCM dan platform perangkat
  */
 export async function registerPushToken(userId: number, jti: string, input: PushTokenInput): Promise<void> {
-  await db.query(
-    `INSERT INTO push_tokens (user_id, session_jti, token, platform) VALUES (?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), session_jti = VALUES(session_jti), platform = VALUES(platform)`,
-    [userId, jti, input.token, input.platform],
-  );
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query("DELETE FROM push_tokens WHERE session_jti = ? AND token <> ?", [jti, input.token]);
+    await conn.query(
+      `INSERT INTO push_tokens (user_id, session_jti, token, platform) VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), session_jti = VALUES(session_jti), platform = VALUES(platform)`,
+      [userId, jti, input.token, input.platform],
+    );
+    await conn.commit();
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 /**
